@@ -110,3 +110,22 @@ def update_order_status(
     db.commit()
     db.refresh(order)
     return {"id": order.id, "status": order.status}
+
+
+@router.put("/orders/{order_id}/pay", response_model=OrderResponseDetail)
+def pay_order(order_id: int, db: Session = Depends(get_db)):
+    """Mark an order as paid."""
+    order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+        )
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order.status = "paid"
+    db.commit()
+    db.refresh(order)
+    return OrderResponseDetail.model_validate(order)

@@ -54,4 +54,10 @@ def kitchen_page():
     return FileResponse(static_dir / "kitchen.html")
 
 
+@app.get("/counter")
+def counter_page():
+    """Serve the Counter / Admin UI."""
+    return FileResponse(static_dir / "counter.html")
+
+
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
