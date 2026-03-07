@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Waiter POS – Take Order</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-6">
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-xl md:text-2xl font-bold text-slate-800 mb-4">Waiter POS – Take Order</h1>
+
+    <div class="grid md:grid-cols-3 gap-4 md:gap-6">
+      <!-- Menu items grid -->
+      <div class="md:col-span-2">
+        <h2 class="text-lg font-semibold text-slate-700 mb-3">Menu</h2>
+        <div id="menu-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3">
+          <p class="col-span-full text-slate-500">Loading menu…</p>
+        </div>
+      </div>
+
+      <!-- Cart -->
+      <div class="md:col-span-1">
+        <div class="bg-white rounded-lg shadow p-4 sticky top-4">
+          <h2 class="text-lg font-semibold text-slate-700 mb-3">Cart</h2>
+          <ul id="cart-list" class="space-y-2 mb-4 min-h-[80px] text-slate-700 text-sm">
+            <li class="text-slate-500">Cart is empty</li>
+          </ul>
+          <div class="border-t border-slate-200 pt-3 mb-4">
+            <div class="flex justify-between text-base font-semibold text-slate-800">
+              <span>Total</span>
+              <span id="cart-total">$0.00</span>
+            </div>
+          </div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">Table number</label>
+          <input
+            type="number"
+            id="table-number"
+            min="1"
+            placeholder="e.g. 5"
+            class="w-full px-3 py-2 border border-slate-300 rounded-md mb-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+          <button
+            id="submit-order"
+            disabled
+            class="w-full py-3 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Submit Order
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/waiter.js"></script>
+</body>
+</html>
