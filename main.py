@@ -48,4 +48,10 @@ def waiter_page():
     return FileResponse(static_dir / "waiter.html")
 
 
+@app.get("/kitchen")
+def kitchen_page():
+    """Serve the Kitchen Display System UI."""
+    return FileResponse(static_dir / "kitchen.html")
+
+
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

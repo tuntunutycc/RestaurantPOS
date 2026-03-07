@@ -1,11 +1,13 @@
 """Orders API: create and manage orders."""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import MenuItem, Order, OrderItem
-from schemas import OrderCreate
+from schemas import OrderCreate, OrderResponseDetail
 
 router = APIRouter(prefix="/api")
 
@@ -67,3 +69,44 @@ def create_order(order_data: OrderCreate, db: Session = Depends(get_db)):
         "status": db_order.status,
         "total_amount": db_order.total_amount,
     }
+
+
+@router.get("/orders/", response_model=list[OrderResponseDetail])
+def list_orders(
+    status: str | None = Query(None, description="Filter by status (e.g. pending, completed)"),
+    db: Session = Depends(get_db),
+):
+    """List orders, optionally filtered by status. Eager-loads items and menu_item to avoid N+1."""
+    q = (
+        db.query(Order)
+        .options(
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+        )
+        .order_by(Order.created_at.desc())
+    )
+    if status is not None:
+        q = q.filter(Order.status == status)
+    orders = q.all()
+    return [OrderResponseDetail.model_validate(o) for o in orders]
+
+
+class OrderStatusUpdate(BaseModel):
+    """Request body for updating order status."""
+
+    status: str
+
+
+@router.put("/orders/{order_id}/status")
+def update_order_status(
+    order_id: int,
+    body: OrderStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    """Update an order's status (e.g. completed)."""
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    order.status = body.status
+    db.commit()
+    db.refresh(order)
+    return {"id": order.id, "status": order.status}
