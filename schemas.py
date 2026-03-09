@@ -27,6 +27,8 @@ class MenuItemCreate(BaseModel):
     name: str
     price: float
     category_id: int
+    description: str | None = None
+    image_url: str | None = None
 
 
 class MenuItemResponse(BaseModel):
@@ -38,6 +40,8 @@ class MenuItemResponse(BaseModel):
     name: str
     price: float
     category_id: int
+    description: str | None = None
+    image_url: str | None = None
 
 
 class OrderItemCreate(BaseModel):
@@ -54,12 +58,32 @@ class OrderCreate(BaseModel):
     items: List[OrderItemCreate]
 
 
+class OrderSubmitRequest(BaseModel):
+    """Schema for submit order (create new or add to existing). table_id = table number."""
+
+    table_id: int
+    items: List[OrderItemCreate]
+
+
+class OrderSubmitResponse(BaseModel):
+    """Response for order submit: indicates new vs add-on and message for UI."""
+
+    id: int
+    table_number: int
+    total_amount: float
+    is_new_order: bool
+    message: str
+
+
 class OrderItemDetail(BaseModel):
-    """Schema for an order line in detailed order response (menu item name + quantity)."""
+    """Schema for an order line in detailed order response (menu item name + quantity + optional image)."""
 
     menu_item_name: str
     quantity: int
     subtotal: float
+    batch_number: int = 1
+    batch_status: str | None = None
+    menu_item_image_url: str | None = None
 
 
 class OrderResponseDetail(BaseModel):
@@ -85,6 +109,9 @@ class OrderResponseDetail(BaseModel):
                     menu_item_name=oi.menu_item.name,
                     quantity=oi.quantity,
                     subtotal=float(oi.subtotal),
+                    batch_number=getattr(oi, "batch_number", 1),
+                    batch_status=getattr(oi, "batch_status", "pending"),
+                    menu_item_image_url=getattr(oi.menu_item, "image_url", None),
                 )
                 for oi in order.order_items
             ]

@@ -26,33 +26,53 @@ function showPanel(panel) {
 tabCashier.addEventListener('click', () => showPanel(panelCashier));
 tabMenu.addEventListener('click', () => showPanel(panelMenu));
 
-// —— Cashier / Billing ——
+// —— Cashier / Billing (table-centric: one active order per table, consolidated items + grand total) ——
 let selectedOrderId = null;
+let selectedTableNumber = null;
 
-async function fetchAllOrders() {
-  const res = await fetch(`${API_BASE}/api/orders/`);
+/** Fetch one canonical order per table (consolidated for Cashier). */
+async function fetchOrdersByTable() {
+  const res = await fetch(`${API_BASE}/api/orders/tables`);
   if (!res.ok) throw new Error('Failed to fetch orders');
+  return res.json();
+}
+
+async function fetchActiveOrderByTable(tableId) {
+  const res = await fetch(`${API_BASE}/api/orders/active-by-table/${tableId}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `No active order for table ${tableId}`);
+  }
   return res.json();
 }
 
 function loadUnpaidOrders() {
   const list = document.getElementById('orders-list');
   list.innerHTML = '<li class="text-slate-500">Loading…</li>';
-  fetchAllOrders()
+  fetchOrdersByTable()
     .then((orders) => {
-      const unpaid = orders.filter((o) => o.status !== 'paid');
-      if (!unpaid.length) {
-        list.innerHTML = '<li class="text-slate-500">No unpaid orders.</li>';
+      if (!orders.length) {
+        list.innerHTML = '<li class="text-slate-500">No active orders.</li>';
         return;
       }
-      list.innerHTML = unpaid
+      // Backend returns one order per table (canonical = all items + grand total).
+      list.innerHTML = orders
         .map(
           (o) =>
-            `<li><button type="button" class="order-row w-full text-left px-3 py-2 rounded bg-white shadow border border-slate-200 hover:bg-slate-50" data-order-id="${o.id}">Table ${escapeHtml(String(o.table_number))} — #${o.id} (${escapeHtml(o.status)})</button></li>`
+            `<li><button type="button" class="order-row w-full text-left px-3 py-2 rounded bg-white shadow border border-slate-200 hover:bg-slate-50" data-table-id="${o.table_number}">Table ${escapeHtml(String(o.table_number))}</button></li>`
         )
         .join('');
       list.querySelectorAll('.order-row').forEach((btn) => {
-        btn.addEventListener('click', () => selectOrder(unpaid.find((x) => x.id === parseInt(btn.dataset.orderId, 10))));
+        const tableId = parseInt(btn.dataset.tableId, 10);
+        btn.addEventListener('click', async () => {
+          try {
+            const order = await fetchActiveOrderByTable(tableId);
+            selectOrder(order);
+          } catch (e) {
+            if (window.toast) window.toast.error(e.message);
+            else alert(e.message);
+          }
+        });
       });
     })
     .catch((e) => {
@@ -64,9 +84,11 @@ function loadUnpaidOrders() {
 function selectOrder(order) {
   if (!order) return;
   selectedOrderId = order.id;
+  selectedTableNumber = order.table_number;
   document.getElementById('receipt-placeholder').classList.add('hidden');
   const container = document.getElementById('receipt-container');
   container.classList.remove('hidden');
+  document.getElementById('receipt-table-number').textContent = order.table_number;
   const itemsRows = (order.items || [])
     .map(
       (i) =>
@@ -74,18 +96,17 @@ function selectOrder(order) {
     )
     .join('');
   document.getElementById('receipt-content').innerHTML = `
-    <p class="text-slate-600 mb-2"><strong>Order #${order.id}</strong></p>
-    <p class="text-slate-600 mb-4">Table ${order.table_number}</p>
-    <table class="w-full text-sm text-slate-700 mb-4">
+    <table class="w-full text-sm text-slate-700">
       <thead><tr class="border-b border-slate-200"><th class="text-left py-1">Item</th><th class="text-right py-1">Qty</th><th class="text-right py-1">Subtotal</th></tr></thead>
       <tbody>${itemsRows}</tbody>
     </table>
-    <p class="text-lg font-semibold text-slate-800 border-t border-slate-200 pt-2">Grand Total: $${Number(order.total_amount).toFixed(2)}</p>
   `;
+  document.getElementById('receipt-grand-total').textContent = 'Grand Total: $' + Number(order.total_amount).toFixed(2);
 }
 
 document.getElementById('btn-process-payment').addEventListener('click', async () => {
   if (selectedOrderId == null) return;
+  const tableNumberJustPaid = selectedTableNumber;
   const btn = document.getElementById('btn-process-payment');
   btn.disabled = true;
   btn.textContent = 'Processing…';
@@ -93,17 +114,35 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     const res = await fetch(`${API_BASE}/api/orders/${selectedOrderId}/pay`, { method: 'PUT' });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(data.detail || 'Payment failed');
+      if (window.toast) window.toast.error(data.detail || 'Payment failed');
+      else alert(data.detail || 'Payment failed');
       return;
     }
-    alert('Payment processed successfully.');
+    if (window.toast) window.toast.success('Payment processed successfully.');
+    else alert('Payment processed successfully.');
     selectedOrderId = null;
+    selectedTableNumber = null;
     document.getElementById('receipt-container').classList.add('hidden');
     document.getElementById('receipt-placeholder').classList.remove('hidden');
+    // Optimistically hide this table from the list so it disappears immediately.
+    if (tableNumberJustPaid != null) {
+      const list = document.getElementById('orders-list');
+      const btnNode = list.querySelector(
+        `.order-row[data-table-id="${tableNumberJustPaid}"]`,
+      );
+      if (btnNode && btnNode.parentElement) {
+        btnNode.parentElement.remove();
+      }
+      if (!list.querySelector('.order-row')) {
+        list.innerHTML = '<li class="text-slate-500">No active orders.</li>';
+      }
+    }
+    // Also reload from backend to stay in sync in case of concurrent changes.
     loadUnpaidOrders();
   } catch (e) {
     console.error(e);
-    alert('Payment failed');
+    if (window.toast) window.toast.error('Payment failed');
+    else alert('Payment failed');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Process Payment';
@@ -145,8 +184,19 @@ function renderMenuItems(items) {
     return;
   }
   el.innerHTML = items
-    .map((m) => `<li class="py-1">${escapeHtml(m.name)} — $${Number(m.price).toFixed(2)}</li>`)
+    .map((m) => {
+      const img = m.image_url
+        ? `<img src="${escapeAttr(m.image_url)}" alt="" class="w-10 h-10 object-cover rounded inline-block mr-2 align-middle" />`
+        : '';
+      return `<li class="py-2 flex items-center gap-2">${img}<span>${escapeHtml(m.name)} — $${Number(m.price).toFixed(2)}</span></li>`;
+    })
     .join('');
+}
+
+function escapeAttr(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML.replace(/"/g, '&quot;');
 }
 
 function populateCategorySelect(categories) {
@@ -199,33 +249,110 @@ document.getElementById('form-category').addEventListener('submit', async (e) =>
   }
 });
 
+document.getElementById('item-image-file').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(data.detail || 'Upload failed');
+      return;
+    }
+    document.getElementById('item-image-url').value = data.url || '';
+  } catch (err) {
+    console.error(err);
+    alert('Upload failed');
+  }
+  e.target.value = '';
+});
+
 document.getElementById('form-menu-item').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('item-name').value.trim();
   const price = parseFloat(document.getElementById('item-price').value);
+  const description = document.getElementById('item-description').value.trim() || null;
   const categoryId = document.getElementById('item-category').value;
+  const imageUrl = document.getElementById('item-image-url').value.trim() || null;
+  const imageFile = document.getElementById('item-image-file').files?.[0];
   if (!name || isNaN(price) || price < 0 || !categoryId) return;
+  const btn = document.getElementById('btn-submit-menu-item');
+  btn.disabled = true;
   try {
-    const res = await fetch(`${API_BASE}/api/menu-items/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, price, category_id: parseInt(categoryId, 10) }),
-    });
+    let res;
+    if (imageFile) {
+      const fd = new FormData();
+      fd.append('name', name);
+      fd.append('price', String(price));
+      fd.append('category_id', categoryId);
+      if (description) fd.append('description', description);
+      fd.append('image', imageFile);
+      res = await fetch(`${API_BASE}/api/menu-items/upload`, { method: 'POST', body: fd });
+    } else {
+      res = await fetch(`${API_BASE}/api/menu-items/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, price, category_id: parseInt(categoryId, 10), description: description, image_url: imageUrl }),
+      });
+    }
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(err.detail || 'Failed to create menu item');
+      alert(Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to create menu item'));
       return;
     }
     document.getElementById('item-name').value = '';
     document.getElementById('item-price').value = '';
+    document.getElementById('item-description').value = '';
+    document.getElementById('item-image-url').value = '';
     document.getElementById('item-category').value = '';
+    document.getElementById('item-image-file').value = '';
     await loadMenuData();
   } catch (err) {
     console.error(err);
     alert('Failed to create menu item');
+  } finally {
+    btn.disabled = false;
   }
 });
+
+// —— Live updates via WebSocket (auto-refresh Cashier list when new batches arrive) ——
+function connectCounterWebSocket() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${location.host}/ws`;
+  const ws = new WebSocket(wsUrl);
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.event === 'new_order_batch' && msg.data) {
+        // A new batch was submitted (new order or add-on). Refresh the tables list.
+        loadUnpaidOrders();
+        // If we are currently viewing this table, refresh the receipt too.
+        const data = msg.data;
+        if (selectedOrderId != null && data.order_id === selectedOrderId) {
+          fetchActiveOrderByTable(data.table_number)
+            .then((order) => selectOrder(order))
+            .catch(() => {});
+        }
+      }
+      if (msg.event === 'order_updated' && msg.data && msg.data.status) {
+        // Status changes (e.g. completed) can affect which tables are active; refresh list.
+        loadUnpaidOrders();
+      }
+    } catch (err) {
+      console.error('Counter WebSocket message error:', err);
+    }
+  };
+
+  ws.onclose = () => {
+    setTimeout(connectCounterWebSocket, 3000);
+  };
+  ws.onerror = () => {};
+}
 
 // Initial load
 loadUnpaidOrders();
 loadMenuData();
+connectCounterWebSocket();

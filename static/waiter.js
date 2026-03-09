@@ -17,18 +17,25 @@ function renderMenu() {
   }
   grid.innerHTML = menuItems
     .map(
-      (m) => `
+      (m) => {
+        const imgSrc = m.image_url || null;
+        const imgHtml = imgSrc
+          ? `<img src="${escapeAttr(imgSrc)}" alt="" class="w-full h-20 object-cover rounded-t-lg" />`
+          : `<div class="w-full h-20 bg-slate-200 rounded-t-lg flex items-center justify-center text-slate-400 text-xs">No image</div>`;
+        return `
       <button
         type="button"
         data-id="${m.id}"
         data-name="${escapeAttr(m.name)}"
         data-price="${m.price}"
-        class="menu-item-btn text-left p-3 bg-white rounded-lg shadow hover:bg-blue-50 border border-slate-200"
+        class="menu-item-btn text-left p-0 bg-white rounded-lg shadow hover:bg-blue-50 border border-slate-200 overflow-hidden"
       >
-        <span class="font-medium text-slate-800 block">${escapeHtml(m.name)}</span>
-        <span class="text-sm text-slate-600">$${Number(m.price).toFixed(2)}</span>
+        ${imgHtml}
+        <span class="font-medium text-slate-800 block px-2 pt-1">${escapeHtml(m.name)}</span>
+        <span class="text-sm text-slate-600 block px-2 pb-2">$${Number(m.price).toFixed(2)}</span>
       </button>
-    `
+    `;
+      }
     )
     .join('');
 
@@ -109,15 +116,31 @@ function escapeAttr(text) {
   return div.innerHTML.replace(/"/g, '&quot;');
 }
 
+async function submitOrder(tableId, items) {
+  const res = await fetch(`${API_BASE}/api/orders/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ table_id: tableId, items }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to submit order');
+    throw new Error(msg);
+  }
+  return data;
+}
+
 document.getElementById('submit-order').addEventListener('click', async () => {
   const tableInput = document.getElementById('table-number');
   const tableNumber = parseInt(tableInput.value, 10);
   if (!tableNumber || tableNumber < 1) {
-    alert('Please enter a valid table number.');
+    if (window.toast) window.toast.error('Please enter a valid table number.');
+    else alert('Please enter a valid table number.');
     return;
   }
   if (cart.size === 0) {
-    alert('Cart is empty.');
+    if (window.toast) window.toast.error('Cart is empty.');
+    else alert('Cart is empty.');
     return;
   }
 
@@ -126,26 +149,58 @@ document.getElementById('submit-order').addEventListener('click', async () => {
     items.push({ menu_item_id: menu_item.id, quantity });
   });
 
+  const submitBtn = document.getElementById('submit-order');
+  submitBtn.disabled = true;
   try {
-    const res = await fetch(`${API_BASE}/api/orders/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ table_number: tableNumber, items }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      alert(data.detail || 'Failed to submit order');
-      return;
-    }
+    const data = await submitOrder(tableNumber, items);
     cart.clear();
     renderCart();
     tableInput.value = '';
-    alert(`Order #${data.id} submitted for table ${data.table_number}. Total: $${Number(data.total_amount).toFixed(2)}`);
+    if (window.toast) {
+      window.toast.success(data.message || (data.is_new_order ? `New order created for Table ${data.table_number}` : `Items added to Table ${data.table_number}'s existing order`));
+    } else {
+      alert(data.message || 'Order submitted.');
+    }
   } catch (err) {
     console.error(err);
-    alert('Failed to submit order');
+    if (window.toast) window.toast.error(err.message || 'Failed to submit order');
+    else alert(err.message || 'Failed to submit order');
+  } finally {
+    submitBtn.disabled = false;
   }
 });
+
+function connectWebSocket() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${location.host}/ws`;
+  const ws = new WebSocket(wsUrl);
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.event === 'menu_item_added' && msg.data) {
+        const item = msg.data;
+        if (!menuItems.some((m) => m.id === item.id)) {
+          menuItems.push({
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            category_id: item.category_id,
+            description: item.description ?? null,
+            image_url: item.image_url ?? null,
+          });
+          renderMenu();
+        }
+      }
+    } catch (err) {
+      console.error('WebSocket message error:', err);
+    }
+  };
+  ws.onclose = () => {
+    setTimeout(connectWebSocket, 3000);
+  };
+  ws.onerror = () => {};
+}
+connectWebSocket();
 
 (async function init() {
   try {
