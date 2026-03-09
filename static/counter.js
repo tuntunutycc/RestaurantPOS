@@ -29,6 +29,7 @@ tabMenu.addEventListener('click', () => showPanel(panelMenu));
 // —— Cashier / Billing (table-centric: one active order per table, consolidated items + grand total) ——
 let selectedOrderId = null;
 let selectedTableNumber = null;
+let selectedOrderTotal = 0;
 
 /** Fetch one canonical order per table (consolidated for Cashier). */
 async function fetchOrdersByTable() {
@@ -85,6 +86,7 @@ function selectOrder(order) {
   if (!order) return;
   selectedOrderId = order.id;
   selectedTableNumber = order.table_number;
+  selectedOrderTotal = Number(order.total_amount) || 0;
   document.getElementById('receipt-placeholder').classList.add('hidden');
   const container = document.getElementById('receipt-container');
   container.classList.remove('hidden');
@@ -102,16 +104,63 @@ function selectOrder(order) {
     </table>
   `;
   document.getElementById('receipt-grand-total').textContent = 'Grand Total: $' + Number(order.total_amount).toFixed(2);
+  // Reset payment inputs for this order
+  const amountInput = document.getElementById('amount-tendered');
+  const changeSpan = document.getElementById('change-amount');
+  const methodSelect = document.getElementById('payment-method');
+  if (amountInput) amountInput.value = '';
+  if (changeSpan) changeSpan.textContent = '$0.00';
+  if (methodSelect) methodSelect.value = 'cash';
+}
+
+// Dynamic change calculation and payment processing
+const amountInputEl = document.getElementById('amount-tendered');
+const changeSpanEl = document.getElementById('change-amount');
+const paymentMethodEl = document.getElementById('payment-method');
+
+if (amountInputEl) {
+  amountInputEl.addEventListener('input', () => {
+    const tendered = parseFloat(amountInputEl.value || '0');
+    const change = tendered - selectedOrderTotal;
+    if (Number.isNaN(change)) {
+      changeSpanEl.textContent = '$0.00';
+    } else if (change >= 0) {
+      changeSpanEl.textContent = `$${change.toFixed(2)}`;
+    } else {
+      changeSpanEl.textContent = 'Insufficient';
+    }
+  });
 }
 
 document.getElementById('btn-process-payment').addEventListener('click', async () => {
   if (selectedOrderId == null) return;
   const tableNumberJustPaid = selectedTableNumber;
   const btn = document.getElementById('btn-process-payment');
+  const amountInput = document.getElementById('amount-tendered');
+  const methodSelect = document.getElementById('payment-method');
+  const tendered = parseFloat((amountInput && amountInput.value) || '0');
+
+  if (Number.isNaN(tendered) || tendered <= 0) {
+    if (window.toast) window.toast.error('Enter a valid amount tendered.');
+    else alert('Enter a valid amount tendered.');
+    return;
+  }
+  if (tendered < selectedOrderTotal) {
+    if (window.toast) window.toast.error('Amount tendered is less than total.');
+    else alert('Amount tendered is less than total.');
+    return;
+  }
+
+  const method = methodSelect ? methodSelect.value || 'cash' : 'cash';
+
   btn.disabled = true;
   btn.textContent = 'Processing…';
   try {
-    const res = await fetch(`${API_BASE}/api/orders/${selectedOrderId}/pay`, { method: 'PUT' });
+    const res = await fetch(`${API_BASE}/api/orders/${selectedOrderId}/checkout`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payment_method: method, amount_tendered: tendered }),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (window.toast) window.toast.error(data.detail || 'Payment failed');
@@ -122,6 +171,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     else alert('Payment processed successfully.');
     selectedOrderId = null;
     selectedTableNumber = null;
+    selectedOrderTotal = 0;
     document.getElementById('receipt-container').classList.add('hidden');
     document.getElementById('receipt-placeholder').classList.remove('hidden');
     // Optimistically hide this table from the list so it disappears immediately.
@@ -145,7 +195,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     else alert('Payment failed');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Process Payment';
+    btn.textContent = 'Confirm Payment';
   }
 });
 

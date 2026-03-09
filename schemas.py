@@ -97,6 +97,10 @@ class OrderResponseDetail(BaseModel):
     total_amount: float
     created_at: datetime
     items: List[OrderItemDetail]
+    # Payment information for cashier
+    payment_method: str | None = None
+    amount_tendered: float | None = None
+    change_amount: float | None = None
 
     @model_validator(mode="wrap")
     @classmethod
@@ -122,5 +126,8 @@ class OrderResponseDetail(BaseModel):
                 total_amount=float(order.total_amount),
                 created_at=order.created_at,
                 items=items,
+                payment_method=getattr(order, "payment_method", None),
+                amount_tendered=getattr(order, "amount_tendered", None),
+                change_amount=getattr(order, "change_amount", None),
             )
         return handler(data)

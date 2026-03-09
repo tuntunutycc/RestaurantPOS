@@ -401,9 +401,26 @@ async def submit_order(
     )
 
 
-@router.put("/orders/{order_id}/pay", response_model=OrderResponseDetail)
-def pay_order(order_id: int, db: Session = Depends(get_db)):
-    """Mark an order as paid."""
+class CheckoutRequest(BaseModel):
+    """Request body for cashier checkout with payment information."""
+
+    payment_method: str  # 'cash', 'mobile_money', etc.
+    amount_tendered: float
+
+
+@router.put("/orders/{order_id}/checkout", response_model=OrderResponseDetail)
+def checkout_order(
+    order_id: int,
+    body: CheckoutRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Finalize payment for an order:
+    - Validate amount_tendered >= total_amount
+    - Compute change_amount = amount_tendered - total_amount
+    - Set status = 'paid' and store payment details
+    - Return full receipt for cashier
+    """
     order = (
         db.query(Order)
         .options(
@@ -414,6 +431,20 @@ def pay_order(order_id: int, db: Session = Depends(get_db)):
     )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    total = float(order.total_amount)
+    tendered = float(body.amount_tendered)
+    if tendered < total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amount tendered ({tendered:.2f}) is less than total ({total:.2f})",
+        )
+
+    change = tendered - total
+
+    order.payment_method = body.payment_method
+    order.amount_tendered = tendered
+    order.change_amount = change
     order.status = "paid"
     db.commit()
     db.refresh(order)

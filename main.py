@@ -57,6 +57,25 @@ async def lifespan(app: FastAPI):
     except Exception:
         # Column may already exist; ignore migration errors.
         pass
+    # Add payment fields to orders for cashier checkout.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN payment_method VARCHAR(32)"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN amount_tendered FLOAT"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN change_amount FLOAT"))
+    except Exception:
+        pass
     # One active order per table: at most one row per table_number with status open/dining
     try:
         from sqlalchemy import text

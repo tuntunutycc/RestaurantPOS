@@ -46,9 +46,11 @@ class Order(Base):
     table_number = Column(Integer, nullable=False, index=True)
     status = Column(String(50), nullable=False, default="pending")
     total_amount = Column(Float, nullable=False, default=0.0)
-    created_at = Column(
-        DateTime, nullable=False, default=datetime.utcnow
-    )
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # Payment information (filled at checkout)
+    payment_method = Column(String(32), nullable=True)  # 'cash', 'mobile_money', etc.
+    amount_tendered = Column(Float, nullable=True)
+    change_amount = Column(Float, nullable=True)
 
     order_items = relationship("OrderItem", back_populates="order")
 
