@@ -1,6 +1,8 @@
 const API_BASE = '';
 
 let menuItems = [];
+let categories = []; // { id, name } from API
+let activeCategoryId = null; // null = "All"
 const cart = new Map(); // menu_item_id -> { menu_item, quantity }
 
 async function fetchMenuItems() {
@@ -9,13 +11,63 @@ async function fetchMenuItems() {
   return res.json();
 }
 
+async function fetchCategories() {
+  const res = await fetch(`${API_BASE}/api/categories/`);
+  if (!res.ok) throw new Error('Failed to fetch categories');
+  return res.json();
+}
+
+/** Get categories that have at least one menu item, in API order; "All" is handled separately. */
+function getCategoriesWithItems() {
+  const ids = new Set(menuItems.map((m) => m.category_id));
+  return categories.filter((c) => ids.has(c.id));
+}
+
+function setActiveCategory(categoryId) {
+  activeCategoryId = categoryId;
+  renderCategoryTabs();
+  renderMenu();
+}
+
+function renderCategoryTabs() {
+  const container = document.getElementById('category-tabs');
+  if (!container) return;
+  const withItems = getCategoriesWithItems();
+  const allLabel = 'All'; // or 'အားလုံး' for Burmese
+  container.innerHTML = [
+    `<button type="button" data-category-id="" class="category-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${activeCategoryId === null ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${escapeHtml(allLabel)}</button>`,
+    ...withItems.map(
+      (c) =>
+        `<button type="button" data-category-id="${c.id}" class="category-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${activeCategoryId === c.id ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${escapeHtml(c.name)}</button>`
+    ),
+  ].join('');
+
+  container.querySelectorAll('.category-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.categoryId;
+      setActiveCategory(id === '' ? null : parseInt(id, 10));
+    });
+  });
+}
+
+/** Items to show: all or filtered by activeCategoryId */
+function getFilteredMenuItems() {
+  if (activeCategoryId == null) return menuItems;
+  return menuItems.filter((m) => m.category_id === activeCategoryId);
+}
+
 function renderMenu() {
   const grid = document.getElementById('menu-grid');
+  const filtered = getFilteredMenuItems();
   if (!menuItems.length) {
     grid.innerHTML = '<p class="col-span-full text-slate-500">No menu items. Add some from the main menu first.</p>';
     return;
   }
-  grid.innerHTML = menuItems
+  if (!filtered.length) {
+    grid.innerHTML = '<p class="col-span-full text-slate-500">No items in this category.</p>';
+    return;
+  }
+  grid.innerHTML = filtered
     .map(
       (m) => {
         const imgSrc = m.image_url || null;
@@ -188,6 +240,7 @@ function connectWebSocket() {
             description: item.description ?? null,
             image_url: item.image_url ?? null,
           });
+          renderCategoryTabs();
           renderMenu();
         }
       }
@@ -204,7 +257,11 @@ connectWebSocket();
 
 (async function init() {
   try {
-    menuItems = await fetchMenuItems();
+    const [items, cats] = await Promise.all([fetchMenuItems(), fetchCategories()]);
+    menuItems = items;
+    categories = cats;
+    activeCategoryId = null;
+    renderCategoryTabs();
     renderMenu();
   } catch (e) {
     console.error(e);

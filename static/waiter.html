@@ -11,9 +11,15 @@
     <h1 class="text-xl md:text-2xl font-bold text-slate-800 mb-4">Waiter POS – Take Order</h1>
 
     <div class="grid md:grid-cols-3 gap-4 md:gap-6">
-      <!-- Menu items grid -->
+      <!-- Menu: sticky category tabs + grid -->
       <div class="md:col-span-2">
         <h2 class="text-lg font-semibold text-slate-700 mb-3">Menu</h2>
+        <!-- Sticky category tab bar -->
+        <div class="sticky top-0 z-10 bg-slate-50 pb-2 -mx-1 mb-3 overflow-x-auto">
+          <div id="category-tabs" class="flex gap-1 min-w-max">
+            <!-- All / အားလုံး and category tabs rendered by JS -->
+          </div>
+        </div>
         <div id="menu-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3">
           <p class="col-span-full text-slate-500">Loading menu…</p>
         </div>
