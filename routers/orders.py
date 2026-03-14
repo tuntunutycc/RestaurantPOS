@@ -6,8 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
+from auth import get_current_user
 from database import get_db
-from models import MenuItem, Order, OrderItem
+from models import MenuItem, Order, OrderItem, User
 from schemas import OrderCreate, OrderItemDetail, OrderResponseDetail, OrderSubmitRequest, OrderSubmitResponse
 
 router = APIRouter(prefix="/api")
@@ -20,6 +21,7 @@ async def create_order(
     request: Request,
     order_data: OrderCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create or add to an order for a table (table-centric). If table already has an open/dining
@@ -136,6 +138,7 @@ async def create_order(
 def list_orders(
     status: list[str] | None = Query(None, description="Filter by status(es), e.g. status=pending&status=open"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """List orders, optionally filtered by status. Eager-loads items and menu_item to avoid N+1."""
     q = (
@@ -169,7 +172,10 @@ def _canonical_order_for_table(orders):
 
 
 @router.get("/orders/tables", response_model=list[OrderResponseDetail])
-def list_orders_by_table(db: Session = Depends(get_db)):
+def list_orders_by_table(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     List one order per table (the canonical order for checkout). Cashier uses this so each
     table appears once with the order that has ALL items (initial + add-ons) and grand total.
@@ -193,7 +199,11 @@ def list_orders_by_table(db: Session = Depends(get_db)):
 
 
 @router.get("/orders/active-by-table/{table_id}", response_model=OrderResponseDetail)
-def get_active_order_by_table(table_id: int, db: Session = Depends(get_db)):
+def get_active_order_by_table(
+    table_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Get the single canonical order for a table (all items + grand total). Prefers the
     order with status open/dining (the one we append add-ons to), then completed, then pending.
@@ -233,6 +243,7 @@ async def update_order_status(
     order_id: int,
     body: OrderStatusUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Update an order's status (e.g. completed). Broadcasts order_updated via WebSocket for kitchen."""
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -254,6 +265,7 @@ async def update_order_batch_status(
     batch_number: int,
     body: BatchStatusUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Update the status of a single batch (ticket) within an order.
@@ -297,6 +309,7 @@ async def submit_order(
     request: Request,
     body: OrderSubmitRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Table-centric batching submit endpoint.
@@ -413,6 +426,7 @@ def checkout_order(
     order_id: int,
     body: CheckoutRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Finalize payment for an order:

@@ -4,13 +4,14 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, WebSocket
+from fastapi import Depends, FastAPI, UploadFile, WebSocket
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from database import engine
-from models import Base
-from routers import menu, orders
+from auth import hash_password, require_roles
+from database import SessionLocal, engine
+from models import Base, User
+from routers import auth, menu, orders
 from websocket_manager import ConnectionManager
 
 
@@ -86,11 +87,48 @@ async def lifespan(app: FastAPI):
             ))
     except Exception:
         pass
+    # Add pin_code to users table (4-char, unique, nullable)
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN pin_code VARCHAR(4)"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("CREATE UNIQUE INDEX ix_users_pin_code ON users(pin_code)"))
+    except Exception:
+        pass
+    # Seed default admin user if no users exist; set PIN for admin (and backfill if column new)
+    db = SessionLocal()
+    try:
+        if db.query(User).count() == 0:
+            admin = User(
+                username="admin",
+                password_hash=hash_password("admin123"),
+                role="admin",
+                pin_code="1234",
+            )
+            db.add(admin)
+            db.commit()
+        else:
+            # Backfill: ensure existing admin has a PIN and a fresh password hash
+            admin = db.query(User).filter(User.username == "admin").first()
+            if admin:
+                if getattr(admin, "pin_code", None) is None:
+                    admin.pin_code = "1234"
+                # Reset password hash to ensure it uses the current hashing scheme
+                admin.password_hash = hash_password("admin123")
+                db.commit()
+    finally:
+        db.close()
     yield
     engine.dispose()
 
 
 app = FastAPI(title="Restaurant POS API", lifespan=lifespan)
+app.include_router(auth.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 
@@ -131,8 +169,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 @app.post("/api/upload")
-async def upload_image(file: UploadFile):
-    """Upload an image for menu items. Saves to static/images/ and returns the URL path."""
+async def upload_image(
+    file: UploadFile,
+    current_user: User = Depends(require_roles(["admin"])),
+):
+    """Upload an image for menu items. Admin only. Saves to static/images/ and returns the URL path."""
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_IMAGE_EXTENSIONS:
         return JSONResponse(
@@ -162,6 +203,18 @@ def kitchen_page():
 def counter_page():
     """Serve the Counter / Admin UI."""
     return FileResponse(static_dir / "counter.html")
+
+
+@app.get("/login")
+def login_page():
+    """Serve the Login page (username/password for admins)."""
+    return FileResponse(static_dir / "login.html")
+
+
+@app.get("/pin-login")
+def pin_login_page():
+    """Serve the Staff PIN login page (4-digit numpad)."""
+    return FileResponse(static_dir / "pin-login.html")
 
 
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

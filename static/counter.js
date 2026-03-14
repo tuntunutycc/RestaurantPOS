@@ -1,5 +1,13 @@
 const API_BASE = '';
 
+(function guard() {
+  if (!window.auth) return;
+  if (!window.auth.requireAuth()) return;
+  if (!window.auth.requireRole(['cashier', 'admin'])) return;
+  window.auth.renderNav('pos-nav');
+  window.auth.consumeUnauthorizedFlag();
+})();
+
 // —— Tab switching ——
 const tabCashier = document.getElementById('tab-cashier');
 const tabMenu = document.getElementById('tab-menu');
@@ -33,13 +41,19 @@ let selectedOrderTotal = 0;
 
 /** Fetch one canonical order per table (consolidated for Cashier). */
 async function fetchOrdersByTable() {
-  const res = await fetch(`${API_BASE}/api/orders/tables`);
+  const res = await fetch(`${API_BASE}/api/orders/tables`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
   if (!res.ok) throw new Error('Failed to fetch orders');
   return res.json();
 }
 
 async function fetchActiveOrderByTable(tableId) {
-  const res = await fetch(`${API_BASE}/api/orders/active-by-table/${tableId}`);
+  const res = await fetch(`${API_BASE}/api/orders/active-by-table/${tableId}`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) throw new Error('Unauthorized');
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || `No active order for table ${tableId}`);
@@ -158,9 +172,10 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
   try {
     const res = await fetch(`${API_BASE}/api/orders/${selectedOrderId}/checkout`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
       body: JSON.stringify({ payment_method: method, amount_tendered: tendered }),
     });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (window.toast) window.toast.error(data.detail || 'Payment failed');
@@ -207,13 +222,19 @@ function escapeHtml(text) {
 }
 
 async function fetchCategories() {
-  const res = await fetch(`${API_BASE}/api/categories/`);
+  const res = await fetch(`${API_BASE}/api/categories/`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
   if (!res.ok) throw new Error('Failed to fetch categories');
   return res.json();
 }
 
 async function fetchMenuItems() {
-  const res = await fetch(`${API_BASE}/api/menu-items/`);
+  const res = await fetch(`${API_BASE}/api/menu-items/`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
   if (!res.ok) throw new Error('Failed to fetch menu items');
   return res.json();
 }
@@ -283,9 +304,10 @@ document.getElementById('form-category').addEventListener('submit', async (e) =>
   try {
     const res = await fetch(`${API_BASE}/api/categories/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
       body: JSON.stringify({ name }),
     });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       alert(err.detail || 'Failed to create category');
@@ -305,7 +327,12 @@ document.getElementById('item-image-file').addEventListener('change', async (e) 
   const fd = new FormData();
   fd.append('file', file);
   try {
-    const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: fd });
+    const res = await fetch(`${API_BASE}/api/upload`, {
+      method: 'POST',
+      headers: { ...window.auth.getAuthHeaders() },
+      body: fd,
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       alert(data.detail || 'Upload failed');
@@ -339,14 +366,19 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
       fd.append('category_id', categoryId);
       if (description) fd.append('description', description);
       fd.append('image', imageFile);
-      res = await fetch(`${API_BASE}/api/menu-items/upload`, { method: 'POST', body: fd });
+      res = await fetch(`${API_BASE}/api/menu-items/upload`, {
+        method: 'POST',
+        headers: { ...window.auth.getAuthHeaders() },
+        body: fd,
+      });
     } else {
       res = await fetch(`${API_BASE}/api/menu-items/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
         body: JSON.stringify({ name, price, category_id: parseInt(categoryId, 10), description: description, image_url: imageUrl }),
       });
     }
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       alert(Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to create menu item'));
@@ -402,7 +434,9 @@ function connectCounterWebSocket() {
   ws.onerror = () => {};
 }
 
-// Initial load
-loadUnpaidOrders();
-loadMenuData();
-connectCounterWebSocket();
+// Initial load only when authenticated (avoids 401s if redirecting to login)
+if (window.auth && window.auth.getToken()) {
+  loadUnpaidOrders();
+  loadMenuData();
+  connectCounterWebSocket();
+}

@@ -6,8 +6,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy.orm import Session
 
+from auth import get_current_user, require_roles
 from database import get_db
-from models import Category, MenuItem
+from models import Category, MenuItem, User
 from schemas import CategoryCreate, CategoryResponse, MenuItemCreate, MenuItemResponse
 
 router = APIRouter(prefix="/api")
@@ -16,8 +17,12 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 
 @router.post("/categories/", response_model=CategoryResponse)
-def create_category(category: CategoryCreate, db: Session = Depends(get_db)):
-    """Create a new category."""
+def create_category(
+    category: CategoryCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin"])),
+):
+    """Create a new category. Admin only."""
     db_category = Category(name=category.name)
     db.add(db_category)
     db.commit()
@@ -26,8 +31,11 @@ def create_category(category: CategoryCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/categories/", response_model=list[CategoryResponse])
-def list_categories(db: Session = Depends(get_db)):
-    """Retrieve all categories."""
+def list_categories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Retrieve all categories. Requires authentication."""
     return db.query(Category).all()
 
 
@@ -36,8 +44,9 @@ async def create_menu_item(
     request: Request,
     item: MenuItemCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin"])),
 ):
-    """Create a new menu item (JSON). Broadcasts menu_item_added via WebSocket."""
+    """Create a new menu item (JSON). Admin only. Broadcasts menu_item_added via WebSocket."""
     db_item = MenuItem(
         name=item.name,
         price=item.price,
@@ -64,6 +73,7 @@ async def create_menu_item_upload(
     description: str | None = Form(None),
     image: UploadFile | None = File(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin"])),
 ):
     """
     Create a menu item from form data (name, price, description, category_id, image file).
@@ -108,8 +118,9 @@ async def create_menu_item_upload(
 def list_menu_items(
     category_id: int | None = Query(None, description="Filter by category ID"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Retrieve all menu items, optionally filtered by category_id."""
+    """Retrieve all menu items, optionally filtered by category_id. Requires authentication."""
     q = db.query(MenuItem)
     if category_id is not None:
         q = q.filter(MenuItem.category_id == category_id)

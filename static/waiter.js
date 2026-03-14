@@ -1,18 +1,32 @@
 const API_BASE = '';
 
+(function guard() {
+  if (!window.auth) return;
+  if (!window.auth.requireAuth()) return;
+  if (!window.auth.requireRole(['waiter', 'admin'])) return;
+  window.auth.renderNav('pos-nav');
+  window.auth.consumeUnauthorizedFlag();
+})();
+
 let menuItems = [];
 let categories = []; // { id, name } from API
 let activeCategoryId = null; // null = "All"
 const cart = new Map(); // menu_item_id -> { menu_item, quantity }
 
 async function fetchMenuItems() {
-  const res = await fetch(`${API_BASE}/api/menu-items/`);
+  const res = await fetch(`${API_BASE}/api/menu-items/`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
   if (!res.ok) throw new Error('Failed to fetch menu items');
   return res.json();
 }
 
 async function fetchCategories() {
-  const res = await fetch(`${API_BASE}/api/categories/`);
+  const res = await fetch(`${API_BASE}/api/categories/`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
   if (!res.ok) throw new Error('Failed to fetch categories');
   return res.json();
 }
@@ -171,9 +185,10 @@ function escapeAttr(text) {
 async function submitOrder(tableId, items) {
   const res = await fetch(`${API_BASE}/api/orders/submit`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
     body: JSON.stringify({ table_id: tableId, items }),
   });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to submit order');
@@ -255,17 +270,19 @@ function connectWebSocket() {
 }
 connectWebSocket();
 
-(async function init() {
-  try {
-    const [items, cats] = await Promise.all([fetchMenuItems(), fetchCategories()]);
-    menuItems = items;
-    categories = cats;
-    activeCategoryId = null;
-    renderCategoryTabs();
-    renderMenu();
-  } catch (e) {
-    console.error(e);
-    document.getElementById('menu-grid').innerHTML =
-      '<p class="col-span-full text-red-600">Error loading menu.</p>';
-  }
-})();
+if (window.auth && window.auth.getToken()) {
+  (async function init() {
+    try {
+      const [items, cats] = await Promise.all([fetchMenuItems(), fetchCategories()]);
+      menuItems = items;
+      categories = cats;
+      activeCategoryId = null;
+      renderCategoryTabs();
+      renderMenu();
+    } catch (e) {
+      console.error(e);
+      document.getElementById('menu-grid').innerHTML =
+        '<p class="col-span-full text-red-600">Error loading menu.</p>';
+    }
+  })();
+}

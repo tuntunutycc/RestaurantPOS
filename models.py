@@ -76,3 +76,17 @@ class OrderItem(Base):
 
     order = relationship("Order", back_populates="order_items")
     menu_item = relationship("MenuItem", back_populates="order_items")
+
+
+class User(Base):
+    """User account for authentication. role: admin, waiter, kitchen, cashier.
+    Staff use pin_code (4 digits); admins can use username/password.
+    """
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(255), nullable=False, unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(32), nullable=False, index=True)  # admin, waiter, kitchen, cashier
+    pin_code = Column(String(4), unique=True, nullable=True, index=True)  # exactly 4 chars, for staff

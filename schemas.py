@@ -6,6 +6,43 @@ from typing import List
 from pydantic import BaseModel, ConfigDict, model_validator
 
 
+class LoginRequest(BaseModel):
+    """Schema for login request."""
+
+    username: str
+    password: str
+
+
+class LoginPinRequest(BaseModel):
+    """Schema for PIN login (4-digit code)."""
+
+    pin_code: str
+
+    @model_validator(mode="after")
+    def pin_must_be_four_digits(self):
+        if not (self.pin_code and len(self.pin_code) == 4 and self.pin_code.isdigit()):
+            raise ValueError("pin_code must be exactly 4 digits")
+        return self
+
+
+class UserResponse(BaseModel):
+    """Schema for user in API responses (no password)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    role: str
+
+
+class TokenResponse(BaseModel):
+    """Schema for login response with JWT and user."""
+
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
+
 class CategoryCreate(BaseModel):
     """Schema for creating a category."""
 

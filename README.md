@@ -54,28 +54,57 @@ Data flow: **Browser** → HTTP (Fetch) → **FastAPI** → **SQLAlchemy** → *
 
 ---
 
+## Authentication & RBAC | အတည်ပြုခြင်းနှင့် ခွင့်ပြုချက်
+
+### English
+
+- **Login URLs** (replace `localhost` with your server IP if needed):
+  - **Admin:** `http://localhost:8000/login` — username `admin`, password `admin123`.
+  - **Staff (PIN):** `http://localhost:8000/pin-login` — 4-digit PIN (default admin PIN: `1234`; run `python scripts/add_staff_users.py` for waiter/kitchen/cashier PINs).
+- **JWT**: After login, the API returns a JWT. The frontend stores it in `localStorage` and sends it in the `Authorization: Bearer <token>` header on every API request.
+- **Roles**: `admin`, `waiter`, `kitchen`, `cashier`. Only **admin** can create/update/delete categories and menu items; all authenticated users can use order and table endpoints appropriate to their role.
+- **Route guards**: `/` (menu management) is admin-only; `/waiter` for waiter/admin; `/kitchen` for kitchen/admin; `/counter` for cashier/admin. Unauthenticated users are redirected to `/login`. Wrong-role access redirects to the user’s default page with an “Unauthorized” message.
+- **Backend**: `auth.py` provides JWT creation/validation and `require_roles(["admin"])`. `routers/auth.py` exposes `POST /api/auth/login` and `GET /api/auth/me`. Set `JWT_SECRET_KEY` in `.env` for production.
+
+### မြန်မာ
+
+- **လော့ဂ်အင်း URL များ** (လိုအပ်ပါက `localhost` ကို ဆာဗာက IP နှင့်အစားထိုးပါ):
+  - **အကြီးတန်း:** `http://localhost:8000/login` — username `admin`, password `admin123`။
+  - **ဝန်ထမ်း (PIN):** `http://localhost:8000/pin-login` — PIN ၄ လုံး (ပုံသက်ရိုက် admin PIN: `1234`; waiter/kitchen/cashier PIN များအတွက် `python scripts/add_staff_users.py` ကို လည်ပတ်ပါ)။
+- **JWT**: လော့ဂ်အင်းပြီးပါက API က JWT ပြန်ပေးသည်။ ရှေ့မျက်နှာစာက `localStorage` တွင် သိမ်းပြီး API တောင်းခံတိုင်းတွင် `Authorization: Bearer <token>` ဟက်ဒါဖြင့် ပို့သည်။
+- **အခန်းကဏ္ဍများ**: `admin`, `waiter`, `kitchen`, `cashier`။ **admin** သာ ကတ်တဂိုရီနှင့် မီနူးပစ္စည်းများ ဖန်တီး/ပြင်ဆင်/ဖျက်နိုင်သည်။ အတည်ပြုထားသော အသုံးပြုသူအားလုံး မိမိအခန်းကဏ္ဍနှင့် ကိုက်ညီသော အမှာစာ/စားပွဲ API များကို သုံးနိုင်သည်။
+- **Route ကာကွယ်မှု**: `/` (မီနူးစီမံခန့်ခွဲမှု) သည် admin သက်သက်။ `/waiter` — waiter/admin၊ `/kitchen` — kitchen/admin၊ `/counter` — cashier/admin။ အတည်မပြုထားသူများကို `/login` သို့ ပြန်ညွှန်းသည်။ အခန်းကဏ္ဍမကိုက်ပါက သက်ဆိုင်ရာ စာမျက်နှာသို့ ပြန်ညွှန်းပြီး “Unauthorized” ပြသသည်။
+
+---
+
 ## Project structure | ပရောဂျက်ဖွဲ့စည်းပုံ
 
 ```
 RestaurantPOS/
-├── main.py              # FastAPI app, routes for /, /waiter, /kitchen, /counter
+├── main.py              # FastAPI app, routes for /login, /waiter, /kitchen, /counter
 ├── database.py           # DB engine, SessionLocal, get_db
-├── models.py             # Category, MenuItem, Order, OrderItem
-├── schemas.py            # Pydantic request/response models
-├── requirements.txt      # fastapi, uvicorn, sqlalchemy, python-dotenv
-├── .env                  # DATABASE_URL (e.g. sqlite:///./pos.db)
+├── auth.py               # JWT auth, get_current_user, require_roles, password hashing
+├── models.py             # Category, MenuItem, Order, OrderItem, User
+├── schemas.py            # Pydantic request/response (incl. LoginRequest, TokenResponse)
+├── requirements.txt      # fastapi, uvicorn, sqlalchemy, python-dotenv, pyjwt, passlib[bcrypt]
+├── .env                  # DATABASE_URL, JWT_SECRET_KEY (see .env.example)
+├── .env.example          # Example env vars for collaborators
 ├── routers/
 │   ├── __init__.py
-│   ├── menu.py           # /api/categories/, /api/menu-items/
-│   └── orders.py         # /api/orders/ (POST, GET), status, pay
+│   ├── auth.py           # POST /api/auth/login, GET /api/auth/me
+│   ├── menu.py           # /api/categories/, /api/menu-items/ (admin for writes)
+│   └── orders.py         # /api/orders/ (all authenticated)
 └── static/
-    ├── index.html        # Menu & categories (test UI)
+    ├── login.html        # Login screen (default entry)
+    ├── login.js
+    ├── auth.js           # Token storage, route guards, nav bar, getAuthHeaders
+    ├── index.html        # Menu & categories (admin only)
     ├── app.js
-    ├── waiter.html       # Take orders
+    ├── waiter.html       # Take orders (waiter/admin)
     ├── waiter.js
-    ├── kitchen.html      # Kitchen display, mark done
+    ├── kitchen.html      # Kitchen display (kitchen/admin)
     ├── kitchen.js
-    ├── counter.html      # Counter/Admin (Cashier + Menu Management tabs)
+    ├── counter.html      # Counter/Admin (cashier/admin)
     └── counter.js
 ```
 
@@ -104,10 +133,23 @@ RestaurantPOS/
 1. **Setup**  
    - Copy `.env.example` to `.env` if needed; set `DATABASE_URL=sqlite:///./pos.db` for development.  
    - Install: `pip install -r requirements.txt`  
-   - Run: `uvicorn main:app --reload`  
-   - Open: `http://localhost:8000`
+   - Run: `uvicorn main:app --reload` (or `uvicorn main:app --host 0.0.0.0 --port 8000` for network access).  
+   - Open in browser: `http://localhost:8000` (or `http://<your-IP>:8000` from other devices).
 
-2. **Pages**  
+2. **Login URLs & credentials**  
+   - **Admin (username + password):**  
+     - URL: `http://localhost:8000/login`  
+     - Username: `admin`  
+     - Password: `admin123`  
+   - **Staff (4-digit PIN):**  
+     - URL: `http://localhost:8000/pin-login`  
+     - Default admin PIN: `1234`  
+   - **Staff users** (waiter, kitchen, cashier) and their PINs are created by running:  
+     `python scripts/add_staff_users.py`  
+     Then: `1111` = waiter1, `2222` = waiter2, `3333` = kitchen1, `4444` = cashier1.  
+   Change these in production.
+
+3. **Pages**  
    - **/** (`index.html`): Add categories and menu items; view lists. Use this or the Counter’s “Menu Management” tab to build the menu.  
    - **/waiter**: Waiter POS. Select items from the menu grid, adjust quantities in the cart, enter table number, then “Submit Order”. Orders are created with status `pending`.  
    - **/kitchen**: Kitchen Display. Shows pending orders as tickets (table, time, items). “Mark as Done” sets status to `completed`. List refreshes every 5 seconds.  
@@ -115,7 +157,7 @@ RestaurantPOS/
      - **Cashier / Billing**: Lists unpaid orders (pending/completed). Click an order to see the receipt; “Process Payment” calls the pay API and refreshes the list.  
      - **Menu Management**: Same as home — add categories and menu items, view lists.
 
-3. **Order flow**  
+4. **Order flow**  
    Waiter creates order (pending) → Kitchen sees it and marks done (completed) → Counter shows unpaid orders, processes payment (paid).
 
 ---
@@ -125,10 +167,23 @@ RestaurantPOS/
 1. **ပြင်ဆင်ခြင်း**  
    - လိုအပ်ပါက `.env.example` ကို `.env` သို့ကူးပါ။ ဖွံ့ဖြိုးမှုအတွက် `DATABASE_URL=sqlite:///./pos.db` သတ်မှတ်ပါ။  
    - တပ်ခြင်း: `pip install -r requirements.txt`  
-   - လည်ပတ်ခြင်း: `uvicorn main:app --reload`  
-   - ဖွင့်ခြင်း: `http://localhost:8000`
+   - လည်ပတ်ခြင်း: `uvicorn main:app --reload` (သို့မဟုတ် ကွန်ယက်မှ ဝင်ရန် `uvicorn main:app --host 0.0.0.0 --port 8000`)။  
+   - ဘရောက်ဆာဖွင့်ခြင်း: `http://localhost:8000` (သို့မဟုတ် အခြားစက်မှ `http://<your-IP>:8000`)။
 
-2. **စာမျက်နှာများ**  
+2. **လော့ဂ်အင်း URL နှင့် အကောင့်များ**  
+   - **အကြီးတန်း (username + password):**  
+     - URL: `http://localhost:8000/login`  
+     - Username: `admin`  
+     - Password: `admin123`  
+   - **ဝန်ထမ်း (PIN ၄ လုံး):**  
+     - URL: `http://localhost:8000/pin-login`  
+     - ပုံသက်ရိုက် admin PIN: `1234`  
+   - **ဝန်ထမ်းအကောင့်များ** (waiter, kitchen, cashier) နှင့် PIN များကို ဤဖြင့်ဖန်တီးသည် —  
+     `python scripts/add_staff_users.py`  
+     ထို့နောက်: `1111` = waiter1, `2222` = waiter2, `3333` = kitchen1, `4444` = cashier1။  
+   ထုတ်လုပ်မှုတွင် ပြောင်းပါ။
+
+3. **စာမျက်နှာများ**  
    - **/** (`index.html`): ကတ်တဂိုရီနှင့် မီနူးပစ္စည်းများ ထည့်ခြင်း၊ စာရင်းကြည့်ခြင်း။ မီနူးတည်ဆောက်ရန် ဤစာမျက်နှာ သို့မဟုတ် Counter ၏ “Menu Management” tab ကို အသုံးပြုပါ။  
    - **/waiter**: ဝိုင်တာ POS။ မီနူးဂရစ်မှ ပစ္စည်းများရွေးချယ်၊ ခြင်းတန်းတွင် အရေအတွက် ပြင်ဆင်၊ စားပွဲနံပါတ်ထည့်၊ “Submit Order” နှိပ်ပါ။ အမှာစာများကို status `pending` ဖြင့်ဖန်တီးသည်။  
    - **/kitchen**: ချက်ပြုတ်ခန်းပြသခြင်း။ pending အမှာစာများကို တစ်ကတ်ချင်း (စားပွဲ၊ အချိန်၊ ပစ္စည်းများ) ပြသည်။ “Mark as Done” သည် status ကို `completed` သတ်မှတ်သည်။ စာရင်းကို ၅ စက္ကန့်တစ်ခါ ပြန်စတင်သည်။  
@@ -136,7 +191,7 @@ RestaurantPOS/
      - **Cashier / Billing**: ငွေမချေရသေးသော အမှာစာများ (pending/completed) စာရင်း။ အမှာစာတစ်ခုကို နှိပ်ပြီး ပြေစာကြည့်ပါ။ “Process Payment” သည် pay API ကိုခေါ်ပြီး စာရင်းကိုပြန်စတင်သည်။  
      - **Menu Management**: ပင်မစာမျက်နှာကဲ့သို့ — ကတ်တဂိုရီနှင့် မီနူးပစ္စည်းများ ထည့်ခြင်း၊ စာရင်းကြည့်ခြင်း။
 
-3. **အမှာစာ စီးဆင်းမှု**  
+4. **အမှာစာ စီးဆင်းမှု**  
    ဝိုင်တာက အမှာစာဖန်တီး (pending) → ချက်ပြုတ်ခန်းက မြင်ပြီး ပြီးပါက မှတ် (completed) → ငွေကောက်ခံက ငွေမချေရသေးသော အမှာစာများပြပြီး ငွေချေခြင်း လုပ်သည် (paid)။
 
 ---

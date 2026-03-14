@@ -1,4 +1,13 @@
 const API_BASE = '';
+
+(function guard() {
+  if (!window.auth) return;
+  if (!window.auth.requireAuth()) return;
+  if (!window.auth.requireRole(['kitchen', 'admin'])) return;
+  window.auth.renderNav('pos-nav');
+  window.auth.consumeUnauthorizedFlag();
+})();
+
 let kitchenMenuItems = [];
 // Each entry here is a "ticket" for the kitchen: one batch of an order for a table.
 let tickets = [];
@@ -23,7 +32,10 @@ function formatTime(isoString) {
 
 async function fetchPendingOrders() {
   const params = new URLSearchParams([['status', 'pending'], ['status', 'open'], ['status', 'dining']]);
-  const res = await fetch(`${API_BASE}/api/orders/?${params}`);
+  const res = await fetch(`${API_BASE}/api/orders/?${params}`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
   if (!res.ok) throw new Error('Failed to fetch orders');
   return res.json();
 }
@@ -31,9 +43,10 @@ async function fetchPendingOrders() {
 async function markOrderDone(orderId, batchNumber) {
   const res = await fetch(`${API_BASE}/api/orders/${orderId}/batches/${batchNumber}/status`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
     body: JSON.stringify({ status: 'completed' }),
   });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || 'Failed to update order');
@@ -135,7 +148,10 @@ async function loadAndRender() {
 }
 
 async function fetchMenuItems() {
-  const res = await fetch(`${API_BASE}/api/menu-items/`);
+  const res = await fetch(`${API_BASE}/api/menu-items/`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
   if (!res.ok) throw new Error('Failed to fetch menu items');
   return res.json();
 }
@@ -208,4 +224,6 @@ async function init() {
   }
 }
 
-init();
+if (window.auth && window.auth.getToken()) {
+  init();
+}

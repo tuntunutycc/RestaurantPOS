@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POS Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-sm">
+    <div class="bg-white rounded-xl shadow-lg p-6">
+      <h1 class="text-xl font-bold text-slate-800 text-center mb-2">Restaurant POS</h1>
+      <p class="text-slate-500 text-sm text-center mb-6">Sign in to continue</p>
+
+      <div id="login-error" class="hidden mb-4 p-3 bg-red-100 text-red-700 text-sm rounded-lg"></div>
+      <div id="login-unauthorized" class="hidden mb-4 p-3 bg-amber-100 text-amber-800 text-sm rounded-lg">
+        You don't have permission to access that page.
+      </div>
+
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label for="username" class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            required
+            autocomplete="username"
+            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="e.g. admin"
+          />
+        </div>
+        <div>
+          <label for="password" class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            required
+            autocomplete="current-password"
+            class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="••••••••"
+          />
+        </div>
+        <button
+          type="submit"
+          id="login-submit"
+          class="w-full py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500"
+        >
+          Sign in
+        </button>
+        <p class="text-center text-sm text-slate-500 mt-3">
+          <a href="/pin-login" class="text-blue-600 hover:underline">Staff? Use PIN login</a>
+        </p>
+      </form>
+    </div>
+  </div>
+  <script src="/auth.js"></script>
+  <script src="/login.js"></script>
+</body>
+</html>
