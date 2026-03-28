@@ -1,5 +1,260 @@
 # Restaurant POS System
 
+A full-stack Restaurant POS built with **FastAPI + SQLAlchemy** (backend) and **Vanilla HTML/JS + Tailwind** (frontend).
+
+FastAPI + SQLAlchemy (backend) နှင့် Vanilla HTML/JS + Tailwind (frontend) ဖြင့် တည်ဆောက်ထားသော စားသောက်ဆိုင် POS စနစ် ဖြစ်သည်။
+
+---
+
+## 1) Architecture | ဗိသုကာ
+
+### English
+
+- **Backend**
+  - `main.py`: app startup/lifespan migrations, page routes, static mount, upload API, WebSocket endpoint.
+  - `auth.py`: JWT create/verify, password hash/verify, role guard helpers.
+  - `database.py`: `DATABASE_URL` loading, SQLAlchemy engine/session/base.
+  - `models.py`: ORM models (`User`, `Category`, `MenuItem`, `Zone`, `Table`, `Order`, `OrderItem`).
+  - `routers/`: modular APIs (`auth`, `menu`, `orders`, `users`, `tables`).
+- **Frontend**
+  - `static/login.html` + `login.js`: admin username/password login.
+  - `static/pin-login.html` + `pin-login.js`: staff 4-digit PIN login.
+  - `static/waiter.*`, `static/kitchen.*`, `static/counter.*`, `static/table-dashboard.*`.
+  - `static/auth.js`: token/user storage, role guards, auth headers.
+- **Realtime**
+  - `/ws` WebSocket broadcasts for menu/order/table updates.
+- **Database**
+  - Dev: SQLite (`pos.db`)
+  - Prod-ready: PostgreSQL by changing `DATABASE_URL` in `.env`.
+
+### မြန်မာ
+
+- **Backend**
+  - `main.py`: app စတင်ချိန် migration များ၊ page routes၊ static mount၊ upload API၊ WebSocket endpoint။
+  - `auth.py`: JWT ဖန်တီး/စစ်ဆေး၊ password hash/verify၊ role guard helper များ။
+  - `database.py`: `DATABASE_URL` ဖတ်ခြင်းနှင့် SQLAlchemy engine/session/base တည်ဆောက်ခြင်း။
+  - `models.py`: ORM models (`User`, `Category`, `MenuItem`, `Zone`, `Table`, `Order`, `OrderItem`)။
+  - `routers/`: `auth`, `menu`, `orders`, `users`, `tables` အလိုက် API ခွဲထားသည်။
+- **Frontend**
+  - `static/login.html` + `login.js`: admin username/password login။
+  - `static/pin-login.html` + `pin-login.js`: staff PIN ၄ လုံး login။
+  - `static/waiter.*`, `static/kitchen.*`, `static/counter.*`, `static/table-dashboard.*`
+  - `static/auth.js`: token/user သိမ်းခြင်း၊ role guard၊ auth headers။
+- **Realtime**
+  - `/ws` WebSocket ဖြင့် menu/order/table update တိုက်ရိုက်ပို့သည်။
+- **Database**
+  - Dev: SQLite (`pos.db`)
+  - Prod: `.env` ထဲက `DATABASE_URL` ကို PostgreSQL URL ပြောင်းပြီးသုံးနိုင်သည်။
+
+---
+
+## 2) Authentication & Roles | လော့ဂ်အင်းနှင့် Role များ
+
+### English
+
+- Roles: `admin`, `waiter`, `kitchen`, `cashier`
+- Admin login URL: `http://localhost:8000/login`
+- Staff PIN login URL: `http://localhost:8000/pin-login`
+- Default admin credentials:
+  - Username: `admin`
+  - Password: `admin123`
+  - PIN: `1234`
+- JWT token is stored in `localStorage` and sent as `Authorization: Bearer <token>`.
+- Route protection is enforced both on backend and frontend guards.
+
+### မြန်မာ
+
+- Role များ: `admin`, `waiter`, `kitchen`, `cashier`
+- Admin login URL: `http://localhost:8000/login`
+- Staff PIN login URL: `http://localhost:8000/pin-login`
+- Default admin account:
+  - Username: `admin`
+  - Password: `admin123`
+  - PIN: `1234`
+- JWT ကို `localStorage` ထဲသိမ်းပြီး API ခေါ်ရာတွင် `Authorization: Bearer <token>` ဖြင့်ပို့သည်။
+- Backend + Frontend နှစ်ဖက်လုံးတွင် route guard ကာကွယ်ထားသည်။
+
+---
+
+## 3) Main Features | အဓိက လုပ်ဆောင်ချက်များ
+
+### English
+
+- Category/Menu management (admin)
+- Menu image upload (local storage)
+- Menu availability toggle (`is_available`) with Sold Out handling
+- Safe menu delete (admin only, blocked if order history exists)
+- Zone/Table management (admin)
+- Waiter order submit with table selection and add-on batches
+- Kitchen ticket view and item-level status updates
+- Counter checkout and receipt flow
+- Realtime updates via WebSocket
+
+### မြန်မာ
+
+- Category/Menu စီမံခန့်ခွဲမှု (admin)
+- Menu image local upload
+- `is_available` ဖြင့် Sold Out toggle
+- Menu delete ကို safe rule ဖြင့်ကာကွယ်ထားသည် (order history ရှိပါက မဖျက်နိုင်)
+- Zone/Table စီမံခန့်ခွဲမှု (admin)
+- Waiter မှ table ရွေးပြီး order submit/add-on batches
+- Kitchen ticket view နှင့် item-level status update
+- Counter checkout နှင့် receipt flow
+- WebSocket ဖြင့် realtime update
+
+---
+
+## 4) Menu Availability & Delete Rules | Sold Out နှင့် Delete စည်းကမ်း
+
+### English
+
+- `PUT /api/menu-items/{item_id}/toggle-availability`
+  - Flips `is_available` true/false.
+  - Waiter UI disables sold-out items (`opacity/grayscale`, badge, add button disabled).
+- `DELETE /api/menu-items/{item_id}`
+  - Admin only.
+  - If item was used in any `order_items`, API returns:
+    - `Cannot delete item with order history. Disable it instead.`
+  - If never used, hard delete is allowed.
+
+### မြန်မာ
+
+- `PUT /api/menu-items/{item_id}/toggle-availability`
+  - `is_available` ကို true/false ပြောင်းသည်။
+  - Waiter UI တွင် sold-out ဖြစ်လျှင် card ကို မှိန်/gray ပြပြီး badge ပြထားပြီး add button ပိတ်ထားသည်။
+- `DELETE /api/menu-items/{item_id}`
+  - Admin သာခွင့်ပြုသည်။
+  - Item ကို အရင် order တွင်သုံးဖူးပါက:
+    - `Cannot delete item with order history. Disable it instead.`
+  - မသုံးဖူးသေးပါက delete လုပ်နိုင်သည်။
+
+---
+
+## 5) Key URLs | အဓိက URL များ
+
+- `GET /api/health`
+- Pages:
+  - `/login`
+  - `/pin-login`
+  - `/waiter`
+  - `/kitchen`
+  - `/counter`
+  - `/table-dashboard`
+- Realtime:
+  - `/ws`
+
+---
+
+## 6) API Summary | API အနှစ်ချုပ်
+
+### Auth
+- `POST /api/auth/login`
+- `POST /api/auth/login-pin`
+- `GET /api/auth/me`
+
+### Menu & Category
+- `GET /api/categories/`
+- `POST /api/categories/` (admin)
+- `GET /api/menu-items/`
+- `POST /api/menu-items/` (admin)
+- `POST /api/menu-items/upload` (admin)
+- `PUT /api/menu-items/{item_id}/toggle-availability` (admin)
+- `DELETE /api/menu-items/{item_id}` (admin, safe-delete rule)
+
+### Users (Admin)
+- `GET /api/admin/users`
+- `POST /api/admin/users`
+- `PUT /api/admin/users/{user_id}`
+- `DELETE /api/admin/users/{user_id}`
+
+### Tables & Zones
+- `GET /api/zones`
+- `POST /api/zones` (admin)
+- `PUT /api/zones/{zone_id}` (admin)
+- `DELETE /api/zones/{zone_id}` (admin)
+- `GET /api/tables`
+- `POST /api/tables` (admin)
+- `PUT /api/tables/{table_id}` (admin)
+- `DELETE /api/tables/{table_id}` (admin)
+- `GET /api/tables/status`
+- `GET /api/tables/grid`
+
+### Orders
+- `GET /api/orders/`
+- `POST /api/orders/`
+- `POST /api/orders/submit`
+- `GET /api/orders/tables`
+- `GET /api/orders/active-by-table/{table_id}`
+- `GET /api/orders/{order_id}/details`
+- `PUT /api/orders/{order_id}/status`
+- `PUT /api/orders/{order_id}/batches/{batch_number}/status`
+- `PUT /api/orders/{order_id}/items/{item_id}/status`
+- `PUT /api/orders/{order_id}/checkout`
+
+---
+
+## 7) Setup & Run | Setup နှင့် Run
+
+### English
+
+1. Install dependencies:
+   - `pip install -r requirements.txt`
+2. Configure `.env`:
+   - `DATABASE_URL=sqlite:///./pos.db`
+   - `JWT_SECRET_KEY=<your-secret>`
+3. Run server:
+   - `uvicorn main:app --host 0.0.0.0 --port 8000 --reload`
+4. Open:
+   - `http://localhost:8000/login` (admin)
+   - `http://localhost:8000/pin-login` (staff)
+
+### မြန်မာ
+
+1. Dependency တင်ပါ:
+   - `pip install -r requirements.txt`
+2. `.env` သတ်မှတ်ပါ:
+   - `DATABASE_URL=sqlite:///./pos.db`
+   - `JWT_SECRET_KEY=<your-secret>`
+3. Server run:
+   - `uvicorn main:app --host 0.0.0.0 --port 8000 --reload`
+4. Browser ဖွင့်:
+   - `http://localhost:8000/login` (admin)
+   - `http://localhost:8000/pin-login` (staff)
+
+---
+
+## 8) Troubleshooting | ပြဿနာဖြေရှင်းခြင်း
+
+### English
+
+- **405 on new endpoint**: restart server (old code still running).
+- **Image 404**: DB has URL but file is missing in `static/images` or `static/images/menu`.
+- **Unauthorized/403**: check role and token expiration.
+- **PIN fails**: ensure exact 4 digits and existing user record.
+
+### မြန်မာ
+
+- **Endpoint အသစ်တွင် 405**: server restart လုပ်ပါ (code ဟောင်း run နေသေးနိုင်သည်)။
+- **Image 404**: DB URL ရှိပေမယ့် file မရှိနိုင် (`static/images` / `static/images/menu`)။
+- **Unauthorized/403**: role နှင့် token expiry စစ်ပါ။
+- **PIN မဝင်**: ၄ လုံးတိတိဖြစ်ရမည်၊ user record ရှိရမည်။
+
+---
+
+## 9) Environment Variables
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | `sqlite:///./pos.db` (dev) or PostgreSQL URL (prod) |
+| `JWT_SECRET_KEY` | JWT signing secret (set a strong value in production) |
+
+---
+
+## License
+
+Use and modify for your project.
+# Restaurant POS System
+
 A full-stack Point of Sale (POS) system for restaurants: menu management, order taking, kitchen display, and counter/billing. Built with **FastAPI** (backend) and vanilla **HTML/JavaScript** (frontend).
 
 ဤစနစ်သည် စားသောက်ဆိုင်များအတွက် မီနူးစီမံခန့်ခွဲမှု၊ အမှာစာယူခြင်း၊ ချက်ပြုတ်ခန်းပြသခြင်းနှင့် ငွေကောက်ခံ/အကြီးတန်းစီမံခန့်ခွဲမှုပါဝင်သော **FastAPI** (နောက်ခံ) နှင့် **HTML/JavaScript** (ရှေ့မျက်နှာစာ) ဖြင့်တည်ဆောက်ထားသော POS စနစ်ဖြစ်သည်။

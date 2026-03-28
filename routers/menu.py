@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from auth import get_current_user, require_roles
 from database import get_db
-from models import Category, MenuItem, User
+from models import Category, MenuItem, OrderItem, User
 from schemas import CategoryCreate, CategoryResponse, MenuItemCreate, MenuItemResponse
 
 router = APIRouter(prefix="/api")
@@ -53,6 +53,7 @@ async def create_menu_item(
         category_id=item.category_id,
         description=item.description,
         image_url=item.image_url,
+        is_available=item.is_available,
     )
     db.add(db_item)
     db.commit()
@@ -101,6 +102,7 @@ async def create_menu_item_upload(
         category_id=category_id,
         description=description.strip() if description else None,
         image_url=image_url,
+        is_available=True,
     )
     db.add(db_item)
     db.commit()
@@ -125,3 +127,65 @@ def list_menu_items(
     if category_id is not None:
         q = q.filter(MenuItem.category_id == category_id)
     return q.all()
+
+
+@router.put("/menu-items/{item_id}/toggle-availability", response_model=MenuItemResponse)
+async def toggle_menu_item_availability(
+    request: Request,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin"])),
+):
+    """Toggle a menu item's availability. Admin only."""
+    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+
+    db_item.is_available = not bool(getattr(db_item, "is_available", True))
+    db.commit()
+    db.refresh(db_item)
+
+    item_response = MenuItemResponse.model_validate(db_item)
+    manager = getattr(request.app.state, "ws_manager", None)
+    if manager:
+        await manager.broadcast(
+            "menu_item_availability_toggled",
+            item_response.model_dump(mode="json"),
+        )
+    return item_response
+
+
+@router.delete("/menu-items/{item_id}")
+async def delete_menu_item(
+    request: Request,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin"])),
+):
+    """Delete a menu item only if it has no order history. Admin only."""
+    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+
+    used_in_orders = (
+        db.query(OrderItem.id)
+        .filter(OrderItem.menu_item_id == item_id)
+        .first()
+        is not None
+    )
+    if used_in_orders:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete item with order history. Disable it instead.",
+        )
+
+    db.delete(db_item)
+    db.commit()
+
+    manager = getattr(request.app.state, "ws_manager", None)
+    if manager:
+        await manager.broadcast(
+            "menu_item_deleted",
+            {"id": item_id},
+        )
+    return {"deleted": True, "item_id": item_id}

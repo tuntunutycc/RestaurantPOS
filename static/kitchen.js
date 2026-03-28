@@ -62,6 +62,7 @@ function renderTicket(ticket) {
   card.dataset.orderId = ticket.order_id;
   const timeStr = ticket.created_at ? formatTime(ticket.created_at) : '—';
   const headerTitle = `Table ${escapeHtml(String(ticket.table_number))} — Ticket #${ticket.batch_number || 1}`;
+  const waiterLabel = ticket.waiter_name ? `Waiter: ${escapeHtml(ticket.waiter_name)}` : 'Waiter: —';
   const itemsList = (ticket.items || [])
     .map((item) => {
       const img = item.menu_item_image_url
@@ -75,6 +76,7 @@ function renderTicket(ticket) {
       <div class="flex flex-wrap items-center gap-2">
         <span class="font-bold text-slate-800">${headerTitle}</span>
         <span class="text-slate-500 text-sm">${timeStr}</span>
+        <span class="text-xs font-medium text-slate-600">${waiterLabel}</span>
       </div>
       <span class="text-xs font-medium text-slate-500">${isAddon ? 'Add-on' : '#' + ticket.order_id}</span>
     </div>
@@ -130,6 +132,7 @@ async function loadAndRender() {
           batch_number: batch,
           created_at: order.created_at,
           items,
+          waiter_name: items && items.length ? items[0].waiter_name : null,
         });
       });
     });

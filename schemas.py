@@ -1,9 +1,9 @@
 """Pydantic schemas for request/response validation."""
 
 from datetime import datetime
-from typing import List
+from typing import List, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -43,10 +43,123 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
+StaffRole = Literal["admin", "waiter", "kitchen", "cashier"]
+TableStatusLiteral = Literal["available", "occupied"]
+OrderItemStatusLiteral = Literal["pending", "cooking", "served"]
+
+
+class UserCreateRequest(BaseModel):
+    """Admin request body for creating/updating a staff/admin user via PIN login."""
+
+    username: str
+    role: StaffRole
+    pin_code: str
+
+    @field_validator("pin_code")
+    @classmethod
+    def pin_code_must_be_four_digits(cls, v: str) -> str:
+        if not (v and len(v) == 4 and v.isdigit()):
+            raise ValueError("pin_code must be exactly 4 digits")
+        return v
+
+
+class UserAdminResponse(BaseModel):
+    """User representation for the Admin panel (includes pin_code)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    role: StaffRole
+    pin_code: str | None = None
+
+
 class CategoryCreate(BaseModel):
     """Schema for creating a category."""
 
     name: str
+
+
+class ZoneCreate(BaseModel):
+    name: str
+
+
+class ZoneUpdate(BaseModel):
+    name: str
+
+
+class ZoneResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class TableCreate(BaseModel):
+    name: str
+    zone_id: int
+    status: TableStatusLiteral = "available"
+
+    @model_validator(mode="before")
+    @classmethod
+    def support_legacy_name_or_number(cls, data):
+        # Accept legacy payload shape: { name_or_number: "A1" }
+        if isinstance(data, dict) and "name" not in data and "name_or_number" in data:
+            data = dict(data)
+            data["name"] = data.get("name_or_number")
+        return data
+
+    @property
+    def name_or_number(self) -> str:
+        return self.name
+
+
+class TableUpdate(BaseModel):
+    name: str | None = None
+    zone_id: int | None = None
+    status: TableStatusLiteral | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def support_legacy_name_or_number(cls, data):
+        if isinstance(data, dict) and "name" not in data and "name_or_number" in data:
+            data = dict(data)
+            data["name"] = data.get("name_or_number")
+        return data
+
+    @property
+    def name_or_number(self) -> str | None:
+        return self.name
+
+
+class TableResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    zone_id: int
+    status: TableStatusLiteral
+
+    @property
+    def name_or_number(self) -> str:
+        return self.name
+
+
+class ZoneGridResponse(ZoneResponse):
+    tables: List[TableResponse] = []
+
+
+# Backward-compatible alias used by existing routers.
+class ZoneWithTablesResponse(ZoneGridResponse):
+    pass
+
+
+class TableGridItemResponse(TableResponse):
+    active_order_id: int | None = None
+
+
+class ZoneTableGridResponse(ZoneResponse):
+    tables: List[TableGridItemResponse] = []
 
 
 class CategoryResponse(BaseModel):
@@ -66,6 +179,7 @@ class MenuItemCreate(BaseModel):
     category_id: int
     description: str | None = None
     image_url: str | None = None
+    is_available: bool = True
 
 
 class MenuItemResponse(BaseModel):
@@ -79,6 +193,24 @@ class MenuItemResponse(BaseModel):
     category_id: int
     description: str | None = None
     image_url: str | None = None
+    is_available: bool = True
+
+
+class MenuItemRead(MenuItemResponse):
+    """Compatibility alias for read responses."""
+
+    pass
+
+
+class MenuItemUpdate(BaseModel):
+    """Partial update schema for menu item updates."""
+
+    name: str | None = None
+    price: float | None = None
+    category_id: int | None = None
+    description: str | None = None
+    image_url: str | None = None
+    is_available: bool | None = None
 
 
 class OrderItemCreate(BaseModel):
@@ -91,7 +223,7 @@ class OrderItemCreate(BaseModel):
 class OrderCreate(BaseModel):
     """Schema for creating an order."""
 
-    table_number: int
+    table_id: int
     items: List[OrderItemCreate]
 
 
@@ -120,7 +252,29 @@ class OrderItemDetail(BaseModel):
     subtotal: float
     batch_number: int = 1
     batch_status: str | None = None
+    item_status: OrderItemStatusLiteral | None = None
     menu_item_image_url: str | None = None
+    # For Kitchen tickets: who created this specific batch (ticket)
+    waiter_name: str | None = None
+
+
+class OrderItemDetailsResponse(BaseModel):
+    id: int
+    menu_item_id: int
+    menu_item_name: str
+    quantity: int
+    subtotal: float
+    item_status: OrderItemStatusLiteral
+    waiter_name: str | None = None
+
+
+class OrderDetailsResponse(BaseModel):
+    id: int
+    table_id: int | None = None
+    status: str
+    total_amount: float
+    created_at: datetime
+    items: List[OrderItemDetailsResponse]
 
 
 class OrderResponseDetail(BaseModel):
@@ -129,11 +283,14 @@ class OrderResponseDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    table_id: int | None = None
     table_number: int
     status: str
     total_amount: float
     created_at: datetime
     items: List[OrderItemDetail]
+    # For Cashier receipt: who served the latest (most recent) batch in this dining session.
+    served_by_name: str | None = None
     # Payment information for cashier
     payment_method: str | None = None
     amount_tendered: float | None = None
@@ -145,6 +302,17 @@ class OrderResponseDetail(BaseModel):
         """Build from Order ORM: map order_items to items with menu_item name."""
         if hasattr(data, "order_items"):
             order = data
+            # Served by = waiter who created the latest batch (highest batch_number).
+            latest_oi = None
+            try:
+                latest_oi = max(order.order_items, key=lambda x: getattr(x, "batch_number", 1))
+            except Exception:
+                latest_oi = None
+            served_by_name = (
+                getattr(getattr(latest_oi, "created_by", None), "username", None)
+                if latest_oi is not None
+                else None
+            )
             items = [
                 OrderItemDetail(
                     menu_item_name=oi.menu_item.name,
@@ -152,17 +320,21 @@ class OrderResponseDetail(BaseModel):
                     subtotal=float(oi.subtotal),
                     batch_number=getattr(oi, "batch_number", 1),
                     batch_status=getattr(oi, "batch_status", "pending"),
+                    item_status=getattr(oi, "item_status", getattr(oi, "status", "pending")),
                     menu_item_image_url=getattr(oi.menu_item, "image_url", None),
+                    waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
                 )
                 for oi in order.order_items
             ]
             return cls(
                 id=order.id,
+                table_id=getattr(order, "table_id", None),
                 table_number=order.table_number,
                 status=order.status,
                 total_amount=float(order.total_amount),
                 created_at=order.created_at,
                 items=items,
+                served_by_name=served_by_name,
                 payment_method=getattr(order, "payment_method", None),
                 amount_tendered=getattr(order, "amount_tendered", None),
                 change_amount=getattr(order, "change_amount", None),

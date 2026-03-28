@@ -4,19 +4,35 @@ Add staff users (waiter, kitchen, cashier) so they can log in with PIN at /pin-l
 
 Run from project root:
   python scripts/add_staff_users.py
+Or from scripts/:
+  cd scripts && python add_staff_users.py
+
+Creates missing DB tables first (including `users`) if they do not exist yet.
 
 Creates users with unique usernames and 4-digit PINs. Change the list below to add
 or modify staff. PINs must be exactly 4 digits and unique across all users.
 """
+import os
 import sys
 from pathlib import Path
 
-# Add project root so we can import app modules
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Project root: ensure imports and .env resolve correctly when run from scripts/ or anywhere
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+os.chdir(ROOT)
 
-from database import SessionLocal
+from dotenv import load_dotenv
+
+load_dotenv(ROOT / ".env")
+
+from database import SessionLocal, engine, Base
+import models  # noqa: F401 — register all ORM tables on Base.metadata
+
 from models import User
 from auth import hash_password
+
+# Create any missing tables (e.g. `users` if DB was created before User model existed)
+Base.metadata.create_all(bind=engine)
 
 # Staff to create: (username, role, pin_code)
 # role must be: waiter | kitchen | cashier

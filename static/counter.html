@@ -12,30 +12,44 @@
     <h1 class="text-2xl font-bold text-slate-800 mb-6">Counter / Admin</h1>
 
     <!-- Tab navigation -->
-    <div class="flex border-b border-slate-200 mb-6">
-      <button type="button" id="tab-cashier" class="tab-btn px-4 py-2 font-medium text-slate-700 border-b-2 border-blue-600 text-blue-600">
+    <div class="border-b border-slate-200 mb-6 overflow-x-auto">
+      <div class="flex min-w-max">
+      <button type="button" id="tab-cashier" data-target-panel="panel-cashier" class="tab-btn px-4 py-2 font-medium text-slate-700 border-b-2 border-blue-600 text-blue-600 whitespace-nowrap">
         Cashier / Billing
       </button>
-      <button type="button" id="tab-menu" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800">
+      <button type="button" id="tab-menu" data-target-panel="panel-menu" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap">
         Menu Management
       </button>
+      <button type="button" id="tab-users" data-target-panel="panel-users" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap hidden">
+        User Management
+      </button>
+      <button type="button" id="tab-tables" data-target-panel="panel-tables" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap">
+        Table Management
+      </button>
+      </div>
     </div>
 
     <!-- Tab 1: Cashier / Billing (table-centric) -->
     <div id="panel-cashier" class="tab-panel">
-      <div class="grid md:grid-cols-3 gap-6">
-        <!-- Tables list -->
-        <div class="md:col-span-1">
-          <h2 class="text-lg font-semibold text-slate-700 mb-3">Active Tables</h2>
-          <p class="text-sm text-slate-500 mb-2">Tap a table to view its bill.</p>
-          <ul id="orders-list" class="space-y-2">
-            <li class="text-slate-500">Loading…</li>
-          </ul>
+      <div class="grid md:grid-cols-2 gap-6">
+        <!-- Full table grid -->
+        <div>
+          <h2 class="text-lg font-semibold text-slate-700 mb-2">Table Floor Grid</h2>
+          <p class="text-sm text-slate-500 mb-3">Tap an occupied table to open billing. Available tables are empty.</p>
+          <div class="overflow-x-auto mb-3">
+            <div id="cashier-zone-tabs" class="flex gap-1 min-w-max"></div>
+          </div>
+          <div id="cashier-tables-grid" class="grid grid-cols-3 md:grid-cols-4 gap-2">
+            <p class="col-span-full text-slate-500">Loading table grid...</p>
+          </div>
         </div>
         <!-- Receipt: consolidated items + grand total for this table -->
-        <div class="md:col-span-2">
+        <div>
           <div id="receipt-container" class="bg-white rounded-lg shadow p-6 hidden">
             <h2 class="text-lg font-semibold text-slate-700 mb-4">Receipt — Table <span id="receipt-table-number"></span></h2>
+            <p class="text-sm text-slate-600 mb-3">
+              Served by: <span id="receipt-served-by" class="font-medium text-slate-800">—</span>
+            </p>
             <div id="receipt-content"></div>
             <p id="receipt-grand-total" class="text-lg font-semibold text-slate-800 border-t border-slate-200 pt-2 mt-2"></p>
 
@@ -128,7 +142,150 @@
         </section>
       </div>
     </div>
+
+    <!-- Tab 3: User Management (admin only) -->
+    <div id="panel-users" class="tab-panel hidden">
+      <div class="grid md:grid-cols-2 gap-8 mb-10">
+        <section class="bg-white rounded-lg shadow p-6">
+          <h2 class="text-lg font-semibold text-slate-700 mb-4">Manage Users</h2>
+          <p class="text-sm text-slate-500 mb-4">Create, edit, or delete staff PIN users.</p>
+          <div class="overflow-auto">
+            <table class="w-full text-sm text-slate-700">
+              <thead>
+                <tr class="border-b border-slate-200">
+                  <th class="text-left py-2">User</th>
+                  <th class="text-left py-2">Role</th>
+                  <th class="text-left py-2">PIN</th>
+                  <th class="text-right py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="users-table-body">
+                <tr><td colspan="4" class="py-3 text-slate-500">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow p-6">
+          <h2 class="text-lg font-semibold text-slate-700 mb-4" id="user-form-title">Create User</h2>
+          <form id="user-form" class="space-y-3">
+            <input type="hidden" id="user-id" />
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Name (username)</label>
+              <input type="text" id="user-username" required
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Role</label>
+              <select id="user-role" required
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <option value="admin">admin</option>
+                <option value="waiter">waiter</option>
+                <option value="kitchen">kitchen</option>
+                <option value="cashier">cashier</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">PIN (4 digits)</label>
+              <input type="text" id="user-pin" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" required title="Enter exactly 4 digits"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="e.g. 1234" />
+              <p id="user-pin-helper" class="mt-1 text-xs text-slate-500">Must be exactly 4 digits</p>
+              <p id="user-pin-warning" class="mt-1 text-xs text-rose-600 hidden">PIN must be exactly 4 numeric digits</p>
+            </div>
+
+            <button type="submit" id="btn-save-user"
+              class="w-full py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">
+              Save
+            </button>
+            <button type="button" id="btn-delete-user"
+              class="w-full py-2 bg-rose-600 text-white font-medium rounded-md hover:bg-rose-700 hidden">
+              Delete User
+            </button>
+            <button type="button" id="btn-reset-user"
+              class="w-full py-2 bg-slate-200 text-slate-800 font-medium rounded-md hover:bg-slate-300">
+              Reset
+            </button>
+          </form>
+        </section>
+      </div>
+    </div>
+
+    <!-- Tab 4: Table Management (admin only) -->
+    <div id="panel-tables" class="tab-panel hidden">
+      <section class="bg-white rounded-lg shadow p-4 md:p-5 mb-4">
+        <h2 class="text-lg font-semibold text-slate-700 mb-3">Zone Creation</h2>
+        <form id="kanban-zone-form" class="flex flex-col sm:flex-row gap-2 items-start">
+          <input
+            type="text"
+            id="kanban-zone-name"
+            required
+            placeholder="Enter zone name (e.g. Indoor)"
+            class="w-full sm:w-80 md:w-96 px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+          <button
+            type="submit"
+            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Create Zone
+          </button>
+        </form>
+      </section>
+
+      <div id="kanban-zones-board" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="bg-slate-100 rounded-lg p-3 border border-slate-200 text-slate-500">
+          Loading zones...
+        </div>
+      </div>
+    </div>
   </div>
+
+  <!-- Printable receipt (hidden until checkout) -->
+  <div id="receipt-print" class="hidden print:block">
+    <div class="receipt-root bg-white p-4">
+      <h1 class="text-base font-bold text-slate-900 mb-2">My Restaurant Name</h1>
+      <p class="text-sm text-slate-700">
+        Table: <span id="rp-table"></span><br />
+        Served by: <span id="rp-served-by"></span><br />
+        Date: <span id="rp-datetime"></span>
+      </p>
+      <hr class="my-2" />
+      <div id="rp-items" class="text-sm text-slate-700"></div>
+      <hr class="my-2" />
+      <p class="text-sm text-slate-700">
+        Total: <span id="rp-total" class="font-semibold"></span>
+      </p>
+      <p class="text-sm text-slate-700">
+        Payment: <span id="rp-method"></span>
+      </p>
+      <p class="text-sm text-slate-700">
+        Amount Tendered: <span id="rp-tendered"></span>
+      </p>
+      <p class="text-sm text-slate-700">
+        Change: <span id="rp-change"></span>
+      </p>
+      <p class="text-sm text-slate-600 mt-3">Thank you!</p>
+    </div>
+  </div>
+
+  <style>
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #receipt-print,
+      #receipt-print * {
+        visibility: visible;
+      }
+      #receipt-print {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+      }
+    }
+  </style>
 
   <script src="/auth.js"></script>
   <script src="/toast.js"></script>

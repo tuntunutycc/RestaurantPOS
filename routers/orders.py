@@ -8,12 +8,43 @@ from sqlalchemy.orm import Session, joinedload
 
 from auth import get_current_user
 from database import get_db
-from models import MenuItem, Order, OrderItem, User
-from schemas import OrderCreate, OrderItemDetail, OrderResponseDetail, OrderSubmitRequest, OrderSubmitResponse
+from models import MenuItem, Order, OrderItem, Table, User
+from schemas import (
+    OrderCreate,
+    OrderDetailsResponse,
+    OrderItemDetail,
+    OrderItemDetailsResponse,
+    OrderResponseDetail,
+    OrderSubmitRequest,
+    OrderSubmitResponse,
+)
 
 router = APIRouter(prefix="/api")
 
 OPEN_ORDER_STATUSES = ("open", "dining")
+
+
+def _table_number_from_table(table: Table) -> int:
+    """Best-effort integer table number for legacy UI/response compatibility."""
+    try:
+        return int(str(table.name_or_number).strip())
+    except Exception:
+        return int(table.id)
+
+
+async def _broadcast_table_status_changed(request: Request, table: Table) -> None:
+    manager = getattr(request.app.state, "ws_manager", None)
+    if manager:
+        await manager.broadcast(
+            "table_status_changed",
+            {
+                "table_id": table.id,
+                "name_or_number": table.name_or_number,
+                "zone_id": table.zone_id,
+                "status": getattr(table.status, "value", table.status),
+            },
+        )
+        await manager.broadcast("table_grid_updated", {"refresh": True})
 
 
 @router.post("/orders/")
@@ -30,11 +61,14 @@ async def create_order(
     if not order_data.items:
         raise HTTPException(status_code=400, detail="Order must have at least one item")
 
-    table_number = order_data.table_number
+    table = db.query(Table).filter(Table.id == order_data.table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail=f"Table id {order_data.table_id} not found")
+    table_number = _table_number_from_table(table)
     existing = (
         db.query(Order)
         .filter(
-            Order.table_number == table_number,
+            Order.table_id == table.id,
             Order.status.in_(OPEN_ORDER_STATUSES),
         )
         .first()
@@ -58,6 +92,7 @@ async def create_order(
                     menu_item_id=line.menu_item_id,
                     quantity=line.quantity,
                     subtotal=subtotal,
+                    created_by_id=current_user.id,
                 )
             )
             added_items_detail.append(
@@ -66,17 +101,22 @@ async def create_order(
                     quantity=line.quantity,
                     subtotal=subtotal,
                     menu_item_image_url=getattr(menu_item, "image_url", None),
+                    waiter_name=current_user.username,
                 )
             )
         existing.total_amount = round(existing_total, 2)
+        previous_status = table.status
+        table.status = "occupied"
         db.commit()
         db.refresh(existing)
         manager = getattr(request.app.state, "ws_manager", None)
         if manager:
             await manager.broadcast(
                 "order_updated",
-                {"table_id": table_number, "added_items": [d.model_dump(mode="json") for d in added_items_detail]},
+                {"table_id": table.id, "added_items": [d.model_dump(mode="json") for d in added_items_detail]},
             )
+        if previous_status != table.status:
+            await _broadcast_table_status_changed(request, table)
         return {
             "id": existing.id,
             "table_number": existing.table_number,
@@ -99,6 +139,7 @@ async def create_order(
         )
 
     db_order = Order(
+        table_id=table.id,
         table_number=table_number,
         status="open",
         total_amount=round(total_amount, 2),
@@ -112,13 +153,21 @@ async def create_order(
                 menu_item_id=item_data["menu_item_id"],
                 quantity=item_data["quantity"],
                 subtotal=item_data["subtotal"],
+                created_by_id=current_user.id,
             )
         )
+    previous_status = table.status
+    table.status = "occupied"
     db.commit()
     db.refresh(db_order)
+    if previous_status != table.status:
+        await _broadcast_table_status_changed(request, table)
     full_order = (
         db.query(Order)
-        .options(joinedload(Order.order_items).joinedload(OrderItem.menu_item))
+        .options(
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
+        )
         .filter(Order.id == db_order.id)
         .first()
     )
@@ -145,6 +194,7 @@ def list_orders(
         db.query(Order)
         .options(
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
         .order_by(Order.created_at.desc())
     )
@@ -184,6 +234,7 @@ def list_orders_by_table(
         db.query(Order)
         .options(
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
         .filter(Order.status.in_(CHECKOUT_ORDER_STATUSES))
         .order_by(Order.table_number, Order.id)
@@ -191,10 +242,11 @@ def list_orders_by_table(
     orders = q.all()
     by_table = {}
     for o in orders:
-        by_table.setdefault(o.table_number, []).append(o)
+        table_key = o.table_id if getattr(o, "table_id", None) is not None else o.table_number
+        by_table.setdefault(table_key, []).append(o)
     canonical = [_canonical_order_for_table(ords) for ords in by_table.values()]
     canonical = [o for o in canonical if o is not None]
-    canonical.sort(key=lambda o: o.table_number)
+    canonical.sort(key=lambda o: o.table_id if getattr(o, "table_id", None) is not None else o.table_number)
     return [OrderResponseDetail.model_validate(o) for o in canonical]
 
 
@@ -212,9 +264,10 @@ def get_active_order_by_table(
         db.query(Order)
         .options(
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
         .filter(
-            Order.table_number == table_id,
+            (Order.table_id == table_id) | (Order.table_number == table_id),
             Order.status.in_(CHECKOUT_ORDER_STATUSES),
         )
     )
@@ -233,6 +286,12 @@ class OrderStatusUpdate(BaseModel):
 
 class BatchStatusUpdate(BaseModel):
     """Request body for updating one batch (ticket) status."""
+
+    status: str
+
+
+class OrderItemStatusUpdate(BaseModel):
+    """Request body for updating one order item's status."""
 
     status: str
 
@@ -304,6 +363,109 @@ async def update_order_batch_status(
     return {"order_id": order_id, "batch_number": batch_number, "status": body.status}
 
 
+@router.get("/orders/{order_id}/details", response_model=OrderDetailsResponse)
+def get_order_details(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
+        )
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    items = [
+        OrderItemDetailsResponse(
+            id=oi.id,
+            menu_item_id=oi.menu_item_id,
+            menu_item_name=getattr(getattr(oi, "menu_item", None), "name", ""),
+            quantity=oi.quantity,
+            subtotal=float(oi.subtotal),
+            item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
+            waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
+        )
+        for oi in order.order_items
+    ]
+    return OrderDetailsResponse(
+        id=order.id,
+        table_id=getattr(order, "table_id", None),
+        status=order.status,
+        total_amount=float(order.total_amount),
+        created_at=order.created_at,
+        items=items,
+    )
+
+
+@router.put("/orders/{order_id}/items/{item_id}/status")
+async def update_order_item_status(
+    request: Request,
+    order_id: int,
+    item_id: int,
+    body: OrderItemStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    oi = (
+        db.query(OrderItem)
+        .filter(
+            OrderItem.id == item_id,
+            OrderItem.order_id == order_id,
+        )
+        .first()
+    )
+    if not oi:
+        raise HTTPException(status_code=404, detail="Order item not found")
+
+    normalized_status = (body.status or "").strip().lower()
+    allowed = {"pending", "cooking", "served"}
+    if normalized_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status '{body.status}'. Allowed: pending, cooking, served",
+        )
+
+    oi.item_status = normalized_status
+    db.commit()
+    db.refresh(oi)
+
+    table_id = (
+        db.query(Order.table_id)
+        .filter(Order.id == order_id)
+        .scalar()
+    )
+
+    manager = getattr(request.app.state, "ws_manager", None)
+    if manager:
+        await manager.broadcast(
+            "table_grid_updated",
+            {
+                "refresh": True,
+                "order_id": order_id,
+                "item_id": item_id,
+                "table_id": table_id,
+                "item_status": getattr(getattr(oi, "item_status", None), "value", oi.item_status),
+            },
+        )
+
+    return {
+        "id": oi.id,
+        "order_id": oi.order_id,
+        "menu_item_id": oi.menu_item_id,
+        "menu_item_name": getattr(getattr(oi, "menu_item", None), "name", None),
+        "quantity": oi.quantity,
+        "subtotal": float(oi.subtotal),
+        "item_status": getattr(getattr(oi, "item_status", None), "value", oi.item_status),
+        "waiter_name": getattr(getattr(oi, "created_by", None), "username", None),
+    }
+
+
 @router.post("/orders/submit", response_model=OrderSubmitResponse)
 async def submit_order(
     request: Request,
@@ -322,12 +484,15 @@ async def submit_order(
     if not body.items:
         raise HTTPException(status_code=400, detail="Order must have at least one item")
 
-    table_number = body.table_id
+    table = db.query(Table).filter(Table.id == body.table_id).first()
+    if not table:
+        raise HTTPException(status_code=404, detail=f"Table id {body.table_id} not found")
+    table_number = _table_number_from_table(table)
     # Find existing open/dining order (current dining session)
     order = (
         db.query(Order)
         .filter(
-            Order.table_number == table_number,
+            Order.table_id == table.id,
             Order.status.in_(OPEN_ORDER_STATUSES),
         )
         .first()
@@ -337,7 +502,12 @@ async def submit_order(
 
     if order is None:
         # No open order yet: start new dining session, first batch = 1
-        order = Order(table_number=table_number, status="open", total_amount=0.0)
+        order = Order(
+            table_id=table.id,
+            table_number=table_number,
+            status="open",
+            total_amount=0.0,
+        )
         db.add(order)
         db.flush()
         new_batch_number = 1
@@ -369,6 +539,8 @@ async def submit_order(
                 quantity=line.quantity,
                 subtotal=subtotal,
                 batch_number=new_batch_number,
+                created_by_id=current_user.id,
+                batch_status="pending",
             )
         )
         batch_items_detail.append(
@@ -378,11 +550,15 @@ async def submit_order(
                 subtotal=subtotal,
                 batch_number=new_batch_number,
                 menu_item_image_url=getattr(menu_item, "image_url", None),
+                waiter_name=current_user.username,
+                batch_status="pending",
             )
         )
 
     # Update order running total and persist
     order.total_amount = float(order.total_amount) + batch_total
+    previous_status = table.status
+    table.status = "occupied"
     db.commit()
     db.refresh(order)
 
@@ -393,6 +569,7 @@ async def submit_order(
             "new_order_batch",
             {
                 "order_id": order.id,
+                "table_id": table.id,
                 "table_number": table_number,
                 "batch_number": new_batch_number,
                 "is_new_order": is_new_order,
@@ -400,6 +577,8 @@ async def submit_order(
                 "items": [d.model_dump(mode="json") for d in batch_items_detail],
             },
         )
+    if previous_status != table.status:
+        await _broadcast_table_status_changed(request, table)
 
     return OrderSubmitResponse(
         id=order.id,
@@ -407,9 +586,9 @@ async def submit_order(
         total_amount=order.total_amount,
         is_new_order=is_new_order,
         message=(
-            f"New order created for Table {table_number}"
+            f"New order created for Table {table.name_or_number}"
             if is_new_order
-            else f"Items added to Table {table_number}'s existing order (batch {new_batch_number})"
+            else f"Items added to Table {table.name_or_number}'s existing order (batch {new_batch_number})"
         ),
     )
 
@@ -422,7 +601,8 @@ class CheckoutRequest(BaseModel):
 
 
 @router.put("/orders/{order_id}/checkout", response_model=OrderResponseDetail)
-def checkout_order(
+async def checkout_order(
+    request: Request,
     order_id: int,
     body: CheckoutRequest,
     db: Session = Depends(get_db),
@@ -439,6 +619,7 @@ def checkout_order(
         db.query(Order)
         .options(
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
         .filter(Order.id == order_id)
         .first()
@@ -460,6 +641,12 @@ def checkout_order(
     order.amount_tendered = tendered
     order.change_amount = change
     order.status = "paid"
+    table = db.query(Table).filter(Table.id == order.table_id).first() if order.table_id else None
+    previous_status = table.status if table else None
+    if table:
+        table.status = "available"
     db.commit()
     db.refresh(order)
+    if table and previous_status != table.status:
+        await _broadcast_table_status_changed(request, table)
     return OrderResponseDetail.model_validate(order)

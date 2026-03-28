@@ -10,8 +10,8 @@ from fastapi.staticfiles import StaticFiles
 
 from auth import hash_password, require_roles
 from database import SessionLocal, engine
-from models import Base, User
-from routers import auth, menu, orders
+from models import Base, Order, Table, User, Zone
+from routers import auth, menu, orders, tables, users
 from websocket_manager import ConnectionManager
 
 
@@ -30,6 +30,17 @@ async def lifespan(app: FastAPI):
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE menu_items ADD COLUMN description VARCHAR(1024)"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE menu_items "
+                    "ADD COLUMN is_available BOOLEAN NOT NULL DEFAULT TRUE"
+                )
+            )
     except Exception:
         pass
     # Add batch_number to existing order_items if missing (SQLite dev migration).
@@ -58,11 +69,43 @@ async def lifespan(app: FastAPI):
     except Exception:
         # Column may already exist; ignore migration errors.
         pass
+    # Add created_by_id to order_items (who created this batch/ticket)
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN created_by_id INTEGER"
+                )
+            )
+    except Exception:
+        # Column may already exist; ignore migration errors.
+        pass
+    # Add item-level status to order_items.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'pending'"
+                )
+            )
+    except Exception:
+        pass
     # Add payment fields to orders for cashier checkout.
     try:
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE orders ADD COLUMN payment_method VARCHAR(32)"))
+    except Exception:
+        pass
+    # Add normalized table relation to orders.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN table_id INTEGER"))
     except Exception:
         pass
     try:
@@ -87,6 +130,15 @@ async def lifespan(app: FastAPI):
             ))
     except Exception:
         pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text(
+                "CREATE UNIQUE INDEX idx_one_active_order_per_table_id ON orders(table_id) "
+                "WHERE status IN ('open','dining')"
+            ))
+    except Exception:
+        pass
     # Add pin_code to users table (4-char, unique, nullable)
     try:
         from sqlalchemy import text
@@ -100,10 +152,46 @@ async def lifespan(app: FastAPI):
             conn.execute(text("CREATE UNIQUE INDEX ix_users_pin_code ON users(pin_code)"))
     except Exception:
         pass
-    # Seed default admin user if no users exist; set PIN for admin (and backfill if column new)
+    # Ensure default zone exists for table management.
     db = SessionLocal()
     try:
-        if db.query(User).count() == 0:
+        default_zone = db.query(Zone).filter(Zone.name == "Main").first()
+        if not default_zone:
+            default_zone = Zone(name="Main")
+            db.add(default_zone)
+            db.commit()
+            db.refresh(default_zone)
+
+        # Backfill tables from legacy orders.table_number where table_id is null.
+        legacy_orders = db.query(Order).filter(Order.table_id.is_(None)).all()
+        for legacy_order in legacy_orders:
+            name_or_number = str(getattr(legacy_order, "table_number", legacy_order.id))
+            table = db.query(Table).filter(Table.name_or_number == name_or_number).first()
+            if not table:
+                table = Table(
+                    name_or_number=name_or_number,
+                    zone_id=default_zone.id,
+                    status=(
+                        "occupied"
+                        if legacy_order.status in ("open", "dining", "pending", "completed")
+                        else "available"
+                    ),
+                )
+                db.add(table)
+                db.flush()
+            legacy_order.table_id = table.id
+        db.commit()
+    except Exception:
+        db.rollback()
+        pass
+    finally:
+        db.close()
+
+    # Ensure default admin exists (even if staff were added first via scripts)
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.username == "admin").first()
+        if not admin:
             admin = User(
                 username="admin",
                 password_hash=hash_password("admin123"),
@@ -113,13 +201,9 @@ async def lifespan(app: FastAPI):
             db.add(admin)
             db.commit()
         else:
-            # Backfill: ensure existing admin has a PIN and a fresh password hash
-            admin = db.query(User).filter(User.username == "admin").first()
-            if admin:
-                if getattr(admin, "pin_code", None) is None:
-                    admin.pin_code = "1234"
-                # Reset password hash to ensure it uses the current hashing scheme
-                admin.password_hash = hash_password("admin123")
+            # Backfill: PIN if missing (do not reset password on every boot)
+            if getattr(admin, "pin_code", None) is None:
+                admin.pin_code = "1234"
                 db.commit()
     finally:
         db.close()
@@ -131,6 +215,8 @@ app = FastAPI(title="Restaurant POS API", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
+app.include_router(users.router)
+app.include_router(tables.router)
 
 
 @app.get("/api/health")
@@ -187,6 +273,20 @@ async def upload_image(
     return {"url": f"/images/{name}"}
 
 
+@app.get("/images/{filename}")
+def get_legacy_image(filename: str):
+    """Backward-compatible image route for old rows storing /images/<file>."""
+    safe_name = Path(filename).name
+    candidates = [
+        images_dir / safe_name,
+        menu_images_dir / safe_name,
+    ]
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return FileResponse(path)
+    return JSONResponse(status_code=404, content={"detail": "Image not found"})
+
+
 @app.get("/waiter")
 def waiter_page():
     """Serve the Waiter POS UI."""
@@ -203,6 +303,12 @@ def kitchen_page():
 def counter_page():
     """Serve the Counter / Admin UI."""
     return FileResponse(static_dir / "counter.html")
+
+
+@app.get("/table-dashboard")
+def table_dashboard_page():
+    """Serve the shared Table Dashboard (Admin + Waiter)."""
+    return FileResponse(static_dir / "table-dashboard.html")
 
 
 @app.get("/login")
