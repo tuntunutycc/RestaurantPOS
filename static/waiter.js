@@ -22,6 +22,7 @@ let refreshTimer = null;
 let tableDetailsOpen = false;
 let tableDetailsOrderId = null;
 let tableDetailsTableName = '';
+let modifierModalItem = null;
 
 function getCurrentUser() {
   return window.auth?.getUser?.() || null;
@@ -46,6 +47,38 @@ function escapeAttr(text) {
   const div = document.createElement('div');
   div.textContent = text ?? '';
   return div.innerHTML.replace(/"/g, '&quot;');
+}
+
+function toNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeSelectedModifiers(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((m) => ({
+      name: String(m?.name || '').trim(),
+      price: toNumber(m?.price, 0),
+      group: m?.group ? String(m.group) : null,
+    }))
+    .filter((m) => m.name);
+}
+
+function modifiersTotal(selectedModifiers) {
+  return normalizeSelectedModifiers(selectedModifiers).reduce((sum, m) => sum + toNumber(m.price, 0), 0);
+}
+
+function buildCartLineKey(menuItemId, selectedModifiers, specialInstructions) {
+  const normalized = normalizeSelectedModifiers(selectedModifiers)
+    .map((m) => ({ name: m.name, price: Number(m.price.toFixed(2)), group: m.group || null }))
+    .sort((a, b) => `${a.group || ''}|${a.name}`.localeCompare(`${b.group || ''}|${b.name}`));
+  const note = String(specialInstructions || '').trim();
+  return `${menuItemId}::${JSON.stringify(normalized)}::${note}`;
+}
+
+function getMenuItemById(id) {
+  return menuItems.find((m) => m.id === id) || null;
 }
 
 function showError(message) {
@@ -172,7 +205,7 @@ function renderMenu() {
       : '<span class="absolute top-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded bg-red-600 text-white">Sold Out</span>';
     const cardStateClass = available ? 'hover:bg-blue-50' : 'opacity-50 grayscale pointer-events-none';
     return `
-      <div class="menu-item-card text-left p-0 bg-white rounded-lg shadow border border-slate-200 overflow-hidden ${cardStateClass}">
+      <div data-menu-card-id="${m.id}" class="menu-item-card cursor-pointer text-left p-0 bg-white rounded-lg shadow border border-slate-200 overflow-hidden ${cardStateClass}">
         <div class="relative">
           ${imgHtml}
           ${soldOutBadge}
@@ -183,8 +216,6 @@ function renderMenu() {
             <button
               type="button"
               data-id="${m.id}"
-              data-name="${escapeAttr(m.name)}"
-              data-price="${m.price}"
               class="add-to-cart-btn h-7 w-7 rounded-full text-sm font-bold text-white ${available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-400 cursor-not-allowed'}"
               ${available ? '' : 'disabled'}
               aria-label="${available ? 'Add to cart' : 'Sold out'}"
@@ -196,8 +227,22 @@ function renderMenu() {
         </div>
       </div>`;
   }).join('');
+  grid.querySelectorAll('[data-menu-card-id]').forEach((card) => {
+    card.addEventListener('click', () => {
+      const itemId = Number(card.getAttribute('data-menu-card-id'));
+      const menuItem = getMenuItemById(itemId);
+      if (!menuItem) return;
+      openModifierModal(menuItem);
+    });
+  });
   grid.querySelectorAll('.add-to-cart-btn').forEach((btn) => {
-    btn.addEventListener('click', () => addToCart(Number(btn.dataset.id), btn.dataset.name, parseFloat(btn.dataset.price)));
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const itemId = Number(btn.dataset.id);
+      const menuItem = getMenuItemById(itemId);
+      if (!menuItem) return;
+      openModifierModal(menuItem);
+    });
   });
 }
 
@@ -277,23 +322,41 @@ function renderTableCards() {
   renderCart();
 }
 
-function addToCart(id, name, price) {
-  const menuItem = menuItems.find((m) => m.id === id);
+function addToCart(menuItem, selectedModifiers = [], specialInstructions = '') {
+  const id = Number(menuItem?.id);
+  if (!id) return;
+  const normalizedModifiers = normalizeSelectedModifiers(selectedModifiers);
+  const note = String(specialInstructions || '').trim();
+  const unitPrice = toNumber(menuItem.price, 0) + modifiersTotal(normalizedModifiers);
+  const key = buildCartLineKey(id, normalizedModifiers, note);
+  const existing = cart.get(key);
+  if (existing) {
+    existing.quantity += 1;
+  } else {
+    cart.set(key, {
+      menu_item: { id, name: menuItem.name, price: toNumber(menuItem.price, 0) },
+      selected_modifiers: normalizedModifiers,
+      special_instructions: note || null,
+      unit_price: unitPrice,
+      quantity: 1,
+    });
+  }
+  renderCart();
+}
+
+function addSimpleItem(menuItem) {
   if (menuItem && menuItem.is_available === false) {
     showError('This item is sold out.');
     return;
   }
-  const current = cart.get(id);
-  if (current) current.quantity += 1;
-  else cart.set(id, { menu_item: { id, name, price }, quantity: 1 });
-  renderCart();
+  addToCart(menuItem, [], '');
 }
 
-function updateCartQuantity(id, delta) {
-  const item = cart.get(id);
+function updateCartQuantity(lineKey, delta) {
+  const item = cart.get(lineKey);
   if (!item) return;
   item.quantity += delta;
-  if (item.quantity <= 0) cart.delete(id);
+  if (item.quantity <= 0) cart.delete(lineKey);
   renderCart();
 }
 
@@ -311,28 +374,169 @@ function renderCart() {
 
   let total = 0;
   list.innerHTML = '';
-  cart.forEach(({ menu_item, quantity }, id) => {
-    const subtotal = menu_item.price * quantity;
+  cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions, unit_price }, lineKey) => {
+    const subtotal = unit_price * quantity;
     total += subtotal;
+    const modifiersHtml = (selected_modifiers || []).length
+      ? `<div class="text-xs text-slate-500 mt-0.5">${(selected_modifiers || []).map((m) => `+ ${escapeHtml(m.name)}${toNumber(m.price, 0) ? ` ($${toNumber(m.price, 0).toFixed(2)})` : ''}`).join(', ')}</div>`
+      : '';
+    const noteHtml = special_instructions
+      ? `<div class="text-xs text-slate-500 italic mt-0.5">${escapeHtml(special_instructions)}</div>`
+      : '';
     const li = document.createElement('li');
     li.className = 'flex items-center justify-between gap-2';
     li.innerHTML = `
-      <span class="flex-1 truncate">${escapeHtml(menu_item.name)} x ${quantity}</span>
+      <div class="flex-1 min-w-0">
+        <span class="truncate block">${escapeHtml(menu_item.name)} x ${quantity}</span>
+        ${modifiersHtml}
+        ${noteHtml}
+      </div>
       <span class="font-medium">$${subtotal.toFixed(2)}</span>
       <div class="flex items-center gap-0">
-        <button type="button" data-id="${id}" class="qty-btn minus w-7 h-7 rounded border border-slate-300 bg-slate-100 hover:bg-slate-200">-</button>
+        <button type="button" data-key="${escapeAttr(lineKey)}" class="qty-btn minus w-7 h-7 rounded border border-slate-300 bg-slate-100 hover:bg-slate-200">-</button>
         <span class="w-6 text-center text-sm">${quantity}</span>
-        <button type="button" data-id="${id}" class="qty-btn plus w-7 h-7 rounded border border-slate-300 bg-slate-100 hover:bg-slate-200">+</button>
+        <button type="button" data-key="${escapeAttr(lineKey)}" class="qty-btn plus w-7 h-7 rounded border border-slate-300 bg-slate-100 hover:bg-slate-200">+</button>
       </div>
     `;
     list.appendChild(li);
   });
 
-  list.querySelectorAll('.qty-btn.minus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(Number(btn.dataset.id), -1)));
-  list.querySelectorAll('.qty-btn.plus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(Number(btn.dataset.id), 1)));
+  list.querySelectorAll('.qty-btn.minus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, -1)));
+  list.querySelectorAll('.qty-btn.plus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, 1)));
 
   totalEl.textContent = `$${total.toFixed(2)}`;
   submitBtn.disabled = !selectedTableId;
+}
+
+function closeModifierModal() {
+  const backdrop = document.getElementById('modifier-modal-backdrop');
+  const modal = document.getElementById('modifier-modal');
+  if (backdrop) backdrop.classList.add('hidden');
+  if (modal) modal.classList.add('hidden');
+  modifierModalItem = null;
+}
+
+function getSelectedModifiersFromModal() {
+  const selected = [];
+  document.querySelectorAll('[data-modifier-option]').forEach((input) => {
+    if (!input.checked) return;
+    selected.push({
+      name: String(input.getAttribute('data-option-name') || ''),
+      price: toNumber(input.getAttribute('data-option-price'), 0),
+      group: String(input.getAttribute('data-group-name') || '') || null,
+    });
+  });
+  return normalizeSelectedModifiers(selected);
+}
+
+function updateModifierModalAddButton() {
+  const addBtn = document.getElementById('modifier-modal-add');
+  if (!addBtn || !modifierModalItem) return;
+  const total = toNumber(modifierModalItem.price, 0) + modifiersTotal(getSelectedModifiersFromModal());
+  addBtn.textContent = `Add to Cart ($${total.toFixed(2)})`;
+}
+
+function validateRequiredModifierGroups() {
+  if (!modifierModalItem) return true;
+  const groups = Array.isArray(modifierModalItem.modifiers_config) ? modifierModalItem.modifiers_config : [];
+  for (let i = 0; i < groups.length; i += 1) {
+    const group = groups[i];
+    if (!group || !group.is_required) continue;
+    const picked = document.querySelector(`input[name="mod-group-${i}"]:checked`);
+    if (!picked) {
+      showError(`Please choose one option for "${group.group || 'Required'}".`);
+      return false;
+    }
+  }
+  return true;
+}
+
+function openModifierModal(menuItem) {
+  if (!menuItem || menuItem.is_available === false) {
+    showError('This item is sold out.');
+    return;
+  }
+  modifierModalItem = menuItem;
+  const title = document.getElementById('modifier-modal-title');
+  const base = document.getElementById('modifier-modal-base-price');
+  const groupsEl = document.getElementById('modifier-modal-groups');
+  const noteEl = document.getElementById('modifier-special-instructions');
+  const backdrop = document.getElementById('modifier-modal-backdrop');
+  const modal = document.getElementById('modifier-modal');
+  if (!title || !base || !groupsEl || !noteEl || !backdrop || !modal) {
+    addSimpleItem(menuItem);
+    return;
+  }
+  title.textContent = menuItem.name || 'Customize Item';
+  base.textContent = `Base: $${toNumber(menuItem.price, 0).toFixed(2)}`;
+  noteEl.value = '';
+
+  const groups = Array.isArray(menuItem.modifiers_config) ? menuItem.modifiers_config : [];
+  if (!groups.length) {
+    groupsEl.innerHTML = '<p class="text-sm text-slate-500">No modifiers for this item.</p>';
+  } else {
+    groupsEl.innerHTML = groups.map((group, i) => {
+      const required = !!group?.is_required;
+      const options = Array.isArray(group?.options) ? group.options : [];
+      return `
+        <div class="border border-slate-200 rounded-md p-3">
+          <p class="text-sm font-semibold text-slate-800 mb-2">
+            ${escapeHtml(group?.group || `Modifiers ${i + 1}`)}
+            ${required ? '<span class="text-red-600">*</span>' : '<span class="text-slate-400 text-xs">(optional)</span>'}
+          </p>
+          <div class="space-y-1.5">
+            ${options.map((opt) => `
+              <label class="flex items-center justify-between gap-2 text-sm">
+                <span class="flex items-center gap-2">
+                  <input
+                    type="${required ? 'radio' : 'checkbox'}"
+                    name="mod-group-${i}"
+                    data-modifier-option="1"
+                    data-group-name="${escapeAttr(group?.group || '')}"
+                    data-option-name="${escapeAttr(opt?.name || '')}"
+                    data-option-price="${toNumber(opt?.price, 0)}"
+                    class="rounded border-slate-300"
+                  />
+                  <span>${escapeHtml(opt?.name || 'Option')}</span>
+                </span>
+                <span class="text-slate-600">+${toNumber(opt?.price, 0).toFixed(2)}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  groupsEl.querySelectorAll('[data-modifier-option]').forEach((input) => {
+    input.addEventListener('change', updateModifierModalAddButton);
+  });
+
+  updateModifierModalAddButton();
+  backdrop.classList.remove('hidden');
+  modal.classList.remove('hidden');
+}
+
+function bindModifierModal() {
+  const closeBtn = document.getElementById('modifier-modal-close');
+  const cancelBtn = document.getElementById('modifier-modal-cancel');
+  const addBtn = document.getElementById('modifier-modal-add');
+  const backdrop = document.getElementById('modifier-modal-backdrop');
+  const noteEl = document.getElementById('modifier-special-instructions');
+
+  if (closeBtn) closeBtn.addEventListener('click', closeModifierModal);
+  if (cancelBtn) cancelBtn.addEventListener('click', closeModifierModal);
+  if (backdrop) backdrop.addEventListener('click', closeModifierModal);
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      if (!modifierModalItem) return;
+      if (!validateRequiredModifierGroups()) return;
+      const selectedModifiers = getSelectedModifiersFromModal();
+      const specialInstructions = noteEl ? noteEl.value : '';
+      addToCart(modifierModalItem, selectedModifiers, specialInstructions);
+      closeModifierModal();
+    });
+  }
 }
 
 function normalizeItemStatus(item) {
@@ -521,7 +725,14 @@ function bindSubmitOrder() {
       return;
     }
     const items = [];
-    cart.forEach(({ menu_item, quantity }) => items.push({ menu_item_id: menu_item.id, quantity }));
+    cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions }) => {
+      items.push({
+        menu_item_id: menu_item.id,
+        quantity,
+        selected_modifiers: selected_modifiers || [],
+        special_instructions: special_instructions || null,
+      });
+    });
     submitBtn.disabled = true;
     try {
       const data = await submitOrder(selectedTableId, items);
@@ -600,6 +811,7 @@ function connectWebSocket() {
             description: item.description ?? null,
             image_url: item.image_url ?? null,
             is_available: item.is_available !== false,
+            modifiers_config: Array.isArray(item.modifiers_config) ? item.modifiers_config : [],
           });
           renderCategoryTabs();
           renderMenu();
@@ -622,8 +834,14 @@ function connectWebSocket() {
         const itemId = Number(msg.data.id);
         if (!itemId) return;
         menuItems = menuItems.filter((m) => m.id !== itemId);
-        if (cart.has(itemId)) {
-          cart.delete(itemId);
+        let changed = false;
+        for (const [key, value] of cart.entries()) {
+          if (Number(value?.menu_item?.id) === itemId) {
+            cart.delete(key);
+            changed = true;
+          }
+        }
+        if (changed) {
           renderCart();
         }
         renderCategoryTabs();
@@ -657,6 +875,7 @@ function connectWebSocket() {
 if (window.auth && window.auth.getToken()) {
   (async function init() {
     bindSubmitOrder();
+    bindModifierModal();
     const closeBtn = document.getElementById('waiter-table-details-close');
     const backdrop = document.getElementById('waiter-table-details-backdrop');
     if (closeBtn) closeBtn.addEventListener('click', closeDetailsSidebar);

@@ -32,6 +32,27 @@ def _table_number_from_table(table: Table) -> int:
         return int(table.id)
 
 
+def _selected_modifiers_payload(raw_modifiers) -> list[dict]:
+    """Normalize validated modifier objects into JSON-serializable dicts."""
+    payload = []
+    for m in (raw_modifiers or []):
+        if hasattr(m, "model_dump"):
+            payload.append(m.model_dump(mode="json"))
+        elif isinstance(m, dict):
+            payload.append(dict(m))
+    return payload
+
+
+def _selected_modifiers_total(selected_modifiers: list[dict]) -> float:
+    total = 0.0
+    for m in selected_modifiers or []:
+        try:
+            total += float(m.get("price") or 0.0)
+        except Exception:
+            continue
+    return total
+
+
 async def _broadcast_table_status_changed(request: Request, table: Table) -> None:
     manager = getattr(request.app.state, "ws_manager", None)
     if manager:
@@ -84,7 +105,9 @@ async def create_order(
                 raise HTTPException(status_code=404, detail=f"Menu item with id {line.menu_item_id} not found")
             if line.quantity < 1:
                 raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
-            subtotal = float(menu_item.price) * line.quantity
+            selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
+            modifiers_total = _selected_modifiers_total(selected_modifiers)
+            subtotal = (float(menu_item.price) + modifiers_total) * line.quantity
             existing_total += subtotal
             db.add(
                 OrderItem(
@@ -93,6 +116,8 @@ async def create_order(
                     quantity=line.quantity,
                     subtotal=subtotal,
                     created_by_id=current_user.id,
+                    selected_modifiers=selected_modifiers,
+                    special_instructions=line.special_instructions,
                 )
             )
             added_items_detail.append(
@@ -102,6 +127,8 @@ async def create_order(
                     subtotal=subtotal,
                     menu_item_image_url=getattr(menu_item, "image_url", None),
                     waiter_name=current_user.username,
+                    selected_modifiers=selected_modifiers,
+                    special_instructions=line.special_instructions,
                 )
             )
         existing.total_amount = round(existing_total, 2)
@@ -132,10 +159,18 @@ async def create_order(
             raise HTTPException(status_code=404, detail=f"Menu item with id {line.menu_item_id} not found")
         if line.quantity < 1:
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
-        subtotal = float(menu_item.price) * line.quantity
+        selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
+        modifiers_total = _selected_modifiers_total(selected_modifiers)
+        subtotal = (float(menu_item.price) + modifiers_total) * line.quantity
         total_amount += subtotal
         order_items_data.append(
-            {"menu_item_id": line.menu_item_id, "quantity": line.quantity, "subtotal": subtotal}
+            {
+                "menu_item_id": line.menu_item_id,
+                "quantity": line.quantity,
+                "subtotal": subtotal,
+                "selected_modifiers": selected_modifiers,
+                "special_instructions": line.special_instructions,
+            }
         )
 
     db_order = Order(
@@ -154,6 +189,8 @@ async def create_order(
                 quantity=item_data["quantity"],
                 subtotal=item_data["subtotal"],
                 created_by_id=current_user.id,
+                selected_modifiers=item_data["selected_modifiers"],
+                special_instructions=item_data["special_instructions"],
             )
         )
     previous_status = table.status
@@ -390,6 +427,8 @@ def get_order_details(
             subtotal=float(oi.subtotal),
             item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
             waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
+            selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
+            special_instructions=getattr(oi, "special_instructions", None),
         )
         for oi in order.order_items
     ]
@@ -463,6 +502,8 @@ async def update_order_item_status(
         "subtotal": float(oi.subtotal),
         "item_status": getattr(getattr(oi, "item_status", None), "value", oi.item_status),
         "waiter_name": getattr(getattr(oi, "created_by", None), "username", None),
+        "selected_modifiers": getattr(oi, "selected_modifiers", []) or [],
+        "special_instructions": getattr(oi, "special_instructions", None),
     }
 
 
@@ -530,7 +571,9 @@ async def submit_order(
             raise HTTPException(status_code=404, detail=f"Menu item id {line.menu_item_id} not found")
         if line.quantity < 1:
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
-        subtotal = float(menu_item.price) * line.quantity
+        selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
+        modifiers_total = _selected_modifiers_total(selected_modifiers)
+        subtotal = (float(menu_item.price) + modifiers_total) * line.quantity
         batch_total += subtotal
         db.add(
             OrderItem(
@@ -541,6 +584,8 @@ async def submit_order(
                 batch_number=new_batch_number,
                 created_by_id=current_user.id,
                 batch_status="pending",
+                selected_modifiers=selected_modifiers,
+                special_instructions=line.special_instructions,
             )
         )
         batch_items_detail.append(
@@ -552,6 +597,8 @@ async def submit_order(
                 menu_item_image_url=getattr(menu_item, "image_url", None),
                 waiter_name=current_user.username,
                 batch_status="pending",
+                selected_modifiers=selected_modifiers,
+                special_instructions=line.special_instructions,
             )
         )
 

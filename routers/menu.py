@@ -54,6 +54,7 @@ async def create_menu_item(
         description=item.description,
         image_url=item.image_url,
         is_available=item.is_available,
+        modifiers_config=[m.model_dump(mode="json") for m in item.modifiers_config],
     )
     db.add(db_item)
     db.commit()
@@ -103,6 +104,7 @@ async def create_menu_item_upload(
         description=description.strip() if description else None,
         image_url=image_url,
         is_available=True,
+        modifiers_config=[],
     )
     db.add(db_item)
     db.commit()

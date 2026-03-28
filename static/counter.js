@@ -1020,6 +1020,110 @@ function escapeAttr(text) {
   return div.innerHTML.replace(/"/g, '&quot;');
 }
 
+function createModifierOptionRow(groupEl, option = {}) {
+  const optionsContainer = groupEl.querySelector('[data-modifier-options-container]');
+  if (!optionsContainer) return;
+  const row = document.createElement('div');
+  row.className = 'grid grid-cols-12 gap-2 items-center';
+  row.innerHTML = `
+    <input
+      type="text"
+      data-modifier-option-name
+      placeholder="Option name (e.g. Duck Egg)"
+      value="${escapeAttr(option.name || '')}"
+      class="col-span-7 px-2 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    />
+    <input
+      type="number"
+      data-modifier-option-price
+      min="0"
+      step="0.01"
+      value="${Number(option.price || 0)}"
+      class="col-span-4 px-2 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    />
+    <button type="button" data-remove-modifier-option class="col-span-1 text-xs px-2 py-1.5 rounded bg-rose-100 text-rose-700 hover:bg-rose-200">x</button>
+  `;
+  row.querySelector('[data-remove-modifier-option]')?.addEventListener('click', () => {
+    row.remove();
+    if (!optionsContainer.querySelector('[data-modifier-option-name]')) {
+      createModifierOptionRow(groupEl, { name: '', price: 0 });
+    }
+  });
+  optionsContainer.appendChild(row);
+}
+
+function createModifierGroupBlock(group = {}) {
+  const container = document.getElementById('modifier-groups-builder');
+  if (!container) return;
+  if (container.querySelector('p')) container.innerHTML = '';
+  const groupEl = document.createElement('div');
+  groupEl.className = 'border border-slate-200 rounded-md p-3 space-y-2';
+  groupEl.innerHTML = `
+    <div class="flex items-center justify-between gap-2">
+      <input
+        type="text"
+        data-modifier-group-name
+        placeholder="Group name (e.g. Add-ons, Sweetness)"
+        value="${escapeAttr(group.group || '')}"
+        class="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      />
+      <label class="text-xs text-slate-700 flex items-center gap-1">
+        <input type="checkbox" data-modifier-group-required ${group.is_required ? 'checked' : ''} />
+        Required
+      </label>
+      <button type="button" data-remove-modifier-group class="text-xs px-2 py-1.5 rounded bg-rose-100 text-rose-700 hover:bg-rose-200">Remove</button>
+    </div>
+    <div class="space-y-2" data-modifier-options-container></div>
+    <button type="button" data-add-modifier-option class="text-xs px-2 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">+ Add Option</button>
+  `;
+  groupEl.querySelector('[data-add-modifier-option]')?.addEventListener('click', () => {
+    createModifierOptionRow(groupEl, { name: '', price: 0 });
+  });
+  groupEl.querySelector('[data-remove-modifier-group]')?.addEventListener('click', () => {
+    groupEl.remove();
+    if (!container.querySelector('[data-modifier-group-name]')) {
+      container.innerHTML = '<p class="text-xs text-slate-500">No modifier groups yet.</p>';
+    }
+  });
+  container.appendChild(groupEl);
+
+  const options = Array.isArray(group.options) && group.options.length ? group.options : [{ name: '', price: 0 }];
+  options.forEach((opt) => createModifierOptionRow(groupEl, opt));
+}
+
+function collectModifiersConfigFromBuilder() {
+  const groups = [];
+  document.querySelectorAll('#modifier-groups-builder [data-modifier-group-name]').forEach((input) => {
+    const groupEl = input.closest('.border');
+    if (!groupEl) return;
+    const groupName = (input.value || '').trim();
+    const isRequired = !!groupEl.querySelector('[data-modifier-group-required]')?.checked;
+    const options = [];
+    groupEl.querySelectorAll('[data-modifier-option-name]').forEach((nameInput) => {
+      const row = nameInput.closest('.grid');
+      const optionName = (nameInput.value || '').trim();
+      const priceInput = row?.querySelector('[data-modifier-option-price]');
+      const price = Number(priceInput?.value || 0);
+      if (!optionName) return;
+      options.push({ name: optionName, price: Number.isFinite(price) ? price : 0 });
+    });
+    if (!groupName || !options.length) return;
+    groups.push({ group: groupName, is_required: isRequired, options });
+  });
+  return groups;
+}
+
+function resetModifiersBuilder() {
+  const container = document.getElementById('modifier-groups-builder');
+  if (container) container.innerHTML = '<p class="text-xs text-slate-500">No modifier groups yet.</p>';
+}
+
+function bindModifiersBuilderEvents() {
+  const addGroupBtn = document.getElementById('btn-add-modifier-group');
+  if (!addGroupBtn) return;
+  addGroupBtn.addEventListener('click', () => createModifierGroupBlock());
+}
+
 function populateCategorySelect(categories) {
   const select = document.getElementById('item-category');
   const currentValue = select.value;
@@ -1104,30 +1208,28 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
   const categoryId = document.getElementById('item-category').value;
   const imageUrl = document.getElementById('item-image-url').value.trim() || null;
   const imageFile = document.getElementById('item-image-file').files?.[0];
+  const modifiersConfig = collectModifiersConfigFromBuilder();
   if (!name || isNaN(price) || price < 0 || !categoryId) return;
+  if (imageFile && !imageUrl) {
+    if (window.toast) window.toast.error('Please wait for image upload to finish.');
+    else alert('Please wait for image upload to finish.');
+    return;
+  }
   const btn = document.getElementById('btn-submit-menu-item');
   btn.disabled = true;
   try {
-    let res;
-    if (imageFile) {
-      const fd = new FormData();
-      fd.append('name', name);
-      fd.append('price', String(price));
-      fd.append('category_id', categoryId);
-      if (description) fd.append('description', description);
-      fd.append('image', imageFile);
-      res = await fetch(`${API_BASE}/api/menu-items/upload`, {
-        method: 'POST',
-        headers: { ...window.auth.getAuthHeaders() },
-        body: fd,
-      });
-    } else {
-      res = await fetch(`${API_BASE}/api/menu-items/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-        body: JSON.stringify({ name, price, category_id: parseInt(categoryId, 10), description: description, image_url: imageUrl }),
-      });
-    }
+    const res = await fetch(`${API_BASE}/api/menu-items/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+      body: JSON.stringify({
+        name,
+        price,
+        category_id: parseInt(categoryId, 10),
+        description,
+        image_url: imageUrl,
+        modifiers_config: modifiersConfig,
+      }),
+    });
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -1140,6 +1242,7 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
     document.getElementById('item-image-url').value = '';
     document.getElementById('item-category').value = '';
     document.getElementById('item-image-file').value = '';
+    resetModifiersBuilder();
     await loadMenuData();
   } catch (err) {
     console.error(err);
@@ -1201,6 +1304,7 @@ function connectCounterWebSocket() {
 
 // Initial load only when authenticated (avoids 401s if redirecting to login)
 if (window.auth && window.auth.getToken()) {
+  bindModifiersBuilderEvents();
   loadUnpaidOrders();
   loadMenuData();
   connectCounterWebSocket();

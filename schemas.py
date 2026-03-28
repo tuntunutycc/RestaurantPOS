@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -171,6 +171,23 @@ class CategoryResponse(BaseModel):
     name: str
 
 
+class ModifierOption(BaseModel):
+    name: str
+    price: float = 0.0
+
+
+class ModifierGroup(BaseModel):
+    group: str
+    is_required: bool = False
+    options: List[ModifierOption] = Field(default_factory=list)
+
+
+class SelectedModifier(BaseModel):
+    name: str
+    price: float = 0.0
+    group: str | None = None
+
+
 class MenuItemCreate(BaseModel):
     """Schema for creating a menu item."""
 
@@ -180,6 +197,7 @@ class MenuItemCreate(BaseModel):
     description: str | None = None
     image_url: str | None = None
     is_available: bool = True
+    modifiers_config: List[ModifierGroup] = Field(default_factory=list)
 
 
 class MenuItemResponse(BaseModel):
@@ -194,6 +212,7 @@ class MenuItemResponse(BaseModel):
     description: str | None = None
     image_url: str | None = None
     is_available: bool = True
+    modifiers_config: List[ModifierGroup] = Field(default_factory=list)
 
 
 class MenuItemRead(MenuItemResponse):
@@ -211,6 +230,7 @@ class MenuItemUpdate(BaseModel):
     description: str | None = None
     image_url: str | None = None
     is_available: bool | None = None
+    modifiers_config: List[ModifierGroup] | None = None
 
 
 class OrderItemCreate(BaseModel):
@@ -218,6 +238,8 @@ class OrderItemCreate(BaseModel):
 
     menu_item_id: int
     quantity: int
+    selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
+    special_instructions: str | None = None
 
 
 class OrderCreate(BaseModel):
@@ -256,6 +278,8 @@ class OrderItemDetail(BaseModel):
     menu_item_image_url: str | None = None
     # For Kitchen tickets: who created this specific batch (ticket)
     waiter_name: str | None = None
+    selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
+    special_instructions: str | None = None
 
 
 class OrderItemDetailsResponse(BaseModel):
@@ -266,6 +290,8 @@ class OrderItemDetailsResponse(BaseModel):
     subtotal: float
     item_status: OrderItemStatusLiteral
     waiter_name: str | None = None
+    selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
+    special_instructions: str | None = None
 
 
 class OrderDetailsResponse(BaseModel):
@@ -323,6 +349,8 @@ class OrderResponseDetail(BaseModel):
                     item_status=getattr(oi, "item_status", getattr(oi, "status", "pending")),
                     menu_item_image_url=getattr(oi.menu_item, "image_url", None),
                     waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
+                    selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
+                    special_instructions=getattr(oi, "special_instructions", None),
                 )
                 for oi in order.order_items
             ]

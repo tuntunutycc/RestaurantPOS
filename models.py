@@ -13,6 +13,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
 )
 from sqlalchemy.orm import relationship, synonym
@@ -42,6 +43,8 @@ class MenuItem(Base):
     description = Column(String(1024), nullable=True)
     image_url = Column(String(512), nullable=True)  # e.g. /images/menu/xxx.png
     is_available = Column(Boolean, nullable=False, default=True, index=True)
+    # Flexible modifier groups/options config for this menu item.
+    modifiers_config = Column(JSON, nullable=False, default=list)
     category_id = Column(
         Integer, ForeignKey("categories.id"), nullable=False, index=True
     )
@@ -166,6 +169,10 @@ class OrderItem(Base):
     )
     # Backward-compatible alias for existing code.
     status = synonym("item_status")
+    # Selected modifiers for this specific line item (JSON list).
+    selected_modifiers = Column(JSON, nullable=False, default=list)
+    # Free-text instructions for kitchen (e.g. "No MSG").
+    special_instructions = Column(String(1024), nullable=True)
 
     # Who created this specific batch (ticket) in the dining session.
     # We store it per OrderItem row so Kitchen can show waiter per batch.

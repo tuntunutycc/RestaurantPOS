@@ -43,6 +43,17 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE menu_items "
+                    "ADD COLUMN modifiers_config JSON NOT NULL DEFAULT '[]'"
+                )
+            )
+    except Exception:
+        pass
     # Add batch_number to existing order_items if missing (SQLite dev migration).
     try:
         from sqlalchemy import text
@@ -90,6 +101,29 @@ async def lifespan(app: FastAPI):
                 text(
                     "ALTER TABLE order_items "
                     "ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'pending'"
+                )
+            )
+    except Exception:
+        pass
+    # Add selected modifiers (JSON) and special instructions to order_items.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN selected_modifiers JSON NOT NULL DEFAULT '[]'"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN special_instructions VARCHAR(1024)"
                 )
             )
     except Exception:
