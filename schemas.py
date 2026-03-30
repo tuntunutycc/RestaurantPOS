@@ -414,3 +414,11 @@ class OrderCheckoutRequest(BaseModel):
     amount_tendered: float
     discount_type: Literal["percentage", "amount"] | None = None
     discount_value: float | None = 0.0
+
+
+class TodaySalesSummaryResponse(BaseModel):
+    """Today's sales summary for analytics dashboard."""
+
+    total_sales: float
+    total_orders: int
+    average_order_value: float

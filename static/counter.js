@@ -9,22 +9,30 @@ const API_BASE = '';
 })();
 
 // —— Tab switching ——
+const tabDashboard = document.getElementById('tab-dashboard');
 const tabCashier = document.getElementById('tab-cashier');
 const tabMenu = document.getElementById('tab-menu');
 const tabUsers = document.getElementById('tab-users');
 const tabTables = document.getElementById('tab-tables');
+const panelDashboard = document.getElementById('panel-dashboard');
 const panelCashier = document.getElementById('panel-cashier');
 const panelMenu = document.getElementById('panel-menu');
 const panelUsers = document.getElementById('panel-users');
 const panelTables = document.getElementById('panel-tables');
+let hasInitializedDefaultPanel = false;
 
 function showPanel(panel) {
   if (!panel) return;
+  if (panelDashboard) panelDashboard.classList.add('hidden');
   panelCashier.classList.add('hidden');
   panelMenu.classList.add('hidden');
   if (panelUsers) panelUsers.classList.add('hidden');
   if (panelTables) panelTables.classList.add('hidden');
 
+  if (tabDashboard) {
+    tabDashboard.classList.remove('border-blue-600', 'text-blue-600');
+    tabDashboard.classList.add('border-transparent', 'text-slate-600');
+  }
   tabCashier.classList.remove('border-blue-600', 'text-blue-600');
   tabCashier.classList.add('border-transparent', 'text-slate-600');
   tabMenu.classList.remove('border-blue-600', 'text-blue-600');
@@ -41,7 +49,10 @@ function showPanel(panel) {
 
   panel.classList.remove('hidden');
 
-  if (panel === panelCashier) {
+  if (panelDashboard && panel === panelDashboard) {
+    if (tabDashboard) tabDashboard.classList.add('border-blue-600', 'text-blue-600');
+    loadDashboardSummary();
+  } else if (panel === panelCashier) {
     tabCashier.classList.add('border-blue-600', 'text-blue-600');
     loadUnpaidOrders();
   } else if (panel === panelMenu) {
@@ -56,6 +67,7 @@ function showPanel(panel) {
   }
 }
 
+if (tabDashboard && panelDashboard) tabDashboard.addEventListener('click', () => showPanel(panelDashboard));
 tabCashier.addEventListener('click', () => showPanel(panelCashier));
 tabMenu.addEventListener('click', () => showPanel(panelMenu));
 if (tabUsers && panelUsers) tabUsers.addEventListener('click', () => showPanel(panelUsers));
@@ -76,11 +88,19 @@ document.addEventListener('click', (e) => {
 function applyAdminOnlyTabVisibility(role) {
   const normalizedRole = String(role || '').toLowerCase();
   const isAdmin = normalizedRole === 'admin';
+  if (tabDashboard) tabDashboard.classList.toggle('hidden', !isAdmin);
   if (tabUsers) tabUsers.classList.toggle('hidden', !isAdmin);
   if (tabTables) tabTables.classList.toggle('hidden', !isAdmin);
   // If current panel is admin-only but user is not admin, fallback to cashier.
+  if (!isAdmin && panelDashboard && !panelDashboard.classList.contains('hidden')) {
+    showPanel(panelCashier);
+  }
   if (!isAdmin && panelTables && !panelTables.classList.contains('hidden')) {
     showPanel(panelCashier);
+  }
+  if (!hasInitializedDefaultPanel) {
+    showPanel(isAdmin && panelDashboard ? panelDashboard : panelCashier);
+    hasInitializedDefaultPanel = true;
   }
 }
 
@@ -123,6 +143,43 @@ let selectedOrderSubtotal = 0;
 let cashierZones = [];
 let cashierActiveZoneId = null;
 let menuItemsCache = [];
+
+function formatCurrencyKs(value) {
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${safe.toLocaleString('en-US', { maximumFractionDigits: 2 })} Ks`;
+}
+
+async function loadDashboardSummary() {
+  const salesEl = document.getElementById('kpi-total-sales');
+  const ordersEl = document.getElementById('kpi-total-orders');
+  const avgEl = document.getElementById('kpi-average-order-value');
+  if (!salesEl || !ordersEl || !avgEl) return;
+
+  salesEl.textContent = '0 Ks';
+  ordersEl.textContent = '0';
+  avgEl.textContent = '0 Ks';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/reports/summary/today`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load dashboard summary');
+
+    const totalSales = Number(data.total_sales) || 0;
+    const totalOrders = Number(data.total_orders) || 0;
+    const averageOrderValue = Number(data.average_order_value) || 0;
+
+    salesEl.textContent = formatCurrencyKs(totalSales);
+    ordersEl.textContent = String(Math.max(0, Math.floor(totalOrders)));
+    avgEl.textContent = formatCurrencyKs(averageOrderValue);
+  } catch (err) {
+    console.error(err);
+    if (window.toast) window.toast.error('Failed to load dashboard summary');
+  }
+}
 
 function getCheckoutDiscountState() {
   const typeEl = document.getElementById('checkout-discount-type');

@@ -14,6 +14,9 @@
     <!-- Tab navigation -->
     <div class="border-b border-slate-200 mb-6 overflow-x-auto">
       <div class="flex min-w-max">
+      <button type="button" id="tab-dashboard" data-target-panel="panel-dashboard" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap hidden">
+        Dashboard
+      </button>
       <button type="button" id="tab-cashier" data-target-panel="panel-cashier" class="tab-btn px-4 py-2 font-medium text-slate-700 border-b-2 border-blue-600 text-blue-600 whitespace-nowrap">
         Cashier / Billing
       </button>
@@ -26,6 +29,24 @@
       <button type="button" id="tab-tables" data-target-panel="panel-tables" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap">
         Table Management
       </button>
+      </div>
+    </div>
+
+    <!-- Tab 0: Dashboard / Overview (admin only) -->
+    <div id="panel-dashboard" class="tab-panel hidden">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <section class="bg-white rounded-lg shadow p-5 border-l-4 border-emerald-500">
+          <p class="text-sm text-slate-500 mb-2">Today's Sales</p>
+          <p id="kpi-total-sales" class="text-2xl font-bold text-slate-800">0 Ks</p>
+        </section>
+        <section class="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
+          <p class="text-sm text-slate-500 mb-2">Total Orders</p>
+          <p id="kpi-total-orders" class="text-2xl font-bold text-slate-800">0</p>
+        </section>
+        <section class="bg-white rounded-lg shadow p-5 border-l-4 border-purple-500">
+          <p class="text-sm text-slate-500 mb-2">Average Order Value</p>
+          <p id="kpi-average-order-value" class="text-2xl font-bold text-slate-800">0 Ks</p>
+        </section>
       </div>
     </div>
 
