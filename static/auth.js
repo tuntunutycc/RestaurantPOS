@@ -15,7 +15,6 @@
   const ROLE_DEFAULT_PAGE = {
     admin: "/counter",
     waiter: "/waiter",
-    kitchen: "/kitchen",
     cashier: "/counter",
   };
 
@@ -66,7 +65,10 @@
    */
   function requireRole(allowedRoles) {
     const user = getUser();
-    if (!user || !user.role) return;
+    if (!user || !user.role) {
+      clearAuth();
+      return false;
+    }
     if (allowedRoles.indexOf(user.role) === -1) {
       localStorage.setItem(UNAUTHORIZED_FLAG, "1");
       const defaultPage = ROLE_DEFAULT_PAGE[user.role] || "/waiter";

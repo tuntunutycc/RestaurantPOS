@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 from auth import get_current_user, require_roles
 from database import get_db
 from models import Category, MenuItem, OrderItem, User
-from schemas import CategoryCreate, CategoryResponse, MenuItemCreate, MenuItemResponse
+from schemas import (
+    CategoryCreate,
+    CategoryResponse,
+    MenuItemCreate,
+    MenuItemResponse,
+    MenuItemUpdate,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -50,6 +56,7 @@ async def create_menu_item(
     db_item = MenuItem(
         name=item.name,
         price=item.price,
+        discount_price=item.discount_price,
         category_id=item.category_id,
         description=item.description,
         image_url=item.image_url,
@@ -129,6 +136,43 @@ def list_menu_items(
     if category_id is not None:
         q = q.filter(MenuItem.category_id == category_id)
     return q.all()
+
+
+@router.put("/menu-items/{item_id}", response_model=MenuItemResponse)
+async def update_menu_item(
+    request: Request,
+    item_id: int,
+    item_update: MenuItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin"])),
+):
+    """
+    Update an existing menu item. Admin only.
+    Supports partial updates for name, price, description, category_id, image_url,
+    is_available, and modifiers_config.
+    """
+    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+
+    update_data = item_update.model_dump(exclude_unset=True)
+    if "modifiers_config" in update_data and update_data["modifiers_config"] is not None:
+        update_data["modifiers_config"] = [
+            m.model_dump(mode="json") if hasattr(m, "model_dump") else m
+            for m in update_data["modifiers_config"]
+        ]
+
+    for field, value in update_data.items():
+        setattr(db_item, field, value)
+
+    db.commit()
+    db.refresh(db_item)
+    item_response = MenuItemResponse.model_validate(db_item)
+
+    manager = getattr(request.app.state, "ws_manager", None)
+    if manager:
+        await manager.broadcast("menu_item_updated", item_response.model_dump(mode="json"))
+    return item_response
 
 
 @router.put("/menu-items/{item_id}/toggle-availability", response_model=MenuItemResponse)

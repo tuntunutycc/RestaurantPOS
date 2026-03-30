@@ -69,6 +69,26 @@ function modifiersTotal(selectedModifiers) {
   return normalizeSelectedModifiers(selectedModifiers).reduce((sum, m) => sum + toNumber(m.price, 0), 0);
 }
 
+function getEffectiveBasePrice(menuItem) {
+  const discount = toNumber(menuItem?.discount_price, 0);
+  if (discount > 0) return discount;
+  return toNumber(menuItem?.price, 0);
+}
+
+function getMenuPriceHtml(menuItem) {
+  const normal = toNumber(menuItem?.price, 0);
+  const discount = toNumber(menuItem?.discount_price, 0);
+  if (discount > 0) {
+    return `
+      <div class="flex items-center gap-2 mt-0.5">
+        <span class="line-through text-gray-500 text-xs">$${normal.toFixed(2)}</span>
+        <span class="text-red-500 font-bold text-sm">$${discount.toFixed(2)}</span>
+      </div>
+    `;
+  }
+  return `<span class="text-sm text-slate-600 block">$${normal.toFixed(2)}</span>`;
+}
+
 function buildCartLineKey(menuItemId, selectedModifiers, specialInstructions) {
   const normalized = normalizeSelectedModifiers(selectedModifiers)
     .map((m) => ({ name: m.name, price: Number(m.price.toFixed(2)), group: m.group || null }))
@@ -141,11 +161,11 @@ async function fetchOrderDetails(orderId) {
   return fetchJson(`${API_BASE}/api/orders/${orderId}/details`);
 }
 
-async function markOrderItemServed(orderId, itemId) {
+async function updateOrderItemStatus(orderId, itemId, status) {
   return fetchJson(`${API_BASE}/api/orders/${orderId}/items/${itemId}/status`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status: 'served' }),
+    body: JSON.stringify({ status }),
   });
 }
 
@@ -223,7 +243,7 @@ function renderMenu() {
               +
             </button>
           </div>
-          <span class="text-sm text-slate-600 block">$${Number(m.price).toFixed(2)}</span>
+          ${getMenuPriceHtml(m)}
         </div>
       </div>`;
   }).join('');
@@ -327,14 +347,19 @@ function addToCart(menuItem, selectedModifiers = [], specialInstructions = '') {
   if (!id) return;
   const normalizedModifiers = normalizeSelectedModifiers(selectedModifiers);
   const note = String(specialInstructions || '').trim();
-  const unitPrice = toNumber(menuItem.price, 0) + modifiersTotal(normalizedModifiers);
+  const unitPrice = getEffectiveBasePrice(menuItem) + modifiersTotal(normalizedModifiers);
   const key = buildCartLineKey(id, normalizedModifiers, note);
   const existing = cart.get(key);
   if (existing) {
     existing.quantity += 1;
   } else {
     cart.set(key, {
-      menu_item: { id, name: menuItem.name, price: toNumber(menuItem.price, 0) },
+      menu_item: {
+        id,
+        name: menuItem.name,
+        price: toNumber(menuItem.price, 0),
+        discount_price: toNumber(menuItem.discount_price, 0) > 0 ? toNumber(menuItem.discount_price, 0) : null,
+      },
       selected_modifiers: normalizedModifiers,
       special_instructions: note || null,
       unit_price: unitPrice,
@@ -377,6 +402,11 @@ function renderCart() {
   cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions, unit_price }, lineKey) => {
     const subtotal = unit_price * quantity;
     total += subtotal;
+    const discountPrice = toNumber(menu_item?.discount_price, 0);
+    const normalPrice = toNumber(menu_item?.price, 0);
+    const priceHtml = discountPrice > 0
+      ? `<div class="text-xs mt-0.5"><span class="line-through text-slate-400">$${normalPrice.toFixed(2)}</span> <span class="text-red-500 font-semibold">$${discountPrice.toFixed(2)}</span></div>`
+      : '';
     const modifiersHtml = (selected_modifiers || []).length
       ? `<div class="text-xs text-slate-500 mt-0.5">${(selected_modifiers || []).map((m) => `+ ${escapeHtml(m.name)}${toNumber(m.price, 0) ? ` ($${toNumber(m.price, 0).toFixed(2)})` : ''}`).join(', ')}</div>`
       : '';
@@ -388,6 +418,7 @@ function renderCart() {
     li.innerHTML = `
       <div class="flex-1 min-w-0">
         <span class="truncate block">${escapeHtml(menu_item.name)} x ${quantity}</span>
+        ${priceHtml}
         ${modifiersHtml}
         ${noteHtml}
       </div>
@@ -432,7 +463,7 @@ function getSelectedModifiersFromModal() {
 function updateModifierModalAddButton() {
   const addBtn = document.getElementById('modifier-modal-add');
   if (!addBtn || !modifierModalItem) return;
-  const total = toNumber(modifierModalItem.price, 0) + modifiersTotal(getSelectedModifiersFromModal());
+  const total = getEffectiveBasePrice(modifierModalItem) + modifiersTotal(getSelectedModifiersFromModal());
   addBtn.textContent = `Add to Cart ($${total.toFixed(2)})`;
 }
 
@@ -468,7 +499,13 @@ function openModifierModal(menuItem) {
     return;
   }
   title.textContent = menuItem.name || 'Customize Item';
-  base.textContent = `Base: $${toNumber(menuItem.price, 0).toFixed(2)}`;
+  const basePrice = getEffectiveBasePrice(menuItem);
+  const normalPrice = toNumber(menuItem.price, 0);
+  if (toNumber(menuItem.discount_price, 0) > 0) {
+    base.innerHTML = `Base: <span class="line-through text-slate-400">$${normalPrice.toFixed(2)}</span> <span class="text-red-500 font-semibold">$${basePrice.toFixed(2)}</span>`;
+  } else {
+    base.textContent = `Base: $${basePrice.toFixed(2)}`;
+  }
   noteEl.value = '';
 
   const groups = Array.isArray(menuItem.modifiers_config) ? menuItem.modifiers_config : [];
@@ -540,7 +577,7 @@ function bindModifierModal() {
 }
 
 function normalizeItemStatus(item) {
-  const raw = String(item?.status || item?.batch_status || 'pending').toLowerCase();
+  const raw = String(item?.status || 'pending').toLowerCase();
   if (raw === 'ready' || raw === 'completed' || raw === 'served') return 'Ready';
   return 'Pending';
 }
@@ -556,6 +593,14 @@ function statusBadgeHtml(status) {
     return '<span class="text-xs px-2 py-0.5 rounded bg-emerald-500 text-white">Served</span>';
   }
   return '<span class="text-xs px-2 py-0.5 rounded bg-amber-500 text-white">Ordered</span>';
+}
+
+function statusToggleButtonHtml(itemId, status) {
+  const s = normalizeTrackingStatus(status);
+  if (s === 'served') {
+    return `<button type="button" data-toggle-served-item-id="${itemId}" data-next-status="pending" class="text-xs px-3 py-1.5 rounded bg-slate-400 text-white hover:bg-slate-500">↩ Undo</button>`;
+  }
+  return `<button type="button" data-toggle-served-item-id="${itemId}" data-next-status="served" class="text-xs px-3 py-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700">✓ Mark as Served</button>`;
 }
 
 function openDetailsSidebar() {
@@ -588,41 +633,47 @@ function renderTableDetailsItems(orderDetails) {
   content.innerHTML = items.map((item) => {
     const status = normalizeTrackingStatus(item.item_status);
     return `
-      <div class="border border-slate-200 rounded-md p-3">
+      <div class="border border-slate-200 rounded-md p-3" data-order-item-id="${item.id}">
         <div class="flex items-center justify-between gap-2 mb-2">
           <div>
             <p class="font-medium text-slate-800">${escapeHtml(item.menu_item_name)} x ${item.quantity}</p>
             <p class="text-xs text-slate-500">Waiter: ${escapeHtml(item.waiter_name || '-')}</p>
           </div>
-          ${statusBadgeHtml(status)}
+          <span data-item-status-badge>${statusBadgeHtml(status)}</span>
         </div>
-        ${
-          status === 'pending'
-            ? `<button type="button" data-mark-served-item-id="${item.id}" class="text-xs px-3 py-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700">✓ Mark as Served</button>`
-            : ''
-        }
+        <div data-item-status-action>
+          ${statusToggleButtonHtml(item.id, status)}
+        </div>
       </div>
     `;
   }).join('');
 
-  content.querySelectorAll('[data-mark-served-item-id]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const itemId = Number(btn.getAttribute('data-mark-served-item-id'));
-      if (!tableDetailsOrderId || !itemId) return;
-      btn.disabled = true;
-      try {
-        await markOrderItemServed(tableDetailsOrderId, itemId);
-        const refreshed = await fetchOrderDetails(tableDetailsOrderId);
-        renderTableDetailsItems(refreshed);
-        showSuccess('Item marked as served.');
-        queueRefresh();
-      } catch (err) {
-        console.error(err);
-        showError(err.message || 'Failed to mark item served');
-        btn.disabled = false;
-      }
-    });
-  });
+  content.onclick = async (event) => {
+    const btn = event.target.closest('[data-toggle-served-item-id]');
+    if (!btn || !content.contains(btn)) return;
+
+    const itemId = Number(btn.getAttribute('data-toggle-served-item-id'));
+    const nextStatus = normalizeTrackingStatus(btn.getAttribute('data-next-status'));
+    if (!tableDetailsOrderId || !itemId) return;
+
+    btn.disabled = true;
+    try {
+      await updateOrderItemStatus(tableDetailsOrderId, itemId, nextStatus);
+      const row = btn.closest('[data-order-item-id]');
+      const badgeEl = row?.querySelector('[data-item-status-badge]');
+      const actionEl = row?.querySelector('[data-item-status-action]');
+      if (badgeEl) badgeEl.innerHTML = statusBadgeHtml(nextStatus);
+      if (actionEl) actionEl.innerHTML = statusToggleButtonHtml(itemId, nextStatus);
+
+      if (nextStatus === 'served') showSuccess('Item marked as served.');
+      else showSuccess('Item reverted to pending.');
+      queueRefresh();
+    } catch (err) {
+      console.error(err);
+      showError(err.message || 'Failed to update item status');
+      btn.disabled = false;
+    }
+  };
 }
 
 async function openTableDetailsSidebar(tableId, tableName) {
@@ -807,6 +858,7 @@ function connectWebSocket() {
             id: item.id,
             name: item.name,
             price: item.price,
+            discount_price: item.discount_price ?? null,
             category_id: item.category_id,
             description: item.description ?? null,
             image_url: item.image_url ?? null,
@@ -815,6 +867,20 @@ function connectWebSocket() {
           });
           renderCategoryTabs();
           renderMenu();
+        }
+        return;
+      }
+      if (msg.event === 'menu_item_updated' && msg.data) {
+        const item = msg.data;
+        const idx = menuItems.findIndex((m) => m.id === item.id);
+        if (idx >= 0) {
+          menuItems[idx] = {
+            ...menuItems[idx],
+            ...item,
+            discount_price: item.discount_price ?? null,
+          };
+          renderMenu();
+          renderCart();
         }
         return;
       }
@@ -851,7 +917,6 @@ function connectWebSocket() {
       if (
         msg.event === 'new_order_batch' ||
         msg.event === 'order_updated' ||
-        msg.event === 'batch_completed' ||
         msg.event === 'table_status_changed' ||
         msg.event === 'table_grid_updated'
       ) {
@@ -872,7 +937,11 @@ function connectWebSocket() {
   ws.onerror = () => {};
 }
 
-if (window.auth && window.auth.getToken()) {
+if (
+  window.auth &&
+  window.auth.getToken() &&
+  ['waiter', 'admin'].includes(String(window.auth.getUser?.()?.role || '').toLowerCase())
+) {
   (async function init() {
     bindSubmitOrder();
     bindModifierModal();

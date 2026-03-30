@@ -64,12 +64,17 @@
         if (!data || !data.access_token || !data.user) return;
         if (window.auth) window.auth.setAuth(data.access_token, data.user);
         const role = data.user.role;
+        if (!["admin", "waiter", "cashier"].includes(role)) {
+          if (window.toast && window.toast.error) {
+            window.toast.error("This account role is not allowed to log in here.");
+          }
+          if (window.auth) window.auth.clearAuth();
+          return;
+        }
         const page =
           role === "waiter"
             ? "/waiter"
-            : role === "kitchen"
-              ? "/kitchen"
-              : role === "cashier"
+            : role === "cashier"
                 ? "/counter"
                 : "/counter";
         window.location.href = page;
@@ -99,12 +104,14 @@
   // Already logged in → redirect by role
   if (window.auth && window.auth.getToken() && window.auth.getUser()) {
     const user = window.auth.getUser();
+    if (!["admin", "waiter", "cashier"].includes(user.role)) {
+      window.auth.clearAuth();
+      return;
+    }
     const page =
       user.role === "waiter"
         ? "/waiter"
-        : user.role === "kitchen"
-          ? "/kitchen"
-          : user.role === "cashier"
+        : user.role === "cashier"
             ? "/counter"
             : "/counter";
     window.location.href = page;

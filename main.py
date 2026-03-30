@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, UploadFile, WebSocket
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from auth import hash_password, require_roles
@@ -54,6 +54,12 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE menu_items ADD COLUMN discount_price FLOAT"))
+    except Exception:
+        pass
     # Add batch_number to existing order_items if missing (SQLite dev migration).
     try:
         from sqlalchemy import text
@@ -67,7 +73,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         # Column may already exist; ignore migration errors.
         pass
-    # Add batch_status to order_items for per-batch completion tracking.
+    # Legacy compatibility: some databases still require batch_status on insert.
     try:
         from sqlalchemy import text
         with engine.begin() as conn:
@@ -78,7 +84,6 @@ async def lifespan(app: FastAPI):
                 )
             )
     except Exception:
-        # Column may already exist; ignore migration errors.
         pass
     # Add created_by_id to order_items (who created this batch/ticket)
     try:
@@ -128,6 +133,31 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         pass
+    # Add note column for per-item special instructions.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN note VARCHAR(1024)"
+                )
+            )
+    except Exception:
+        pass
+    # Backfill note from legacy special_instructions when available.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE order_items "
+                    "SET note = special_instructions "
+                    "WHERE note IS NULL AND special_instructions IS NOT NULL"
+                )
+            )
+    except Exception:
+        pass
     # Add payment fields to orders for cashier checkout.
     try:
         from sqlalchemy import text
@@ -152,6 +182,18 @@ async def lifespan(app: FastAPI):
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE orders ADD COLUMN change_amount FLOAT"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN discount_type VARCHAR(32)"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN discount_value FLOAT"))
     except Exception:
         pass
     # One active order per table: at most one row per table_number with status open/dining
@@ -327,10 +369,10 @@ def waiter_page():
     return FileResponse(static_dir / "waiter.html")
 
 
-@app.get("/kitchen")
-def kitchen_page():
-    """Serve the Kitchen Display System UI."""
-    return FileResponse(static_dir / "kitchen.html")
+@app.get("/")
+def root_page():
+    """Start app at the login page."""
+    return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/counter")

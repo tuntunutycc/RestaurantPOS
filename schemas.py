@@ -193,6 +193,7 @@ class MenuItemCreate(BaseModel):
 
     name: str
     price: float
+    discount_price: float | None = None
     category_id: int
     description: str | None = None
     image_url: str | None = None
@@ -208,6 +209,7 @@ class MenuItemResponse(BaseModel):
     id: int
     name: str
     price: float
+    discount_price: float | None = None
     category_id: int
     description: str | None = None
     image_url: str | None = None
@@ -226,6 +228,7 @@ class MenuItemUpdate(BaseModel):
 
     name: str | None = None
     price: float | None = None
+    discount_price: float | None = None
     category_id: int | None = None
     description: str | None = None
     image_url: str | None = None
@@ -239,7 +242,22 @@ class OrderItemCreate(BaseModel):
     menu_item_id: int
     quantity: int
     selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
+    note: str | None = None
     special_instructions: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def support_note_alias(cls, data):
+        if isinstance(data, dict):
+            note = data.get("note")
+            special = data.get("special_instructions")
+            if note is None and special is not None:
+                data = dict(data)
+                data["note"] = special
+            elif note is not None and special is None:
+                data = dict(data)
+                data["special_instructions"] = note
+        return data
 
 
 class OrderCreate(BaseModel):
@@ -273,12 +291,12 @@ class OrderItemDetail(BaseModel):
     quantity: int
     subtotal: float
     batch_number: int = 1
-    batch_status: str | None = None
     item_status: OrderItemStatusLiteral | None = None
     menu_item_image_url: str | None = None
     # For Kitchen tickets: who created this specific batch (ticket)
     waiter_name: str | None = None
     selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
+    note: str | None = None
     special_instructions: str | None = None
 
 
@@ -291,7 +309,14 @@ class OrderItemDetailsResponse(BaseModel):
     item_status: OrderItemStatusLiteral
     waiter_name: str | None = None
     selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
+    note: str | None = None
     special_instructions: str | None = None
+
+
+class OrderItemRead(OrderItemDetailsResponse):
+    """Read schema for order item including note."""
+
+    pass
 
 
 class OrderDetailsResponse(BaseModel):
@@ -299,6 +324,8 @@ class OrderDetailsResponse(BaseModel):
     table_id: int | None = None
     status: str
     total_amount: float
+    discount_type: str | None = None
+    discount_value: float | None = 0.0
     created_at: datetime
     items: List[OrderItemDetailsResponse]
 
@@ -321,6 +348,8 @@ class OrderResponseDetail(BaseModel):
     payment_method: str | None = None
     amount_tendered: float | None = None
     change_amount: float | None = None
+    discount_type: str | None = None
+    discount_value: float | None = 0.0
 
     @model_validator(mode="wrap")
     @classmethod
@@ -345,11 +374,11 @@ class OrderResponseDetail(BaseModel):
                     quantity=oi.quantity,
                     subtotal=float(oi.subtotal),
                     batch_number=getattr(oi, "batch_number", 1),
-                    batch_status=getattr(oi, "batch_status", "pending"),
                     item_status=getattr(oi, "item_status", getattr(oi, "status", "pending")),
                     menu_item_image_url=getattr(oi.menu_item, "image_url", None),
                     waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
                     selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
+                    note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
                     special_instructions=getattr(oi, "special_instructions", None),
                 )
                 for oi in order.order_items
@@ -366,5 +395,22 @@ class OrderResponseDetail(BaseModel):
                 payment_method=getattr(order, "payment_method", None),
                 amount_tendered=getattr(order, "amount_tendered", None),
                 change_amount=getattr(order, "change_amount", None),
+                discount_type=getattr(order, "discount_type", None),
+                discount_value=getattr(order, "discount_value", 0.0),
             )
         return handler(data)
+
+
+class OrderRead(OrderResponseDetail):
+    """Compatibility read schema for full order payload."""
+
+    pass
+
+
+class OrderCheckoutRequest(BaseModel):
+    """Request body for cashier checkout with optional order-level discount."""
+
+    payment_method: str  # 'cash', 'mobile_money', etc.
+    amount_tendered: float
+    discount_type: Literal["percentage", "amount"] | None = None
+    discount_value: float | None = 0.0

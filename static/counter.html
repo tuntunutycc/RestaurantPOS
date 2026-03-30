@@ -51,9 +51,34 @@
               Served by: <span id="receipt-served-by" class="font-medium text-slate-800">—</span>
             </p>
             <div id="receipt-content"></div>
+            <p class="text-sm text-slate-700 border-t border-slate-200 pt-2 mt-2">
+              Subtotal: <span id="receipt-subtotal" class="font-semibold">$0.00</span>
+            </p>
+            <p class="text-sm text-slate-700">
+              Discount: <span id="receipt-discount-amount" class="font-semibold">$0.00</span>
+            </p>
             <p id="receipt-grand-total" class="text-lg font-semibold text-slate-800 border-t border-slate-200 pt-2 mt-2"></p>
 
             <div class="mt-4 space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Discount Type</label>
+                <select id="checkout-discount-type" class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                  <option value="none">None</option>
+                  <option value="percentage">Percentage (%)</option>
+                  <option value="amount">Fixed Amount (Ks)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Discount Value</label>
+                <input
+                  type="number"
+                  id="checkout-discount-value"
+                  min="0"
+                  step="0.01"
+                  disabled
+                  class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                />
+              </div>
               <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
                 <select id="payment-method" class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
@@ -101,11 +126,14 @@
           </form>
         </section>
         <section class="bg-white rounded-lg shadow p-6">
-          <h2 class="text-lg font-semibold text-slate-700 mb-4">Add Menu Item</h2>
+          <h2 id="menu-form-title" class="text-lg font-semibold text-slate-700 mb-4">Add Menu Item</h2>
           <form id="form-menu-item" class="space-y-3">
+            <input type="hidden" id="menu-edit-item-id" value="" />
             <input type="text" id="item-name" name="name" placeholder="Item name" required
               class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
             <input type="number" id="item-price" name="price" placeholder="Price" step="0.01" min="0" required
+              class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            <input type="number" id="item-discount-price" name="discount_price" placeholder="Discount Price (Optional)" step="0.01" min="0"
               class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
             <textarea id="item-description" name="description" placeholder="Description (optional)" rows="2"
               class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
@@ -123,16 +151,10 @@
                 </label>
               </div>
             </div>
-            <div class="border border-slate-200 rounded-md p-3">
-              <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-semibold text-slate-700">Modifiers (Optional)</h3>
-                <button type="button" id="btn-add-modifier-group" class="text-xs px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700">+ Add Option Group</button>
-              </div>
-              <div id="modifier-groups-builder" class="space-y-3">
-                <p class="text-xs text-slate-500">No modifier groups yet.</p>
-              </div>
+            <div class="flex gap-2">
+              <button type="submit" id="btn-submit-menu-item" class="flex-1 py-2 bg-emerald-600 text-white font-medium rounded-md hover:bg-emerald-700">Add Menu Item</button>
+              <button type="button" id="btn-cancel-menu-edit" class="hidden px-4 py-2 bg-slate-200 text-slate-800 font-medium rounded-md hover:bg-slate-300">Cancel</button>
             </div>
-            <button type="submit" id="btn-submit-menu-item" class="w-full py-2 bg-emerald-600 text-white font-medium rounded-md hover:bg-emerald-700">Add Menu Item</button>
           </form>
         </section>
       </div>
@@ -191,7 +213,6 @@
                 class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 <option value="admin">admin</option>
                 <option value="waiter">waiter</option>
-                <option value="kitchen">kitchen</option>
                 <option value="cashier">cashier</option>
               </select>
             </div>

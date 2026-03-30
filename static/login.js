@@ -7,6 +7,10 @@
   // If already logged in, redirect to default page by role
   if (window.auth && window.auth.getToken() && window.auth.getUser()) {
     const user = window.auth.getUser();
+    if (!["admin", "waiter", "cashier"].includes(user.role)) {
+      window.auth.clearAuth();
+      return;
+    }
     const page = window.auth.ROLE_DEFAULT_PAGE[user.role] || "/counter";
     window.location.href = page;
     return;
@@ -56,6 +60,10 @@
 
       if (data.access_token && data.user) {
         window.auth.setAuth(data.access_token, data.user);
+        if (!["admin", "waiter", "cashier"].includes(data.user.role)) {
+          window.auth.clearAuth();
+          return;
+        }
         const page = window.auth.ROLE_DEFAULT_PAGE[data.user.role] || "/counter";
         window.location.href = page;
       } else {

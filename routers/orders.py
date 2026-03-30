@@ -1,5 +1,7 @@
 """Orders API: create and manage orders."""
 
+import asyncio
+import re
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -10,6 +12,7 @@ from auth import get_current_user
 from database import get_db
 from models import MenuItem, Order, OrderItem, Table, User
 from schemas import (
+    OrderCheckoutRequest,
     OrderCreate,
     OrderDetailsResponse,
     OrderItemDetail,
@@ -22,6 +25,45 @@ from schemas import (
 router = APIRouter(prefix="/api")
 
 OPEN_ORDER_STATUSES = ("open", "dining")
+
+
+def _printer_name_for_category(category_name: str | None) -> str:
+    """
+    Resolve a target printer name from menu category.
+    Example: "Hot Drinks" -> "hot_drinks_printer".
+    """
+    cleaned = re.sub(r"[^a-z0-9]+", "_", (category_name or "").strip().lower()).strip("_")
+    return f"{cleaned or 'general'}_printer"
+
+
+async def mock_send_to_printer(printer_name: str, item_ticket: dict) -> None:
+    """
+    Mock printer writer for ONE item ticket.
+    Appends a standalone ticket to <printer_name>_output.txt.
+    """
+    output_path = f"{printer_name}_output.txt"
+    note_value = (item_ticket.get("note") or "").strip()
+    ticket_text = (
+        "=== KITCHEN ITEM TICKET ===\n"
+        f"Printer: {printer_name}\n"
+        f"Date: {item_ticket.get('date', '')}\n"
+        f"Order ID: {item_ticket.get('order_id', '')}\n"
+        f"Table: {item_ticket.get('table_number', '')}\n"
+        f"Item: {item_ticket.get('item_name', '')}\n"
+        f"Qty: {item_ticket.get('quantity', 1)}\n"
+        + (f"Note: {note_value}\n" if note_value else "")
+        + "[ --- CUT TICKET --- ]\n"
+    )
+    await asyncio.to_thread(
+        _append_text_file,
+        output_path,
+        ticket_text,
+    )
+
+
+def _append_text_file(path: str, text: str) -> None:
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(text)
 
 
 def _table_number_from_table(table: Table) -> int:
@@ -51,6 +93,19 @@ def _selected_modifiers_total(selected_modifiers: list[dict]) -> float:
         except Exception:
             continue
     return total
+
+
+def _base_price_with_discount(menu_item: MenuItem) -> float:
+    """
+    Use discount price when it exists and is > 0, otherwise use standard price.
+    """
+    try:
+        discount = float(getattr(menu_item, "discount_price", 0) or 0)
+    except Exception:
+        discount = 0.0
+    if discount > 0:
+        return discount
+    return float(menu_item.price)
 
 
 async def _broadcast_table_status_changed(request: Request, table: Table) -> None:
@@ -107,7 +162,9 @@ async def create_order(
                 raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
             selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
             modifiers_total = _selected_modifiers_total(selected_modifiers)
-            subtotal = (float(menu_item.price) + modifiers_total) * line.quantity
+            base_price = _base_price_with_discount(menu_item)
+            subtotal = (base_price + modifiers_total) * line.quantity
+            note_value = (line.note or line.special_instructions or "").strip() or None
             existing_total += subtotal
             db.add(
                 OrderItem(
@@ -115,9 +172,11 @@ async def create_order(
                     menu_item_id=line.menu_item_id,
                     quantity=line.quantity,
                     subtotal=subtotal,
+                    batch_status="pending",
                     created_by_id=current_user.id,
                     selected_modifiers=selected_modifiers,
-                    special_instructions=line.special_instructions,
+                    note=note_value,
+                    special_instructions=note_value,
                 )
             )
             added_items_detail.append(
@@ -128,7 +187,8 @@ async def create_order(
                     menu_item_image_url=getattr(menu_item, "image_url", None),
                     waiter_name=current_user.username,
                     selected_modifiers=selected_modifiers,
-                    special_instructions=line.special_instructions,
+                    note=note_value,
+                    special_instructions=note_value,
                 )
             )
         existing.total_amount = round(existing_total, 2)
@@ -161,7 +221,9 @@ async def create_order(
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
         selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
         modifiers_total = _selected_modifiers_total(selected_modifiers)
-        subtotal = (float(menu_item.price) + modifiers_total) * line.quantity
+        base_price = _base_price_with_discount(menu_item)
+        subtotal = (base_price + modifiers_total) * line.quantity
+        note_value = (line.note or line.special_instructions or "").strip() or None
         total_amount += subtotal
         order_items_data.append(
             {
@@ -169,7 +231,8 @@ async def create_order(
                 "quantity": line.quantity,
                 "subtotal": subtotal,
                 "selected_modifiers": selected_modifiers,
-                "special_instructions": line.special_instructions,
+                "note": note_value,
+                "special_instructions": note_value,
             }
         )
 
@@ -188,8 +251,10 @@ async def create_order(
                 menu_item_id=item_data["menu_item_id"],
                 quantity=item_data["quantity"],
                 subtotal=item_data["subtotal"],
+                batch_status="pending",
                 created_by_id=current_user.id,
                 selected_modifiers=item_data["selected_modifiers"],
+                note=item_data["note"],
                 special_instructions=item_data["special_instructions"],
             )
         )
@@ -321,12 +386,6 @@ class OrderStatusUpdate(BaseModel):
     status: str
 
 
-class BatchStatusUpdate(BaseModel):
-    """Request body for updating one batch (ticket) status."""
-
-    status: str
-
-
 class OrderItemStatusUpdate(BaseModel):
     """Request body for updating one order item's status."""
 
@@ -341,7 +400,7 @@ async def update_order_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update an order's status (e.g. completed). Broadcasts order_updated via WebSocket for kitchen."""
+    """Update an order's status (e.g. completed). Broadcasts order_updated via WebSocket."""
     order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -352,52 +411,6 @@ async def update_order_status(
     if manager:
         await manager.broadcast("order_updated", {"id": order.id, "status": order.status})
     return {"id": order.id, "status": order.status}
-
-
-@router.put("/orders/{order_id}/batches/{batch_number}/status")
-async def update_order_batch_status(
-    request: Request,
-    order_id: int,
-    batch_number: int,
-    body: BatchStatusUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Update the status of a single batch (ticket) within an order.
-    This ONLY touches OrderItem rows that belong to the given (order_id, batch_number).
-    Other batches for the same order/table are not affected.
-    """
-    items = (
-        db.query(OrderItem)
-        .filter(
-            OrderItem.order_id == order_id,
-            OrderItem.batch_number == batch_number,
-        )
-        .all()
-    )
-    if not items:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No items found for order {order_id} batch {batch_number}",
-        )
-
-    for oi in items:
-        oi.batch_status = body.status
-    db.commit()
-
-    manager = getattr(request.app.state, "ws_manager", None)
-    if manager:
-        await manager.broadcast(
-            "batch_completed",
-            {
-                "order_id": order_id,
-                "batch_number": batch_number,
-                "status": body.status,
-            },
-        )
-
-    return {"order_id": order_id, "batch_number": batch_number, "status": body.status}
 
 
 @router.get("/orders/{order_id}/details", response_model=OrderDetailsResponse)
@@ -428,6 +441,7 @@ def get_order_details(
             item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
             waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
             selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
+            note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
             special_instructions=getattr(oi, "special_instructions", None),
         )
         for oi in order.order_items
@@ -503,6 +517,7 @@ async def update_order_item_status(
         "item_status": getattr(getattr(oi, "item_status", None), "value", oi.item_status),
         "waiter_name": getattr(getattr(oi, "created_by", None), "username", None),
         "selected_modifiers": getattr(oi, "selected_modifiers", []) or [],
+        "note": getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
         "special_instructions": getattr(oi, "special_instructions", None),
     }
 
@@ -520,7 +535,7 @@ async def submit_order(
     - If no open/dining Order for this table: create new Order and add items as batch_number = 1.
     - If open/dining Order exists: append items as a NEW batch (batch_number = max+1).
     - Always updates Order.total_amount.
-    - Emits WebSocket event `new_order_batch` with ONLY the items in this batch, table_number and batch_number.
+    - Emits WebSocket event `new_order_batch` with only the new batch items, table_number and batch_number.
     """
     if not body.items:
         raise HTTPException(status_code=400, detail="Order must have at least one item")
@@ -564,16 +579,24 @@ async def submit_order(
 
     batch_total = 0.0
     batch_items_detail: list[OrderItemDetail] = []
+    item_print_jobs: list[tuple[str, dict]] = []
 
     for line in body.items:
-        menu_item = db.query(MenuItem).filter(MenuItem.id == line.menu_item_id).first()
+        menu_item = (
+            db.query(MenuItem)
+            .options(joinedload(MenuItem.category))
+            .filter(MenuItem.id == line.menu_item_id)
+            .first()
+        )
         if not menu_item:
             raise HTTPException(status_code=404, detail=f"Menu item id {line.menu_item_id} not found")
         if line.quantity < 1:
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
         selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
         modifiers_total = _selected_modifiers_total(selected_modifiers)
-        subtotal = (float(menu_item.price) + modifiers_total) * line.quantity
+        base_price = _base_price_with_discount(menu_item)
+        subtotal = (base_price + modifiers_total) * line.quantity
+        note_value = (line.note or line.special_instructions or "").strip() or None
         batch_total += subtotal
         db.add(
             OrderItem(
@@ -582,10 +605,11 @@ async def submit_order(
                 quantity=line.quantity,
                 subtotal=subtotal,
                 batch_number=new_batch_number,
-                created_by_id=current_user.id,
                 batch_status="pending",
+                created_by_id=current_user.id,
                 selected_modifiers=selected_modifiers,
-                special_instructions=line.special_instructions,
+                note=note_value,
+                special_instructions=note_value,
             )
         )
         batch_items_detail.append(
@@ -596,9 +620,24 @@ async def submit_order(
                 batch_number=new_batch_number,
                 menu_item_image_url=getattr(menu_item, "image_url", None),
                 waiter_name=current_user.username,
-                batch_status="pending",
                 selected_modifiers=selected_modifiers,
-                special_instructions=line.special_instructions,
+                note=note_value,
+                special_instructions=note_value,
+            )
+        )
+        category_name = getattr(getattr(menu_item, "category", None), "name", None)
+        printer_name = _printer_name_for_category(category_name)
+        item_print_jobs.append(
+            (
+                printer_name,
+                {
+                    "item_name": menu_item.name,
+                    "quantity": line.quantity,
+                    "note": note_value,
+                    "table_number": table_number,
+                    "order_id": order.id,
+                    "date": order.created_at.isoformat() if order.created_at else "",
+                },
             )
         )
 
@@ -627,6 +666,16 @@ async def submit_order(
     if previous_status != table.status:
         await _broadcast_table_status_changed(request, table)
 
+    # Print each item as a separate ticket (single-item ticketing).
+    if item_print_jobs:
+        await asyncio.gather(
+            *[
+                mock_send_to_printer(printer_name, item_ticket)
+                for printer_name, item_ticket in item_print_jobs
+            ],
+            return_exceptions=True,
+        )
+
     return OrderSubmitResponse(
         id=order.id,
         table_number=order.table_number,
@@ -640,26 +689,22 @@ async def submit_order(
     )
 
 
-class CheckoutRequest(BaseModel):
-    """Request body for cashier checkout with payment information."""
-
-    payment_method: str  # 'cash', 'mobile_money', etc.
-    amount_tendered: float
-
-
+@router.post("/orders/{order_id}/checkout", response_model=OrderResponseDetail)
 @router.put("/orders/{order_id}/checkout", response_model=OrderResponseDetail)
 async def checkout_order(
     request: Request,
     order_id: int,
-    body: CheckoutRequest,
+    body: OrderCheckoutRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Finalize payment for an order:
-    - Validate amount_tendered >= total_amount
-    - Compute change_amount = amount_tendered - total_amount
-    - Set status = 'paid' and store payment details
+    Finalize payment for an order with optional order-level discount:
+    - Recalculate subtotal from order items
+    - Apply discount_type/discount_value if provided
+    - Ensure final total is never below 0
+    - Validate amount_tendered >= final total
+    - Set status = 'paid' and store payment + discount details
     - Return full receipt for cashier
     """
     order = (
@@ -674,16 +719,35 @@ async def checkout_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    total = float(order.total_amount)
+    subtotal = sum(float(getattr(i, "subtotal", 0.0) or 0.0) for i in (order.order_items or []))
+    normalized_discount_type = (body.discount_type or "").strip().lower() or None
+    discount_value = float(body.discount_value or 0.0)
+    if discount_value < 0:
+        raise HTTPException(status_code=400, detail="discount_value cannot be negative")
+    if normalized_discount_type not in (None, "percentage", "amount"):
+        raise HTTPException(status_code=400, detail="discount_type must be 'percentage' or 'amount'")
+
+    discount_amount = 0.0
+    if normalized_discount_type == "percentage" and discount_value > 0:
+        discount_amount = subtotal * (discount_value / 100.0)
+    elif normalized_discount_type == "amount" and discount_value > 0:
+        discount_amount = discount_value
+
+    final_total = max(subtotal - discount_amount, 0.0)
+    final_total = round(final_total, 2)
+
     tendered = float(body.amount_tendered)
-    if tendered < total:
+    if tendered < final_total:
         raise HTTPException(
             status_code=400,
-            detail=f"Amount tendered ({tendered:.2f}) is less than total ({total:.2f})",
+            detail=f"Amount tendered ({tendered:.2f}) is less than total ({final_total:.2f})",
         )
 
-    change = tendered - total
+    change = tendered - final_total
 
+    order.total_amount = final_total
+    order.discount_type = normalized_discount_type
+    order.discount_value = round(discount_value, 2) if normalized_discount_type else 0.0
     order.payment_method = body.payment_method
     order.amount_tendered = tendered
     order.change_amount = change

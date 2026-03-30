@@ -40,6 +40,7 @@ class MenuItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     price = Column(Float, nullable=False)
+    discount_price = Column(Float, nullable=True, default=None)
     description = Column(String(1024), nullable=True)
     image_url = Column(String(512), nullable=True)  # e.g. /images/menu/xxx.png
     is_available = Column(Boolean, nullable=False, default=True, index=True)
@@ -121,6 +122,8 @@ class Order(Base):
     payment_method = Column(String(32), nullable=True)  # 'cash', 'mobile_money', etc.
     amount_tendered = Column(Float, nullable=True)
     change_amount = Column(Float, nullable=True)
+    discount_type = Column(String(32), nullable=True)  # 'percentage' or 'amount'
+    discount_value = Column(Float, nullable=True, default=0.0)
 
     table = relationship("Table", back_populates="orders")
     order_items = relationship(
@@ -156,8 +159,10 @@ class OrderItem(Base):
     subtotal = Column(Float, nullable=False)
     # Batch of ordering within a dining session (1 = first round, 2 = add-on, etc.)
     batch_number = Column(Integer, nullable=False, default=1, index=True)
-    # Per-batch status (e.g. pending/completed). All rows in a batch share same status.
-    batch_status = Column(String(32), nullable=False, default="pending", index=True)
+    # Legacy compatibility:
+    # Some existing SQLite databases still contain this old NOT NULL column.
+    # Keep writing a default value so inserts do not fail on those databases.
+    batch_status = Column(String(32), nullable=False, default="pending")
     # New canonical attribute: item_status.
     # DB column is still "status" for backward compatibility in existing databases.
     item_status = Column(
@@ -171,6 +176,8 @@ class OrderItem(Base):
     status = synonym("item_status")
     # Selected modifiers for this specific line item (JSON list).
     selected_modifiers = Column(JSON, nullable=False, default=list)
+    # Preferred field for per-item note/special instruction.
+    note = Column(String(1024), nullable=True)
     # Free-text instructions for kitchen (e.g. "No MSG").
     special_instructions = Column(String(1024), nullable=True)
 

@@ -119,8 +119,54 @@ if (window.auth && window.auth.getUser) {
 let selectedOrderId = null;
 let selectedTableNumber = null;
 let selectedOrderTotal = 0;
+let selectedOrderSubtotal = 0;
 let cashierZones = [];
 let cashierActiveZoneId = null;
+let menuItemsCache = [];
+
+function getCheckoutDiscountState() {
+  const typeEl = document.getElementById('checkout-discount-type');
+  const valueEl = document.getElementById('checkout-discount-value');
+  const rawType = (typeEl?.value || 'none').toLowerCase();
+  const normalizedType = rawType === 'percentage' || rawType === 'amount' ? rawType : 'none';
+  const parsedValue = parseFloat(valueEl?.value || '0');
+  const value = Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : 0;
+  return { type: normalizedType, value };
+}
+
+function calculateOrderDiscountAmount(subtotal, discountType, discountValue) {
+  const safeSubtotal = Number.isFinite(subtotal) ? subtotal : 0;
+  const safeValue = Number.isFinite(discountValue) && discountValue > 0 ? discountValue : 0;
+  if (discountType === 'percentage') return safeSubtotal * (safeValue / 100);
+  if (discountType === 'amount') return safeValue;
+  return 0;
+}
+
+function recalculateCheckoutTotals() {
+  const subtotal = Number.isFinite(selectedOrderSubtotal) ? selectedOrderSubtotal : 0;
+  const { type, value } = getCheckoutDiscountState();
+  const discountAmount = calculateOrderDiscountAmount(subtotal, type, value);
+  const finalTotal = Math.max(subtotal - discountAmount, 0);
+
+  const subtotalEl = document.getElementById('receipt-subtotal');
+  const discountEl = document.getElementById('receipt-discount-amount');
+  const grandTotalEl = document.getElementById('receipt-grand-total');
+  if (subtotalEl) subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
+  if (discountEl) discountEl.textContent = `-$${discountAmount.toFixed(2)}`;
+  if (grandTotalEl) grandTotalEl.textContent = `Grand Total: $${finalTotal.toFixed(2)}`;
+
+  selectedOrderTotal = finalTotal;
+
+  const amountInput = document.getElementById('amount-tendered');
+  const changeSpan = document.getElementById('change-amount');
+  const tendered = parseFloat(amountInput?.value || '0');
+  const change = tendered - finalTotal;
+  if (!changeSpan) return finalTotal;
+  if (Number.isNaN(change)) changeSpan.textContent = '$0.00';
+  else if (change >= 0) changeSpan.textContent = `$${change.toFixed(2)}`;
+  else changeSpan.textContent = 'Insufficient';
+  return finalTotal;
+}
 
 async function fetchCashierTableGrid() {
   const res = await fetch(`${API_BASE}/api/tables/grid`, {
@@ -259,7 +305,8 @@ function selectOrder(order) {
   if (!order) return;
   selectedOrderId = order.id;
   selectedTableNumber = order.table_number;
-  selectedOrderTotal = Number(order.total_amount) || 0;
+  selectedOrderSubtotal = (order.items || []).reduce((sum, i) => sum + (Number(i.subtotal) || 0), 0);
+  selectedOrderTotal = selectedOrderSubtotal;
   document.getElementById('receipt-placeholder').classList.add('hidden');
   const container = document.getElementById('receipt-container');
   container.classList.remove('hidden');
@@ -276,16 +323,23 @@ function selectOrder(order) {
       <tbody>${itemsRows}</tbody>
     </table>
   `;
-  document.getElementById('receipt-grand-total').textContent = 'Grand Total: $' + Number(order.total_amount).toFixed(2);
   const servedByEl = document.getElementById('receipt-served-by');
   if (servedByEl) servedByEl.textContent = order.served_by_name || '—';
   // Reset payment inputs for this order
   const amountInput = document.getElementById('amount-tendered');
   const changeSpan = document.getElementById('change-amount');
   const methodSelect = document.getElementById('payment-method');
+  const discountTypeSelect = document.getElementById('checkout-discount-type');
+  const discountValueInput = document.getElementById('checkout-discount-value');
   if (amountInput) amountInput.value = '';
   if (changeSpan) changeSpan.textContent = '$0.00';
   if (methodSelect) methodSelect.value = 'cash';
+  if (discountTypeSelect) discountTypeSelect.value = 'none';
+  if (discountValueInput) {
+    discountValueInput.value = '';
+    discountValueInput.disabled = true;
+  }
+  recalculateCheckoutTotals();
 }
 
 function renderReceiptForPrint(order) {
@@ -331,19 +385,21 @@ function renderReceiptForPrint(order) {
 const amountInputEl = document.getElementById('amount-tendered');
 const changeSpanEl = document.getElementById('change-amount');
 const paymentMethodEl = document.getElementById('payment-method');
+const discountTypeEl = document.getElementById('checkout-discount-type');
+const discountValueEl = document.getElementById('checkout-discount-value');
 
 if (amountInputEl) {
-  amountInputEl.addEventListener('input', () => {
-    const tendered = parseFloat(amountInputEl.value || '0');
-    const change = tendered - selectedOrderTotal;
-    if (Number.isNaN(change)) {
-      changeSpanEl.textContent = '$0.00';
-    } else if (change >= 0) {
-      changeSpanEl.textContent = `$${change.toFixed(2)}`;
-    } else {
-      changeSpanEl.textContent = 'Insufficient';
-    }
+  amountInputEl.addEventListener('input', recalculateCheckoutTotals);
+}
+
+if (discountTypeEl && discountValueEl) {
+  discountTypeEl.addEventListener('change', () => {
+    const hasDiscount = discountTypeEl.value === 'percentage' || discountTypeEl.value === 'amount';
+    discountValueEl.disabled = !hasDiscount;
+    if (!hasDiscount) discountValueEl.value = '';
+    recalculateCheckoutTotals();
   });
+  discountValueEl.addEventListener('input', recalculateCheckoutTotals);
 }
 
 document.getElementById('btn-process-payment').addEventListener('click', async () => {
@@ -352,13 +408,15 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
   const amountInput = document.getElementById('amount-tendered');
   const methodSelect = document.getElementById('payment-method');
   const tendered = parseFloat((amountInput && amountInput.value) || '0');
+  const { type: discountType, value: discountValue } = getCheckoutDiscountState();
+  const currentFinalTotal = recalculateCheckoutTotals();
 
   if (Number.isNaN(tendered) || tendered <= 0) {
     if (window.toast) window.toast.error('Enter a valid amount tendered.');
     else alert('Enter a valid amount tendered.');
     return;
   }
-  if (tendered < selectedOrderTotal) {
+  if (tendered < currentFinalTotal) {
     if (window.toast) window.toast.error('Amount tendered is less than total.');
     else alert('Amount tendered is less than total.');
     return;
@@ -372,7 +430,12 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     const res = await fetch(`${API_BASE}/api/orders/${selectedOrderId}/checkout`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-      body: JSON.stringify({ payment_method: method, amount_tendered: tendered }),
+      body: JSON.stringify({
+        payment_method: method,
+        amount_tendered: tendered,
+        discount_type: discountType === 'none' ? null : discountType,
+        discount_value: discountType === 'none' ? 0 : discountValue,
+      }),
     });
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
@@ -391,6 +454,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     selectedOrderId = null;
     selectedTableNumber = null;
     selectedOrderTotal = 0;
+    selectedOrderSubtotal = 0;
     document.getElementById('receipt-container').classList.add('hidden');
     document.getElementById('receipt-placeholder').classList.remove('hidden');
     // Reload grid from backend after payment.
@@ -921,6 +985,71 @@ async function deleteMenuItem(itemId) {
   return data;
 }
 
+async function updateMenuItem(itemId, payload) {
+  const res = await fetch(`${API_BASE}/api/menu-items/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+    body: JSON.stringify(payload),
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      Array.isArray(data.detail)
+        ? data.detail.map((x) => x.msg || x).join(', ')
+        : (data.detail || 'Failed to update menu item')
+    );
+  }
+  if (window.toast) window.toast.success('Menu item updated.');
+  return data;
+}
+
+function resetMenuItemFormMode() {
+  const form = document.getElementById('form-menu-item');
+  const title = document.getElementById('menu-form-title');
+  const btn = document.getElementById('btn-submit-menu-item');
+  const cancelBtn = document.getElementById('btn-cancel-menu-edit');
+  const editId = document.getElementById('menu-edit-item-id');
+  if (!form || !title || !btn || !cancelBtn || !editId) return;
+  form.removeAttribute('data-mode');
+  title.textContent = 'Add Menu Item';
+  btn.textContent = 'Add Menu Item';
+  btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+  btn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
+  cancelBtn.classList.add('hidden');
+  editId.value = '';
+  const discountInput = document.getElementById('item-discount-price');
+  if (discountInput) discountInput.value = '';
+}
+
+function startMenuItemEdit(itemId) {
+  const item = menuItemsCache.find((m) => Number(m.id) === Number(itemId));
+  if (!item) return;
+  const title = document.getElementById('menu-form-title');
+  const btn = document.getElementById('btn-submit-menu-item');
+  const cancelBtn = document.getElementById('btn-cancel-menu-edit');
+  const editId = document.getElementById('menu-edit-item-id');
+  const form = document.getElementById('form-menu-item');
+  if (!title || !btn || !cancelBtn || !editId || !form) return;
+
+  title.textContent = 'Edit Menu Item';
+  btn.textContent = 'Update Menu Item';
+  btn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700');
+  btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+  cancelBtn.classList.remove('hidden');
+  form.setAttribute('data-mode', 'edit');
+  editId.value = String(item.id);
+
+  document.getElementById('item-name').value = item.name || '';
+  document.getElementById('item-price').value = Number(item.price || 0);
+  document.getElementById('item-discount-price').value = item.discount_price != null ? Number(item.discount_price) : '';
+  document.getElementById('item-description').value = item.description || '';
+  document.getElementById('item-category').value = String(item.category_id || '');
+  document.getElementById('item-image-url').value = item.image_url || '';
+  document.getElementById('item-image-file').value = '';
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function renderCategories(categories) {
   const el = document.getElementById('categories-list');
   if (!categories.length) {
@@ -942,6 +1071,10 @@ function renderMenuItems(items) {
         ? `<img src="${escapeAttr(m.image_url)}" alt="" class="w-10 h-10 object-cover rounded inline-block mr-2 align-middle" />`
         : '';
       const available = m.is_available !== false;
+      const hasDiscount = Number(m.discount_price) > 0;
+      const priceLabel = hasDiscount
+        ? `<span class="truncate">${escapeHtml(m.name)} — <span class="line-through text-slate-400 text-xs">$${Number(m.price).toFixed(2)}</span> <span class="text-rose-600 font-semibold">$${Number(m.discount_price).toFixed(2)}</span></span>`
+        : `<span class="truncate">${escapeHtml(m.name)} — $${Number(m.price).toFixed(2)}</span>`;
       const badge = available
         ? '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Available</span>'
         : '<span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Sold Out</span>';
@@ -953,10 +1086,17 @@ function renderMenuItems(items) {
         <li class="py-2 flex items-center justify-between gap-3">
           <div class="flex items-center gap-2 min-w-0">
             ${img}
-            <span class="truncate">${escapeHtml(m.name)} — $${Number(m.price).toFixed(2)}</span>
+            ${priceLabel}
             ${badge}
           </div>
           <div class="flex items-center gap-2">
+            <button
+              type="button"
+              data-edit-menu-item-id="${m.id}"
+              class="text-xs text-white px-3 py-1 rounded bg-blue-600 hover:bg-blue-700"
+            >
+              Edit
+            </button>
             <button
               type="button"
               data-toggle-availability-id="${m.id}"
@@ -994,6 +1134,14 @@ function renderMenuItems(items) {
     });
   });
 
+  el.querySelectorAll('[data-edit-menu-item-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const itemId = Number(btn.getAttribute('data-edit-menu-item-id'));
+      if (!itemId) return;
+      startMenuItemEdit(itemId);
+    });
+  });
+
   el.querySelectorAll('[data-delete-menu-item-id]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const itemId = Number(btn.getAttribute('data-delete-menu-item-id'));
@@ -1020,110 +1168,6 @@ function escapeAttr(text) {
   return div.innerHTML.replace(/"/g, '&quot;');
 }
 
-function createModifierOptionRow(groupEl, option = {}) {
-  const optionsContainer = groupEl.querySelector('[data-modifier-options-container]');
-  if (!optionsContainer) return;
-  const row = document.createElement('div');
-  row.className = 'grid grid-cols-12 gap-2 items-center';
-  row.innerHTML = `
-    <input
-      type="text"
-      data-modifier-option-name
-      placeholder="Option name (e.g. Duck Egg)"
-      value="${escapeAttr(option.name || '')}"
-      class="col-span-7 px-2 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-    />
-    <input
-      type="number"
-      data-modifier-option-price
-      min="0"
-      step="0.01"
-      value="${Number(option.price || 0)}"
-      class="col-span-4 px-2 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-    />
-    <button type="button" data-remove-modifier-option class="col-span-1 text-xs px-2 py-1.5 rounded bg-rose-100 text-rose-700 hover:bg-rose-200">x</button>
-  `;
-  row.querySelector('[data-remove-modifier-option]')?.addEventListener('click', () => {
-    row.remove();
-    if (!optionsContainer.querySelector('[data-modifier-option-name]')) {
-      createModifierOptionRow(groupEl, { name: '', price: 0 });
-    }
-  });
-  optionsContainer.appendChild(row);
-}
-
-function createModifierGroupBlock(group = {}) {
-  const container = document.getElementById('modifier-groups-builder');
-  if (!container) return;
-  if (container.querySelector('p')) container.innerHTML = '';
-  const groupEl = document.createElement('div');
-  groupEl.className = 'border border-slate-200 rounded-md p-3 space-y-2';
-  groupEl.innerHTML = `
-    <div class="flex items-center justify-between gap-2">
-      <input
-        type="text"
-        data-modifier-group-name
-        placeholder="Group name (e.g. Add-ons, Sweetness)"
-        value="${escapeAttr(group.group || '')}"
-        class="flex-1 px-2 py-1.5 text-sm border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-      />
-      <label class="text-xs text-slate-700 flex items-center gap-1">
-        <input type="checkbox" data-modifier-group-required ${group.is_required ? 'checked' : ''} />
-        Required
-      </label>
-      <button type="button" data-remove-modifier-group class="text-xs px-2 py-1.5 rounded bg-rose-100 text-rose-700 hover:bg-rose-200">Remove</button>
-    </div>
-    <div class="space-y-2" data-modifier-options-container></div>
-    <button type="button" data-add-modifier-option class="text-xs px-2 py-1.5 rounded bg-slate-100 text-slate-700 hover:bg-slate-200">+ Add Option</button>
-  `;
-  groupEl.querySelector('[data-add-modifier-option]')?.addEventListener('click', () => {
-    createModifierOptionRow(groupEl, { name: '', price: 0 });
-  });
-  groupEl.querySelector('[data-remove-modifier-group]')?.addEventListener('click', () => {
-    groupEl.remove();
-    if (!container.querySelector('[data-modifier-group-name]')) {
-      container.innerHTML = '<p class="text-xs text-slate-500">No modifier groups yet.</p>';
-    }
-  });
-  container.appendChild(groupEl);
-
-  const options = Array.isArray(group.options) && group.options.length ? group.options : [{ name: '', price: 0 }];
-  options.forEach((opt) => createModifierOptionRow(groupEl, opt));
-}
-
-function collectModifiersConfigFromBuilder() {
-  const groups = [];
-  document.querySelectorAll('#modifier-groups-builder [data-modifier-group-name]').forEach((input) => {
-    const groupEl = input.closest('.border');
-    if (!groupEl) return;
-    const groupName = (input.value || '').trim();
-    const isRequired = !!groupEl.querySelector('[data-modifier-group-required]')?.checked;
-    const options = [];
-    groupEl.querySelectorAll('[data-modifier-option-name]').forEach((nameInput) => {
-      const row = nameInput.closest('.grid');
-      const optionName = (nameInput.value || '').trim();
-      const priceInput = row?.querySelector('[data-modifier-option-price]');
-      const price = Number(priceInput?.value || 0);
-      if (!optionName) return;
-      options.push({ name: optionName, price: Number.isFinite(price) ? price : 0 });
-    });
-    if (!groupName || !options.length) return;
-    groups.push({ group: groupName, is_required: isRequired, options });
-  });
-  return groups;
-}
-
-function resetModifiersBuilder() {
-  const container = document.getElementById('modifier-groups-builder');
-  if (container) container.innerHTML = '<p class="text-xs text-slate-500">No modifier groups yet.</p>';
-}
-
-function bindModifiersBuilderEvents() {
-  const addGroupBtn = document.getElementById('btn-add-modifier-group');
-  if (!addGroupBtn) return;
-  addGroupBtn.addEventListener('click', () => createModifierGroupBlock());
-}
-
 function populateCategorySelect(categories) {
   const select = document.getElementById('item-category');
   const currentValue = select.value;
@@ -1140,6 +1184,7 @@ function populateCategorySelect(categories) {
 async function loadMenuData() {
   try {
     const [categories, menuItems] = await Promise.all([fetchCategories(), fetchMenuItems()]);
+    menuItemsCache = menuItems || [];
     renderCategories(categories);
     renderMenuItems(menuItems);
     populateCategorySelect(categories);
@@ -1202,14 +1247,19 @@ document.getElementById('item-image-file').addEventListener('change', async (e) 
 
 document.getElementById('form-menu-item').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const form = document.getElementById('form-menu-item');
   const name = document.getElementById('item-name').value.trim();
   const price = parseFloat(document.getElementById('item-price').value);
+  const discountPriceRaw = document.getElementById('item-discount-price').value.trim();
+  const discountPrice = discountPriceRaw === '' ? null : parseFloat(discountPriceRaw);
   const description = document.getElementById('item-description').value.trim() || null;
   const categoryId = document.getElementById('item-category').value;
   const imageUrl = document.getElementById('item-image-url').value.trim() || null;
   const imageFile = document.getElementById('item-image-file').files?.[0];
-  const modifiersConfig = collectModifiersConfigFromBuilder();
+  const editItemId = Number(document.getElementById('menu-edit-item-id').value || 0);
+  const isEditMode = form?.getAttribute('data-mode') === 'edit' && !!editItemId;
   if (!name || isNaN(price) || price < 0 || !categoryId) return;
+  if (discountPrice !== null && (Number.isNaN(discountPrice) || discountPrice < 0)) return;
   if (imageFile && !imageUrl) {
     if (window.toast) window.toast.error('Please wait for image upload to finish.');
     else alert('Please wait for image upload to finish.');
@@ -1218,38 +1268,61 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
   const btn = document.getElementById('btn-submit-menu-item');
   btn.disabled = true;
   try {
-    const res = await fetch(`${API_BASE}/api/menu-items/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-      body: JSON.stringify({
+    if (isEditMode) {
+      await updateMenuItem(editItemId, {
         name,
         price,
+        discount_price: discountPrice,
         category_id: parseInt(categoryId, 10),
         description,
         image_url: imageUrl,
-        modifiers_config: modifiersConfig,
-      }),
-    });
-    if (window.auth && window.auth.checkUnauthorized(res)) return;
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      alert(Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to create menu item'));
-      return;
+      });
+    } else {
+      const res = await fetch(`${API_BASE}/api/menu-items/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+        body: JSON.stringify({
+          name,
+          price,
+          discount_price: discountPrice,
+          category_id: parseInt(categoryId, 10),
+          description,
+          image_url: imageUrl,
+        }),
+      });
+      if (window.auth && window.auth.checkUnauthorized(res)) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to create menu item'));
+        return;
+      }
     }
     document.getElementById('item-name').value = '';
     document.getElementById('item-price').value = '';
+    document.getElementById('item-discount-price').value = '';
     document.getElementById('item-description').value = '';
     document.getElementById('item-image-url').value = '';
     document.getElementById('item-category').value = '';
     document.getElementById('item-image-file').value = '';
-    resetModifiersBuilder();
+    resetMenuItemFormMode();
     await loadMenuData();
   } catch (err) {
     console.error(err);
-    alert('Failed to create menu item');
+    alert(err.message || (isEditMode ? 'Failed to update menu item' : 'Failed to create menu item'));
   } finally {
     btn.disabled = false;
   }
+});
+
+document.getElementById('btn-cancel-menu-edit')?.addEventListener('click', () => {
+  document.getElementById('item-name').value = '';
+  document.getElementById('item-price').value = '';
+  document.getElementById('item-discount-price').value = '';
+  document.getElementById('item-description').value = '';
+  document.getElementById('item-image-url').value = '';
+  document.getElementById('item-category').value = '';
+  document.getElementById('item-image-file').value = '';
+  resetMenuItemFormMode();
 });
 
 // —— Live updates via WebSocket (auto-refresh Cashier list when new batches arrive) ——
@@ -1284,6 +1357,7 @@ function connectCounterWebSocket() {
       }
       if (
         msg.event === 'menu_item_added' ||
+        msg.event === 'menu_item_updated' ||
         msg.event === 'menu_item_availability_toggled' ||
         msg.event === 'menu_item_deleted'
       ) {
@@ -1302,9 +1376,12 @@ function connectCounterWebSocket() {
   ws.onerror = () => {};
 }
 
-// Initial load only when authenticated (avoids 401s if redirecting to login)
-if (window.auth && window.auth.getToken()) {
-  bindModifiersBuilderEvents();
+// Initial load only when authenticated and role-allowed.
+if (
+  window.auth &&
+  window.auth.getToken() &&
+  ['cashier', 'admin'].includes(String(window.auth.getUser?.()?.role || '').toLowerCase())
+) {
   loadUnpaidOrders();
   loadMenuData();
   connectCounterWebSocket();
