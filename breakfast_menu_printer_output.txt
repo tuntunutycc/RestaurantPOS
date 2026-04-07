@@ -1,0 +1,154 @@
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:39:00.715467
+Order ID: 12
+Table: 8
+Item: မုန့်ဟင်းခါး
+Qty: 2
+Note: မုန့်ဟင်းခါးအလွတ်
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:39:00.715467
+Order ID: 12
+Table: 8
+Item: စီလုံတီး
+Qty: 2
+Note: မလိုင်များများ
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:43:12.332326
+Order ID: 13
+Table: 3
+Item: မြီးရှည်
+Qty: 1
+Note: အချိုမှုန့်လျှော့ရန်
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:43:12.332326
+Order ID: 13
+Table: 3
+Item: အီကြာကွေး
+Qty: 2
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:43:12.332326
+Order ID: 13
+Table: 3
+Item: လက်ဖက်ရည်
+Qty: 2
+Note: ပေါ့ဆိမ့်
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:44:21.571166
+Order ID: 14
+Table: 16
+Item: dim sum
+Qty: 5
+Note: အသားပေါင်းအစုံ
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:44:21.571166
+Order ID: 14
+Table: 16
+Item: ဖက်ထုပ်ဆီချက်ခေါက်ဆွဲ
+Qty: 1
+Note: အရွက်များများထည့်ပေး
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:44:21.571166
+Order ID: 14
+Table: 16
+Item: လက်ဖက်ရည်
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T03:44:21.571166
+Order ID: 14
+Table: 16
+Item: စီလုံတီး
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T05:09:26.447912
+Order ID: 15
+Table: 15
+Item: ကြက်သားဆန်ပြုတ်
+Qty: 2
+Note: အချိုမှုန့်မထည့်
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T05:09:26.447912
+Order ID: 15
+Table: 15
+Item: ကြက်ကီးမားပလာတာ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T05:55:06.160570
+Order ID: 16
+Table: 3
+Item: ဖက်ထုပ်ဆီချက်ခေါက်ဆွဲ
+Qty: 2
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-03-31T05:55:06.160570
+Order ID: 16
+Table: 3
+Item: စီလုံတီး
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-04-01T06:53:16.811090
+Order ID: 17
+Table: 9
+Item: မုန့်ဟင်းခါးအစုံ
+Qty: 1
+Note: နံနံပင်မထည့်နဲ့
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-04-01T06:53:16.811090
+Order ID: 17
+Table: 9
+Item: လက်ဖက်ရည်
+Qty: 2
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-04-01T07:10:38.216577
+Order ID: 18
+Table: 8
+Item: ကြက်ကီးမားပလာတာ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-04-01T07:10:38.216577
+Order ID: 18
+Table: 8
+Item: လက်ဖက်ရည်
+Qty: 2
+Note: ပေါ့ဆိမ့်
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Date: 2026-04-01T07:10:38.216577
+Order ID: 18
+Table: 8
+Item: နန်းပြားသုပ်
+Qty: 1
+Note: နံနံပင်မထည့်
+[ --- CUT TICKET --- ]
