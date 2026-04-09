@@ -63,11 +63,17 @@
           <div id="cashier-tables-grid" class="grid grid-cols-3 md:grid-cols-4 gap-2">
             <p class="col-span-full text-slate-500">Loading table grid...</p>
           </div>
+          <div class="mt-5">
+            <h3 class="text-sm font-semibold text-slate-700 mb-2">🛍️ Active Takeaway Orders</h3>
+            <div id="cashier-takeaway-orders" class="space-y-2">
+              <p class="text-slate-500 text-sm">No takeaway orders.</p>
+            </div>
+          </div>
         </div>
         <!-- Receipt: consolidated items + grand total for this table -->
         <div>
           <div id="receipt-container" class="bg-white rounded-lg shadow p-6 hidden">
-            <h2 class="text-lg font-semibold text-slate-700 mb-4">Receipt — Table <span id="receipt-table-number"></span></h2>
+            <h2 id="checkout-header" class="text-lg font-semibold text-slate-700 mb-4">Checkout</h2>
             <p class="text-sm text-slate-600 mb-3">
               Served by: <span id="receipt-served-by" class="font-medium text-slate-800">—</span>
             </p>

@@ -115,6 +115,8 @@ class Order(Base):
     table_id = Column(Integer, ForeignKey("tables.id"), nullable=True, index=True)
     # Legacy field kept only for backward compatibility with existing data/UI.
     table_number = Column(Integer, nullable=True, index=True)
+    order_type = Column(String(32), nullable=False, default="dine_in")
+    customer_name = Column(String(255), nullable=True)
     status = Column(String(50), nullable=False, default="pending")
     total_amount = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

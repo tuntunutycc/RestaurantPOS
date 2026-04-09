@@ -17,16 +17,19 @@ let categories = [];
 let activeCategoryId = null;
 let zones = [];
 let activeZoneId = null;
+let currentView = 'tables'; // 'tables' | 'takeaway'
 let selectedTableId = null;
+let activeOrderContext = null;
+let takeawayOrders = [];
 let refreshTimer = null;
 let tableDetailsOpen = false;
 let tableDetailsOrderId = null;
 let tableDetailsTableName = '';
+let tableDetailsOrderContext = null;
 let modifierModalItem = null;
-
-function getCurrentUser() {
-  return window.auth?.getUser?.() || null;
-}
+let takeawayPromptResolver = null;
+let takeawayOrdersById = new Map();
+let takeawayPollTimer = null;
 
 function tableLabel(table) {
   return table?.name || table?.name_or_number || `#${table?.id ?? ''}`;
@@ -111,6 +114,69 @@ function showSuccess(message) {
   else window.alert(message);
 }
 
+async function showSelectContextAlert() {
+  const title = 'Attention';
+  const message = 'Please select a Table or create a Takeaway order first.';
+  if (window.CustomDialog?.alert) {
+    await window.CustomDialog.alert(title, message);
+    return;
+  }
+  showError(message);
+}
+
+async function ensureActiveOrderContextSelected() {
+  if (activeOrderContext) return true;
+  await showSelectContextAlert();
+  return false;
+}
+
+function updateCartUIContext() {
+  const titleEl = document.getElementById('cart-context-title');
+  const clearBtn = document.getElementById('cart-clear-context');
+  const submitBtn = document.getElementById('submit-order');
+  if (titleEl) {
+    titleEl.textContent = activeOrderContext?.title || 'No Active Order';
+  }
+  if (clearBtn) {
+    clearBtn.disabled = !activeOrderContext && cart.size === 0;
+  }
+  if (submitBtn) {
+    submitBtn.disabled = !activeOrderContext || cart.size === 0;
+  }
+}
+
+function setActiveOrderContext(nextContext) {
+  activeOrderContext = nextContext ? { ...nextContext } : null;
+  if (!activeOrderContext) {
+    selectedTableId = null;
+  } else if (activeOrderContext.type === 'dine_in') {
+    selectedTableId = activeOrderContext.table_id ?? null;
+  } else {
+    selectedTableId = null;
+  }
+  updateCartUIContext();
+}
+
+function focusCartSidebar() {
+  const sidebar = document.getElementById('cart-sidebar');
+  if (sidebar) {
+    sidebar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  const submitBtn = document.getElementById('submit-order');
+  if (submitBtn) submitBtn.focus();
+}
+
+function clearCartAndContext() {
+  closeDetailsSidebar();
+  cart.clear();
+  setActiveOrderContext(null);
+  renderZoneTabs();
+  updateOrderSourceView();
+  renderSelectedTableLabel();
+  renderCart();
+  if (window.toast?.info) window.toast.info('Cart and active context cleared.');
+}
+
 function autoLogoutToPin() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
@@ -149,8 +215,8 @@ async function fetchTablesStatus() {
   return fetchJson(`${API_BASE}/api/tables/status`);
 }
 
-async function fetchActiveOrdersForMyTables() {
-  return fetchJson(`${API_BASE}/api/orders/?status=open&status=dining&status=completed&status=pending`);
+async function fetchActiveTakeawayOrders() {
+  return fetchJson(`${API_BASE}/api/orders/active-takeaways`);
 }
 
 async function fetchActiveOrderByTable(tableId) {
@@ -248,7 +314,8 @@ function renderMenu() {
       </div>`;
   }).join('');
   grid.querySelectorAll('[data-menu-card-id]').forEach((card) => {
-    card.addEventListener('click', () => {
+    card.addEventListener('click', async () => {
+      if (!(await ensureActiveOrderContextSelected())) return;
       const itemId = Number(card.getAttribute('data-menu-card-id'));
       const menuItem = getMenuItemById(itemId);
       if (!menuItem) return;
@@ -256,8 +323,9 @@ function renderMenu() {
     });
   });
   grid.querySelectorAll('.add-to-cart-btn').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
+      if (!(await ensureActiveOrderContextSelected())) return;
       const itemId = Number(btn.dataset.id);
       const menuItem = getMenuItemById(itemId);
       if (!menuItem) return;
@@ -267,24 +335,42 @@ function renderMenu() {
 }
 
 function setActiveZone(zoneId) {
+  currentView = 'tables';
   activeZoneId = zoneId;
   renderZoneTabs();
-  renderTableCards();
+  updateOrderSourceView();
 }
 
 function renderZoneTabs() {
   const container = document.getElementById('zone-tabs');
   if (!container) return;
-  if (!zones.length) {
-    container.innerHTML = '<span class="text-slate-500 text-sm">No zones found</span>';
-    return;
-  }
-  container.innerHTML = zones.map((z) => (
-    `<button type="button" data-zone-id="${z.id}" class="zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${activeZoneId === z.id ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${escapeHtml(z.name)}</button>`
-  )).join('');
+  const zoneButtons = zones.map((z) => (
+    `<button type="button" data-zone-id="${z.id}" class="zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${currentView === 'tables' && activeZoneId === z.id ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${escapeHtml(z.name)}</button>`
+  ));
+  const takeawayButton = `<button type="button" data-zone-view="takeaway" class="zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${currentView === 'takeaway' ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}">🛍️ Takeaway</button>`;
+  container.innerHTML = [...zoneButtons, takeawayButton].join('');
   container.querySelectorAll('.zone-tab').forEach((btn) => {
-    btn.addEventListener('click', () => setActiveZone(Number(btn.dataset.zoneId)));
+    btn.addEventListener('click', () => {
+      const view = btn.getAttribute('data-zone-view');
+      if (view === 'takeaway') {
+        currentView = 'takeaway';
+        renderZoneTabs();
+        updateOrderSourceView();
+        return;
+      }
+      setActiveZone(Number(btn.dataset.zoneId));
+    });
   });
+}
+
+function updateOrderSourceView() {
+  const tableCards = document.getElementById('table-cards');
+  const takeawayView = document.getElementById('takeaway-view');
+  const showTakeaway = currentView === 'takeaway';
+  if (tableCards) tableCards.classList.toggle('hidden', showTakeaway);
+  if (takeawayView) takeawayView.classList.toggle('hidden', !showTakeaway);
+  if (showTakeaway) renderTakeawayOrdersList(takeawayOrders);
+  else renderTableCards();
 }
 
 function getActiveZoneTables() {
@@ -295,13 +381,27 @@ function getActiveZoneTables() {
 function renderSelectedTableLabel() {
   const label = document.getElementById('selected-table-label');
   if (!label) return;
-  const selected = zones.flatMap((z) => z.tables || []).find((t) => t.id === selectedTableId);
+  if (!activeOrderContext) {
+    label.innerHTML = 'Selected: <span class="font-medium">None</span>';
+    return;
+  }
+  if (activeOrderContext.type === 'takeaway') {
+    const customer = String(activeOrderContext.customer_name || '').trim() || 'Guest';
+    label.innerHTML = `Selected: <span class="inline-flex items-center px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">Takeaway - Customer: ${escapeHtml(customer)}</span>`;
+    return;
+  }
+  const selected = zones.flatMap((z) => z.tables || []).find((t) => t.id === activeOrderContext.table_id);
   label.innerHTML = `Selected: <span class="font-medium">${selected ? escapeHtml(tableLabel(selected)) : 'None'}</span>`;
 }
 
 function renderTableCards() {
   const container = document.getElementById('table-cards');
   if (!container) return;
+  if (currentView !== 'tables') {
+    renderSelectedTableLabel();
+    renderCart();
+    return;
+  }
   const tables = getActiveZoneTables();
   if (!tables.length) {
     container.innerHTML = '<p class="col-span-full text-slate-500">No tables in this zone.</p>';
@@ -326,6 +426,7 @@ function renderTableCards() {
       const table = zones.flatMap((z) => z.tables || []).find((t) => t.id === tableId);
       const tableName = tableLabel(table || { id: tableId });
       const isOccupied = String(table?.status || '').toLowerCase() === 'occupied';
+      currentView = 'tables';
       selectedTableId = tableId;
       renderTableCards();
       renderSelectedTableLabel();
@@ -335,11 +436,297 @@ function renderTableCards() {
           console.error(err);
           showError(err.message || 'Failed to load table details');
         });
+      } else {
+        setActiveOrderContext({
+          type: 'dine_in',
+          table_id: tableId,
+          customer_name: null,
+          title: `Table ${tableName}`,
+        });
+        renderSelectedTableLabel();
+        renderCart();
+        focusCartSidebar();
       }
     });
   });
   renderSelectedTableLabel();
   renderCart();
+}
+
+async function openOrderDetails(options) {
+  const {
+    orderId,
+    orderType = 'dine_in',
+    tableId = null,
+    tableName = '',
+    customerName = '',
+    initialOrderData = null,
+  } = options || {};
+  if (!orderId) return;
+  const subtitle = document.getElementById('waiter-table-details-subtitle');
+  const content = document.getElementById('waiter-table-details-content');
+  const normalizedType = String(orderType || 'dine_in').toLowerCase();
+  const customer = String(customerName || '').trim() || 'Walk-in';
+
+  if (subtitle) {
+    subtitle.textContent = normalizedType === 'takeaway'
+      ? `Takeaway Order - Customer: ${customer}`
+      : `Table ${tableName}`;
+  }
+  if (content) content.innerHTML = '<p class="text-slate-500">Loading order details...</p>';
+
+  tableDetailsOrderId = Number(orderId);
+  tableDetailsTableName = normalizedType === 'takeaway' ? `Takeaway ${customer}` : tableName;
+  tableDetailsOrderContext = {
+    type: normalizedType === 'takeaway' ? 'takeaway' : 'dine_in',
+    table_id: normalizedType === 'takeaway' ? null : (tableId ?? initialOrderData?.table_id ?? null),
+    customer_name: normalizedType === 'takeaway' ? customer : null,
+    title: normalizedType === 'takeaway' ? `Takeaway: ${customer}` : `Table ${tableName}`,
+    source_order_id: Number(orderId),
+  };
+  updateOrderDetailsAddMoreButton();
+  openDetailsSidebar();
+
+  if (initialOrderData && Array.isArray(initialOrderData.items)) {
+    renderTableDetailsItems(initialOrderData);
+    return;
+  }
+  const details = await fetchOrderDetails(orderId);
+  if (details) {
+    const detailsType = String(details.order_type || normalizedType).toLowerCase();
+    const detailCustomer = String(details.customer_name || customer).trim() || 'Guest';
+    const detailsTableId = details.table_id ?? tableId ?? null;
+    const detailsTableLabel = detailsType === 'takeaway'
+      ? `Takeaway: ${detailCustomer}`
+      : `Table ${tableNameById(detailsTableId, tableName)}`;
+    tableDetailsOrderContext = {
+      type: detailsType === 'takeaway' ? 'takeaway' : 'dine_in',
+      table_id: detailsType === 'takeaway' ? null : detailsTableId,
+      customer_name: detailsType === 'takeaway' ? detailCustomer : null,
+      title: detailsTableLabel,
+      source_order_id: Number(orderId),
+    };
+    updateOrderDetailsAddMoreButton();
+    renderTableDetailsItems(details);
+  }
+}
+
+function renderTakeawayOrdersList(orders) {
+  const container = document.getElementById('takeaway-orders-list');
+  if (!container) return;
+  const list = Array.isArray(orders) ? orders : [];
+  takeawayOrdersById = new Map(list.map((order) => [Number(order.id), order]));
+
+  Array.from(container.children).forEach((child) => {
+    if (child.tagName === 'P' && !child.hasAttribute('data-takeaway-empty')) {
+      child.remove();
+    }
+  });
+
+  if (!container.dataset.takeawayClickBound) {
+    container.dataset.takeawayClickBound = '1';
+    container.addEventListener('click', (event) => {
+      const newBtn = event.target.closest('[data-new-takeaway-order]');
+      if (newBtn && container.contains(newBtn)) {
+        startTakeawayOrder();
+        return;
+      }
+      const orderBtn = event.target.closest('[data-takeaway-order-id]');
+      if (!orderBtn || !container.contains(orderBtn)) return;
+      const orderId = Number(orderBtn.getAttribute('data-takeaway-order-id'));
+      const order = takeawayOrdersById.get(orderId);
+      if (!order) return;
+      const customer = String(order.customer_name || '').trim() || 'Walk-in';
+      openOrderDetails({
+        orderId: order.id,
+        orderType: 'takeaway',
+        customerName: customer,
+        initialOrderData: order,
+      }).catch((err) => {
+        console.error(err);
+        showError(err.message || 'Failed to load takeaway order details');
+      });
+    });
+  }
+
+  let newCard = container.querySelector('[data-new-takeaway-order]');
+  if (!newCard) {
+    newCard = document.createElement('button');
+    newCard.type = 'button';
+    newCard.setAttribute('data-new-takeaway-order', '1');
+    newCard.className = 'rounded-md p-3 text-left transition border-2 border-dashed border-orange-400 bg-orange-50 hover:bg-orange-100';
+    newCard.innerHTML = `
+      <div class="font-semibold text-orange-800">+ New Takeaway Order</div>
+      <div class="text-xs text-orange-700 mt-1">Create a fresh takeaway cart</div>
+    `;
+    container.appendChild(newCard);
+  } else if (container.firstElementChild !== newCard) {
+    container.prepend(newCard);
+  }
+
+  const existingCards = new Map();
+  container.querySelectorAll('[data-takeaway-order-id]').forEach((el) => {
+    existingCards.set(Number(el.getAttribute('data-takeaway-order-id')), el);
+  });
+
+  const nextIds = new Set();
+  for (const order of list) {
+    const orderId = Number(order.id);
+    if (!orderId) continue;
+    nextIds.add(orderId);
+    const customer = String(order.customer_name || '').trim() || 'Walk-in';
+    const items = Array.isArray(order.items) ? order.items : [];
+    const pending = items.filter((i) => String(i.item_status || '').toLowerCase() !== 'served').length;
+    const served = items.filter((i) => String(i.item_status || '').toLowerCase() === 'served').length;
+    const signature = `${customer}|${toNumber(order.total_amount, 0).toFixed(2)}|${pending}|${served}`;
+    let card = existingCards.get(orderId);
+    if (!card) {
+      card = document.createElement('button');
+      card.type = 'button';
+      card.setAttribute('data-takeaway-order-id', String(orderId));
+      card.className = 'rounded-md p-3 text-left transition border-2 bg-orange-50 border-orange-300 hover:bg-orange-100';
+      container.appendChild(card);
+    }
+    if (card.dataset.signature !== signature) {
+      card.dataset.signature = signature;
+      card.innerHTML = `
+        <div class="font-semibold text-slate-800">Takeaway - ${escapeHtml(customer)}</div>
+        <div class="text-xs text-slate-600 mt-1">Order #${orderId}</div>
+        <div class="text-sm font-medium text-orange-700 mt-1">$${toNumber(order.total_amount, 0).toFixed(2)}</div>
+        <div class="mt-2 flex gap-1 flex-wrap">
+          <span class="text-[11px] px-2 py-0.5 rounded bg-amber-100 text-amber-800">Pending: ${pending}</span>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Served: ${served}</span>
+        </div>
+      `;
+    }
+  }
+
+  for (const [orderId, el] of existingCards.entries()) {
+    if (!nextIds.has(orderId)) {
+      el.remove();
+    }
+  }
+
+  let emptyState = container.querySelector('[data-takeaway-empty]');
+  if (!list.length) {
+    if (!emptyState) {
+      emptyState = document.createElement('p');
+      emptyState.setAttribute('data-takeaway-empty', '1');
+      emptyState.className = 'text-slate-500 text-sm';
+      emptyState.textContent = 'No active takeaway orders.';
+      container.appendChild(emptyState);
+    }
+  } else if (emptyState) {
+    emptyState.remove();
+  }
+}
+
+function setTakeawayContext(customerName = 'Guest') {
+  const normalizedName = String(customerName || '').trim() || 'Guest';
+  setActiveOrderContext({
+    type: 'takeaway',
+    table_id: null,
+    customer_name: normalizedName,
+    title: `Takeaway: ${normalizedName}`,
+  });
+  currentView = 'takeaway';
+  renderZoneTabs();
+  updateOrderSourceView();
+  renderSelectedTableLabel();
+  renderCart();
+  focusCartSidebar();
+  if (window.toast?.info) window.toast.info('Takeaway order mode enabled.');
+}
+
+function openTakeawayModal(initialName = 'Guest') {
+  const backdrop = document.getElementById('takeaway-modal-backdrop');
+  const modal = document.getElementById('takeaway-modal');
+  const input = document.getElementById('takeaway-customer-name');
+  return new Promise((resolve) => {
+    if (!backdrop || !modal || !input) {
+      resolve(String(initialName || 'Guest'));
+      return;
+    }
+    takeawayPromptResolver = resolve;
+    input.value = String(initialName || 'Guest');
+    backdrop.classList.remove('hidden');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+  });
+}
+
+function bindTakeawayModal() {
+  const backdrop = document.getElementById('takeaway-modal-backdrop');
+  const closeBtn = document.getElementById('takeaway-modal-close');
+  const cancelBtn = document.getElementById('takeaway-modal-cancel');
+  const confirmBtn = document.getElementById('takeaway-modal-confirm');
+  const input = document.getElementById('takeaway-customer-name');
+
+  const resolveAndClose = (value) => {
+    if (takeawayPromptResolver) {
+      takeawayPromptResolver(value);
+      takeawayPromptResolver = null;
+    }
+    const modalBackdrop = document.getElementById('takeaway-modal-backdrop');
+    const modalEl = document.getElementById('takeaway-modal');
+    if (modalBackdrop) modalBackdrop.classList.add('hidden');
+    if (modalEl) modalEl.classList.add('hidden');
+  };
+
+  const submit = () => {
+    const name = String(input?.value || '').trim() || 'Guest';
+    resolveAndClose(name);
+  };
+
+  if (backdrop) backdrop.addEventListener('click', () => resolveAndClose(null));
+  if (closeBtn) closeBtn.addEventListener('click', () => resolveAndClose(null));
+  if (cancelBtn) cancelBtn.addEventListener('click', () => resolveAndClose(null));
+  if (confirmBtn) confirmBtn.addEventListener('click', submit);
+  if (input) {
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        submit();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        resolveAndClose(null);
+      }
+    });
+  }
+}
+
+function normalizePromptResult(result) {
+  if (result === null || result === undefined || result === false) return null;
+  if (typeof result === 'string') return result;
+  if (typeof result === 'object') {
+    if ('cancelled' in result && result.cancelled) return null;
+    if ('confirmed' in result && result.confirmed === false) return null;
+    if (typeof result.value === 'string') return result.value;
+    if (typeof result.text === 'string') return result.text;
+  }
+  return String(result);
+}
+
+async function startTakeawayOrder() {
+  const defaultName = activeOrderContext?.type === 'takeaway'
+    ? (activeOrderContext.customer_name || 'Guest')
+    : 'Guest';
+  let name = null;
+  if (window.CustomDialog?.prompt) {
+    const result = await window.CustomDialog.prompt(
+      'New Takeaway',
+      'Enter Customer Name (Optional):',
+      'Guest',
+    );
+    name = normalizePromptResult(result);
+  } else {
+    name = await openTakeawayModal(defaultName);
+  }
+  if (name === null) return;
+  setTakeawayContext(name);
 }
 
 function addToCart(menuItem, selectedModifiers = [], specialInstructions = '') {
@@ -388,12 +775,12 @@ function updateCartQuantity(lineKey, delta) {
 function renderCart() {
   const list = document.getElementById('cart-list');
   const totalEl = document.getElementById('cart-total');
-  const submitBtn = document.getElementById('submit-order');
 
   if (cart.size === 0) {
     list.innerHTML = '<li class="text-slate-500">Cart is empty</li>';
     totalEl.textContent = '$0.00';
-    submitBtn.disabled = true;
+    renderSelectedTableLabel();
+    updateCartUIContext();
     return;
   }
 
@@ -436,7 +823,8 @@ function renderCart() {
   list.querySelectorAll('.qty-btn.plus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, 1)));
 
   totalEl.textContent = `$${total.toFixed(2)}`;
-  submitBtn.disabled = !selectedTableId;
+  renderSelectedTableLabel();
+  updateCartUIContext();
 }
 
 function closeModifierModal() {
@@ -611,6 +999,24 @@ function openDetailsSidebar() {
   tableDetailsOpen = true;
 }
 
+function updateOrderDetailsAddMoreButton() {
+  const btn = document.getElementById('waiter-table-details-add-more');
+  if (!btn) return;
+  if (!tableDetailsOrderContext) {
+    btn.disabled = true;
+    btn.classList.add('hidden');
+    return;
+  }
+  const isTakeaway = tableDetailsOrderContext.type === 'takeaway';
+  btn.classList.toggle('hidden', isTakeaway);
+  if (isTakeaway) {
+    btn.disabled = true;
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = 'Add More Items';
+}
+
 function closeDetailsSidebar() {
   const backdrop = document.getElementById('waiter-table-details-backdrop');
   const sidebar = document.getElementById('waiter-table-details-sidebar');
@@ -619,6 +1025,22 @@ function closeDetailsSidebar() {
   tableDetailsOpen = false;
   tableDetailsOrderId = null;
   tableDetailsTableName = '';
+  tableDetailsOrderContext = null;
+  updateOrderDetailsAddMoreButton();
+}
+
+function activateContextFromOrderDetails() {
+  if (!tableDetailsOrderContext) return;
+  if (tableDetailsOrderContext.type === 'takeaway') return;
+  setActiveOrderContext(tableDetailsOrderContext);
+  currentView = activeOrderContext.type === 'takeaway' ? 'takeaway' : 'tables';
+  renderZoneTabs();
+  updateOrderSourceView();
+  renderSelectedTableLabel();
+  renderCart();
+  closeDetailsSidebar();
+  focusCartSidebar();
+  if (window.toast?.success) window.toast.success(`Active context: ${activeOrderContext.title}`);
 }
 
 function renderTableDetailsItems(orderDetails) {
@@ -677,98 +1099,35 @@ function renderTableDetailsItems(orderDetails) {
 }
 
 async function openTableDetailsSidebar(tableId, tableName) {
-  const subtitle = document.getElementById('waiter-table-details-subtitle');
-  const content = document.getElementById('waiter-table-details-content');
-  if (subtitle) subtitle.textContent = `Table ${tableName}`;
-  if (content) content.innerHTML = '<p class="text-slate-500">Loading order details...</p>';
-  openDetailsSidebar();
-
   const activeOrder = await fetchActiveOrderByTable(tableId);
   if (!activeOrder || !activeOrder.id) {
+    const content = document.getElementById('waiter-table-details-content');
     if (content) content.innerHTML = '<p class="text-slate-500">No active order found for this table.</p>';
     return;
   }
-
-  tableDetailsOrderId = activeOrder.id;
-  tableDetailsTableName = tableName;
-  const details = await fetchOrderDetails(activeOrder.id);
-  renderTableDetailsItems(details);
+  await openOrderDetails({
+    orderId: activeOrder.id,
+    orderType: activeOrder.order_type || 'dine_in',
+    tableId,
+    tableName,
+  });
 }
 
-function renderMyTables(orders) {
-  const user = getCurrentUser();
-  const target = document.getElementById('my-tables');
-  if (!target) return;
-  if (!orders?.length || !user?.username) {
-    target.innerHTML = '<p class="text-slate-500">No active tables yet.</p>';
-    return;
-  }
-
-  const myTablesMap = new Map();
-  for (const order of orders) {
-    const mine = (order.items || []).filter((item) => item.waiter_name === user.username);
-    if (!mine.length) continue;
-    const key = String(order.table_id ?? order.table_number ?? order.id);
-    const existing = myTablesMap.get(key) || {
-      tableLabel: `Table ${tableNameById(order.table_id, order.table_number ?? order.id)}`,
-      pending: 0,
-      ready: 0,
-      items: [],
-    };
-    mine.forEach((item) => {
-      const status = normalizeItemStatus(item);
-      if (status === 'Ready') existing.ready += 1;
-      else existing.pending += 1;
-      existing.items.push({
-        name: item.menu_item_name,
-        quantity: item.quantity,
-        status,
-      });
-    });
-    myTablesMap.set(key, existing);
-  }
-
-  const cards = Array.from(myTablesMap.values());
-  if (!cards.length) {
-    target.innerHTML = '<p class="text-slate-500">No active tables yet.</p>';
-    return;
-  }
-
-  target.innerHTML = cards.map((card) => `
-    <div class="border border-slate-200 rounded-md p-3">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="font-semibold text-slate-800">${escapeHtml(card.tableLabel)}</h3>
-        <div class="text-xs">
-          <span class="px-2 py-1 rounded bg-amber-100 text-amber-800 mr-1">Pending: ${card.pending}</span>
-          <span class="px-2 py-1 rounded bg-emerald-100 text-emerald-800">Ready: ${card.ready}</span>
-        </div>
-      </div>
-      <ul class="space-y-1 text-sm">
-        ${card.items.map((item) => `
-          <li class="flex items-center justify-between">
-            <span>${escapeHtml(item.name)} x ${item.quantity}</span>
-            <span class="text-xs px-2 py-0.5 rounded ${item.status === 'Ready' ? 'bg-emerald-500 text-white' : 'bg-amber-500 text-white'}">${item.status}</span>
-          </li>
-        `).join('')}
-      </ul>
-    </div>
-  `).join('');
-}
-
-async function submitOrder(tableId, items) {
+async function submitOrder(payload) {
   return fetchJson(`${API_BASE}/api/orders/submit`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ table_id: tableId, items }),
+    body: JSON.stringify(payload),
   });
 }
 
 function bindSubmitOrder() {
   const submitBtn = document.getElementById('submit-order');
+
   if (!submitBtn) return;
   submitBtn.addEventListener('click', async () => {
-    if (!selectedTableId) {
-      showError('Please select a table first.');
+    if (!activeOrderContext) {
+      showError('Please select a table first, or choose New Takeaway Order.');
       return;
     }
     if (cart.size === 0) {
@@ -784,11 +1143,18 @@ function bindSubmitOrder() {
         special_instructions: special_instructions || null,
       });
     });
+    const payload = {
+      table_id: activeOrderContext.table_id ?? null,
+      order_type: activeOrderContext.type === 'takeaway' ? 'takeaway' : 'dine_in',
+      customer_name: activeOrderContext.customer_name || null,
+      items,
+    };
     submitBtn.disabled = true;
     try {
-      const data = await submitOrder(selectedTableId, items);
+      const data = await submitOrder(payload);
       if (!data) return;
       cart.clear();
+      setActiveOrderContext(null);
       renderCart();
       showSuccess(data.message || 'Order submitted.');
       if (AUTO_LOGOUT_AFTER_SUBMIT) {
@@ -809,36 +1175,64 @@ async function refreshTableStatus() {
   if (!zones.length) {
     activeZoneId = null;
     selectedTableId = null;
+    if (activeOrderContext?.type === 'dine_in') setActiveOrderContext(null);
   } else {
     if (!activeZoneId || !zones.some((z) => z.id === activeZoneId)) activeZoneId = zones[0].id;
     const allTableIds = zones.flatMap((z) => z.tables || []).map((t) => t.id);
     if (selectedTableId && !allTableIds.includes(selectedTableId)) selectedTableId = null;
+    if (
+      activeOrderContext?.type === 'dine_in' &&
+      activeOrderContext.table_id &&
+      !allTableIds.includes(activeOrderContext.table_id)
+    ) {
+      setActiveOrderContext(null);
+    }
   }
   renderZoneTabs();
-  renderTableCards();
+  updateOrderSourceView();
 
   // Optional preselect via /waiter?table_id=123 (used by Table Dashboard redirect).
   const paramTableId = Number(new URLSearchParams(window.location.search).get('table_id') || 0);
   if (paramTableId && zones.flatMap((z) => z.tables || []).some((t) => t.id === paramTableId)) {
+    currentView = 'tables';
     selectedTableId = paramTableId;
+    const paramTable = zones.flatMap((z) => z.tables || []).find((t) => t.id === paramTableId);
+    const paramTableName = tableLabel(paramTable || { id: paramTableId });
+    setActiveOrderContext({
+      type: 'dine_in',
+      table_id: paramTableId,
+      customer_name: null,
+      title: `Table ${paramTableName}`,
+    });
     const selectedZone = zones.find((z) => (z.tables || []).some((t) => t.id === paramTableId));
     if (selectedZone) activeZoneId = selectedZone.id;
     renderZoneTabs();
-    renderTableCards();
+    updateOrderSourceView();
   }
 }
 
-async function refreshMyTables() {
-  const orders = await fetchActiveOrdersForMyTables();
-  if (!orders) return;
-  renderMyTables(orders);
+async function loadTakeawayOrders() {
+  const data = await fetchActiveTakeawayOrders();
+  if (!data) return;
+  takeawayOrders = data;
+  renderTakeawayOrdersList(takeawayOrders);
+}
+
+function startTakeawayPolling() {
+  if (takeawayPollTimer) return;
+  takeawayPollTimer = setInterval(() => {
+    if (currentView !== 'takeaway') return;
+    loadTakeawayOrders().catch((err) => {
+      console.error('Takeaway polling error:', err);
+    });
+  }, 5000);
 }
 
 function queueRefresh() {
   if (refreshTimer) clearTimeout(refreshTimer);
   refreshTimer = setTimeout(async () => {
     try {
-      await Promise.all([refreshTableStatus(), refreshMyTables()]);
+      await Promise.all([refreshTableStatus(), loadTakeawayOrders()]);
     } catch (err) {
       console.error('Refresh error:', err);
     }
@@ -928,6 +1322,17 @@ function connectWebSocket() {
             })
             .catch(() => {});
         }
+        return;
+      }
+      if (
+        msg.event === 'takeaways_updated' ||
+        (msg.event === 'order_completed' && String(msg?.data?.order_type || '').toLowerCase() === 'takeaway')
+      ) {
+        if (currentView === 'takeaway') {
+          loadTakeawayOrders().catch((err) => {
+            console.error('Takeaway live refresh error:', err);
+          });
+        }
       }
     } catch (err) {
       console.error('WebSocket message error:', err);
@@ -945,11 +1350,19 @@ if (
   (async function init() {
     bindSubmitOrder();
     bindModifierModal();
+    bindTakeawayModal();
     const closeBtn = document.getElementById('waiter-table-details-close');
+    const addMoreBtn = document.getElementById('waiter-table-details-add-more');
+    const clearContextBtn = document.getElementById('cart-clear-context');
     const backdrop = document.getElementById('waiter-table-details-backdrop');
     if (closeBtn) closeBtn.addEventListener('click', closeDetailsSidebar);
+    if (addMoreBtn) addMoreBtn.addEventListener('click', activateContextFromOrderDetails);
+    if (clearContextBtn) clearContextBtn.addEventListener('click', clearCartAndContext);
     if (backdrop) backdrop.addEventListener('click', closeDetailsSidebar);
+    updateOrderDetailsAddMoreButton();
+    updateCartUIContext();
     connectWebSocket();
+    startTakeawayPolling();
     try {
       const [items, cats] = await Promise.all([fetchMenuItems(), fetchCategories()]);
       menuItems = items || [];
@@ -957,7 +1370,7 @@ if (
       activeCategoryId = null;
       renderCategoryTabs();
       renderMenu();
-      await Promise.all([refreshTableStatus(), refreshMyTables()]);
+      await Promise.all([refreshTableStatus(), loadTakeawayOrders()]);
     } catch (err) {
       console.error(err);
       document.getElementById('menu-grid').innerHTML = '<p class="col-span-full text-red-600">Error loading waiter screen.</p>';

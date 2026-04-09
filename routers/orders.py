@@ -12,6 +12,7 @@ from auth import get_current_user
 from database import get_db
 from models import MenuItem, Order, OrderItem, Table, User
 from schemas import (
+    ActiveTakeawayOrderResponse,
     OrderCheckoutRequest,
     OrderCreate,
     OrderDetailsResponse,
@@ -36,22 +37,38 @@ def _printer_name_for_category(category_name: str | None) -> str:
     return f"{cleaned or 'general'}_printer"
 
 
-async def mock_send_to_printer(printer_name: str, item_ticket: dict) -> None:
+async def mock_send_to_printer(
+    printer_name: str,
+    item_ticket: dict,
+    order_type: str = "dine_in",
+    customer_name: str | None = None,
+) -> None:
     """
     Mock printer writer for ONE item ticket.
     Appends a standalone ticket to <printer_name>_output.txt.
     """
     output_path = f"{printer_name}_output.txt"
     note_value = (item_ticket.get("note") or "").strip()
+    normalized_order_type = (order_type or "dine_in").strip().lower()
+    customer = (customer_name or "").strip() or "Walk-in"
+    header_block = (
+        "=================================\n"
+        "  [ *** TAKEAWAY / ပါဆယ် *** ]\n"
+        f"  Customer: {customer}\n"
+        "=================================\n"
+        if normalized_order_type == "takeaway"
+        else f"Table: {item_ticket.get('table_number', '')}\n"
+    )
     ticket_text = (
         "=== KITCHEN ITEM TICKET ===\n"
         f"Printer: {printer_name}\n"
-        f"Date: {item_ticket.get('date', '')}\n"
-        f"Order ID: {item_ticket.get('order_id', '')}\n"
-        f"Table: {item_ticket.get('table_number', '')}\n"
-        f"Item: {item_ticket.get('item_name', '')}\n"
-        f"Qty: {item_ticket.get('quantity', 1)}\n"
-        + (f"Note: {note_value}\n" if note_value else "")
+        + header_block
+        + f"Order: #{item_ticket.get('order_id', '')}\n"
+        + f"Time: {item_ticket.get('date', '')}\n"
+        + "---------------------------------\n"
+        + f"{item_ticket.get('quantity', 1)}x {item_ticket.get('item_name', '')}\n"
+        + (f"   *** Note: {note_value} ***\n" if note_value else "")
+        + "---------------------------------\n"
         + "[ --- CUT TICKET --- ]\n"
     )
     await asyncio.to_thread(
@@ -137,18 +154,28 @@ async def create_order(
     if not order_data.items:
         raise HTTPException(status_code=400, detail="Order must have at least one item")
 
-    table = db.query(Table).filter(Table.id == order_data.table_id).first()
-    if not table:
-        raise HTTPException(status_code=404, detail=f"Table id {order_data.table_id} not found")
-    table_number = _table_number_from_table(table)
-    existing = (
-        db.query(Order)
-        .filter(
-            Order.table_id == table.id,
-            Order.status.in_(OPEN_ORDER_STATUSES),
+    normalized_order_type = (order_data.order_type or "dine_in").strip().lower()
+    if normalized_order_type not in ("dine_in", "takeaway"):
+        raise HTTPException(status_code=400, detail="order_type must be 'dine_in' or 'takeaway'")
+
+    table = None
+    table_number = None
+    existing = None
+    if normalized_order_type == "dine_in":
+        if order_data.table_id is None:
+            raise HTTPException(status_code=400, detail="table_id is required for dine_in orders")
+        table = db.query(Table).filter(Table.id == order_data.table_id).first()
+        if not table:
+            raise HTTPException(status_code=404, detail=f"Table id {order_data.table_id} not found")
+        table_number = _table_number_from_table(table)
+        existing = (
+            db.query(Order)
+            .filter(
+                Order.table_id == table.id,
+                Order.status.in_(OPEN_ORDER_STATUSES),
+            )
+            .first()
         )
-        .first()
-    )
 
     if existing is not None:
         # Append to existing order (same as submit add-on)
@@ -192,17 +219,18 @@ async def create_order(
                 )
             )
         existing.total_amount = round(existing_total, 2)
-        previous_status = table.status
-        table.status = "occupied"
+        previous_status = table.status if table else None
+        if table:
+            table.status = "occupied"
         db.commit()
         db.refresh(existing)
         manager = getattr(request.app.state, "ws_manager", None)
         if manager:
             await manager.broadcast(
                 "order_updated",
-                {"table_id": table.id, "added_items": [d.model_dump(mode="json") for d in added_items_detail]},
+                {"table_id": table.id if table else None, "added_items": [d.model_dump(mode="json") for d in added_items_detail]},
             )
-        if previous_status != table.status:
+        if table and previous_status != table.status:
             await _broadcast_table_status_changed(request, table)
         return {
             "id": existing.id,
@@ -237,8 +265,10 @@ async def create_order(
         )
 
     db_order = Order(
-        table_id=table.id,
+        table_id=table.id if table else None,
         table_number=table_number,
+        order_type=normalized_order_type,
+        customer_name=(order_data.customer_name or "").strip() or None,
         status="open",
         total_amount=round(total_amount, 2),
     )
@@ -258,11 +288,12 @@ async def create_order(
                 special_instructions=item_data["special_instructions"],
             )
         )
-    previous_status = table.status
-    table.status = "occupied"
+    previous_status = table.status if table else None
+    if table:
+        table.status = "occupied"
     db.commit()
     db.refresh(db_order)
-    if previous_status != table.status:
+    if table and previous_status != table.status:
         await _broadcast_table_status_changed(request, table)
     full_order = (
         db.query(Order)
@@ -304,6 +335,57 @@ def list_orders(
         q = q.filter(Order.status.in_(status))
     orders = q.all()
     return [OrderResponseDetail.model_validate(o) for o in orders]
+
+
+@router.get("/orders/active-takeaways", response_model=list[ActiveTakeawayOrderResponse])
+def list_active_takeaways(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return all active (unpaid) takeaway orders with their related order items.
+    """
+    orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
+        )
+        .filter(
+            Order.order_type == "takeaway",
+            Order.status != "paid",
+        )
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    payload: list[ActiveTakeawayOrderResponse] = []
+    for order in orders:
+        items = [
+            OrderItemDetailsResponse(
+                id=oi.id,
+                menu_item_id=oi.menu_item_id,
+                menu_item_name=getattr(getattr(oi, "menu_item", None), "name", ""),
+                quantity=oi.quantity,
+                subtotal=float(oi.subtotal),
+                item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
+                waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
+                selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
+                note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
+                special_instructions=getattr(oi, "special_instructions", None),
+            )
+            for oi in (order.order_items or [])
+        ]
+        payload.append(
+            ActiveTakeawayOrderResponse(
+                id=order.id,
+                customer_name=getattr(order, "customer_name", None),
+                total_amount=float(order.total_amount),
+                created_at=order.created_at,
+                items=items,
+            )
+        )
+    return payload
 
 
 # Statuses that mean "this table has an order ready for checkout" (Cashier view)
@@ -449,6 +531,9 @@ def get_order_details(
     return OrderDetailsResponse(
         id=order.id,
         table_id=getattr(order, "table_id", None),
+        table_number=getattr(order, "table_number", None),
+        order_type=getattr(order, "order_type", "dine_in"),
+        customer_name=getattr(order, "customer_name", None),
         status=order.status,
         total_amount=float(order.total_amount),
         created_at=order.created_at,
@@ -530,7 +615,9 @@ async def submit_order(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Table-centric batching submit endpoint.
+    Submit order endpoint supporting:
+    - dine_in (table-centric batching)
+    - takeaway (no table required)
 
     - If no open/dining Order for this table: create new Order and add items as batch_number = 1.
     - If open/dining Order exists: append items as a NEW batch (batch_number = max+1).
@@ -540,27 +627,40 @@ async def submit_order(
     if not body.items:
         raise HTTPException(status_code=400, detail="Order must have at least one item")
 
-    table = db.query(Table).filter(Table.id == body.table_id).first()
-    if not table:
-        raise HTTPException(status_code=404, detail=f"Table id {body.table_id} not found")
-    table_number = _table_number_from_table(table)
-    # Find existing open/dining order (current dining session)
-    order = (
-        db.query(Order)
-        .filter(
-            Order.table_id == table.id,
-            Order.status.in_(OPEN_ORDER_STATUSES),
+    normalized_order_type = (body.order_type or "dine_in").strip().lower()
+    if normalized_order_type not in ("dine_in", "takeaway"):
+        raise HTTPException(status_code=400, detail="order_type must be 'dine_in' or 'takeaway'")
+
+    table = None
+    table_number = None
+    order = None
+
+    if normalized_order_type == "dine_in":
+        if body.table_id is None:
+            raise HTTPException(status_code=400, detail="table_id is required for dine_in orders")
+        table = db.query(Table).filter(Table.id == body.table_id).first()
+        if not table:
+            raise HTTPException(status_code=404, detail=f"Table id {body.table_id} not found")
+        table_number = _table_number_from_table(table)
+        # Find existing open/dining order (current dining session)
+        order = (
+            db.query(Order)
+            .filter(
+                Order.table_id == table.id,
+                Order.status.in_(OPEN_ORDER_STATUSES),
+            )
+            .first()
         )
-        .first()
-    )
 
     is_new_order = order is None
 
     if order is None:
-        # No open order yet: start new dining session, first batch = 1
+        # No open order yet: start a new order, first batch = 1
         order = Order(
-            table_id=table.id,
+            table_id=table.id if table else None,
             table_number=table_number,
+            order_type=normalized_order_type,
+            customer_name=(body.customer_name or "").strip() or None,
             status="open",
             total_amount=0.0,
         )
@@ -634,7 +734,7 @@ async def submit_order(
                     "item_name": menu_item.name,
                     "quantity": line.quantity,
                     "note": note_value,
-                    "table_number": table_number,
+                    "table_number": table_number if table_number is not None else (order.customer_name or "Takeaway"),
                     "order_id": order.id,
                     "date": order.created_at.isoformat() if order.created_at else "",
                 },
@@ -643,8 +743,9 @@ async def submit_order(
 
     # Update order running total and persist
     order.total_amount = float(order.total_amount) + batch_total
-    previous_status = table.status
-    table.status = "occupied"
+    previous_status = table.status if table else None
+    if table:
+        table.status = "occupied"
     db.commit()
     db.refresh(order)
 
@@ -655,7 +756,7 @@ async def submit_order(
             "new_order_batch",
             {
                 "order_id": order.id,
-                "table_id": table.id,
+                "table_id": table.id if table else None,
                 "table_number": table_number,
                 "batch_number": new_batch_number,
                 "is_new_order": is_new_order,
@@ -663,14 +764,19 @@ async def submit_order(
                 "items": [d.model_dump(mode="json") for d in batch_items_detail],
             },
         )
-    if previous_status != table.status:
+    if table and previous_status != table.status:
         await _broadcast_table_status_changed(request, table)
 
     # Print each item as a separate ticket (single-item ticketing).
     if item_print_jobs:
         await asyncio.gather(
             *[
-                mock_send_to_printer(printer_name, item_ticket)
+                mock_send_to_printer(
+                    printer_name,
+                    item_ticket,
+                    order_type=getattr(order, "order_type", "dine_in"),
+                    customer_name=getattr(order, "customer_name", None),
+                )
                 for printer_name, item_ticket in item_print_jobs
             ],
             return_exceptions=True,
@@ -682,9 +788,17 @@ async def submit_order(
         total_amount=order.total_amount,
         is_new_order=is_new_order,
         message=(
-            f"New order created for Table {table.name_or_number}"
-            if is_new_order
-            else f"Items added to Table {table.name_or_number}'s existing order (batch {new_batch_number})"
+            (
+                f"New takeaway order created for {order.customer_name or 'Walk-in'}"
+                if is_new_order
+                else f"Items added to takeaway order for {order.customer_name or 'Walk-in'} (batch {new_batch_number})"
+            )
+            if normalized_order_type == "takeaway"
+            else (
+                f"New order created for Table {table.name_or_number}"
+                if is_new_order
+                else f"Items added to Table {table.name_or_number}'s existing order (batch {new_batch_number})"
+            )
         ),
     )
 
@@ -752,7 +866,8 @@ async def checkout_order(
     order.amount_tendered = tendered
     order.change_amount = change
     order.status = "paid"
-    table = db.query(Table).filter(Table.id == order.table_id).first() if order.table_id else None
+    # For takeaway orders, table_id is NULL, so skip table status update safely.
+    table = db.query(Table).filter(Table.id == order.table_id).first() if order.table_id is not None else None
     previous_status = table.status if table else None
     if table:
         table.status = "available"
@@ -760,4 +875,15 @@ async def checkout_order(
     db.refresh(order)
     if table and previous_status != table.status:
         await _broadcast_table_status_changed(request, table)
+    manager = getattr(request.app.state, "ws_manager", None)
+    if manager:
+        payload = {
+            "order_id": order.id,
+            "order_type": (order.order_type or "dine_in"),
+            "status": order.status,
+            "table_id": order.table_id,
+        }
+        await manager.broadcast("order_completed", payload)
+        if (order.order_type or "").strip().lower() == "takeaway":
+            await manager.broadcast("takeaways_updated", payload)
     return OrderResponseDetail.model_validate(order)

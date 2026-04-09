@@ -4,7 +4,8 @@
  */
 (function () {
   const CONTAINER_ID = 'toast-container';
-  const DURATION_MS = 4000;
+  const DURATION_MS = 500;
+  const FADE_OUT_MS = 100;
 
   function ensureContainer() {
     let el = document.getElementById(CONTAINER_ID);
@@ -32,14 +33,14 @@
     container.appendChild(toast);
     const t = setTimeout(() => {
       toast.style.opacity = '0';
-      toast.style.transition = 'opacity 0.2s';
-      setTimeout(() => toast.remove(), 200);
+      toast.style.transition = `opacity ${FADE_OUT_MS}ms`;
+      setTimeout(() => toast.remove(), FADE_OUT_MS);
     }, DURATION_MS);
     toast.addEventListener('click', () => {
       clearTimeout(t);
       toast.style.opacity = '0';
-      toast.style.transition = 'opacity 0.2s';
-      setTimeout(() => toast.remove(), 200);
+      toast.style.transition = `opacity ${FADE_OUT_MS}ms`;
+      setTimeout(() => toast.remove(), FADE_OUT_MS);
     });
   }
 

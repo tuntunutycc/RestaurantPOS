@@ -196,6 +196,23 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE orders ADD COLUMN discount_value FLOAT"))
     except Exception:
         pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE orders "
+                    "ADD COLUMN order_type VARCHAR(32) NOT NULL DEFAULT 'dine_in'"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN customer_name VARCHAR(255)"))
+    except Exception:
+        pass
     # One active order per table: at most one row per table_number with status open/dining
     try:
         from sqlalchemy import text

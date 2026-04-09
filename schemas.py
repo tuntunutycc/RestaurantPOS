@@ -263,14 +263,18 @@ class OrderItemCreate(BaseModel):
 class OrderCreate(BaseModel):
     """Schema for creating an order."""
 
-    table_id: int
+    table_id: int | None = None
+    order_type: Literal["dine_in", "takeaway"] = "dine_in"
+    customer_name: str | None = None
     items: List[OrderItemCreate]
 
 
 class OrderSubmitRequest(BaseModel):
     """Schema for submit order (create new or add to existing). table_id = table number."""
 
-    table_id: int
+    table_id: int | None = None
+    order_type: Literal["dine_in", "takeaway"] = "dine_in"
+    customer_name: str | None = None
     items: List[OrderItemCreate]
 
 
@@ -278,7 +282,7 @@ class OrderSubmitResponse(BaseModel):
     """Response for order submit: indicates new vs add-on and message for UI."""
 
     id: int
-    table_number: int
+    table_number: int | None = None
     total_amount: float
     is_new_order: bool
     message: str
@@ -322,6 +326,9 @@ class OrderItemRead(OrderItemDetailsResponse):
 class OrderDetailsResponse(BaseModel):
     id: int
     table_id: int | None = None
+    table_number: int | None = None
+    order_type: str = "dine_in"
+    customer_name: str | None = None
     status: str
     total_amount: float
     discount_type: str | None = None
@@ -337,7 +344,9 @@ class OrderResponseDetail(BaseModel):
 
     id: int
     table_id: int | None = None
-    table_number: int
+    table_number: int | None = None
+    order_type: str = "dine_in"
+    customer_name: str | None = None
     status: str
     total_amount: float
     created_at: datetime
@@ -386,7 +395,9 @@ class OrderResponseDetail(BaseModel):
             return cls(
                 id=order.id,
                 table_id=getattr(order, "table_id", None),
-                table_number=order.table_number,
+                table_number=getattr(order, "table_number", None),
+                order_type=getattr(order, "order_type", "dine_in"),
+                customer_name=getattr(order, "customer_name", None),
                 status=order.status,
                 total_amount=float(order.total_amount),
                 created_at=order.created_at,
@@ -422,3 +433,13 @@ class TodaySalesSummaryResponse(BaseModel):
     total_sales: float
     total_orders: int
     average_order_value: float
+
+
+class ActiveTakeawayOrderResponse(BaseModel):
+    """Schema for active takeaway orders list."""
+
+    id: int
+    customer_name: str | None = None
+    total_amount: float
+    created_at: datetime
+    items: List[OrderItemDetailsResponse]

@@ -234,6 +234,15 @@ async function fetchCashierTableGrid() {
   return res.json();
 }
 
+async function fetchActiveTakeawayOrders() {
+  const res = await fetch(`${API_BASE}/api/orders/active-takeaways`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
+  if (!res.ok) throw new Error('Failed to fetch active takeaway orders');
+  return res.json();
+}
+
 async function fetchActiveOrderByTable(tableId) {
   const res = await fetch(`${API_BASE}/api/orders/active-by-table/${tableId}`, {
     headers: { ...window.auth.getAuthHeaders() },
@@ -336,11 +345,67 @@ function renderCashierTablesGrid() {
   });
 }
 
+function renderTakeawayOrders(orders) {
+  const container = document.getElementById('cashier-takeaway-orders');
+  if (!container) return;
+  const takeawayOrders = (orders || [])
+    .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+
+  if (!takeawayOrders.length) {
+    container.innerHTML = '<p class="text-slate-500 text-sm">No active takeaway orders.</p>';
+    return;
+  }
+
+  container.innerHTML = takeawayOrders.map((o) => {
+    const customer = String(o.customer_name || '').trim() || 'Walk-in';
+    const items = Array.isArray(o.items) ? o.items : [];
+    const pending = items.filter((i) => String(i.item_status || '').toLowerCase() !== 'served').length;
+    const served = items.filter((i) => String(i.item_status || '').toLowerCase() === 'served').length;
+    return `
+      <button
+        type="button"
+        data-takeaway-order-id="${o.id}"
+        class="w-full text-left border border-orange-200 rounded-md p-2 bg-orange-50 hover:bg-orange-100"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-sm font-medium text-orange-800">Order #${o.id}</span>
+          <span class="text-xs text-orange-700">Total: $${Number(o.total_amount || 0).toFixed(2)}</span>
+        </div>
+        <div class="text-xs text-orange-700 mt-0.5">Customer: ${escapeHtml(customer)}</div>
+        <div class="mt-1.5 flex gap-1">
+          <span class="text-[11px] px-2 py-0.5 rounded bg-amber-100 text-amber-800">Pending: ${pending}</span>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Served: ${served}</span>
+        </div>
+      </button>
+    `;
+  }).join('');
+
+  container.querySelectorAll('[data-takeaway-order-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const orderId = Number(btn.getAttribute('data-takeaway-order-id'));
+      const order = takeawayOrders.find((o) => Number(o.id) === orderId);
+      if (order) selectOrder(order);
+    });
+  });
+}
+
+async function loadTakeawayOrders() {
+  const takeaway = document.getElementById('cashier-takeaway-orders');
+  if (takeaway) takeaway.innerHTML = '<p class="text-slate-500 text-sm">Loading takeaway orders...</p>';
+  try {
+    const orders = await fetchActiveTakeawayOrders();
+    renderTakeawayOrders(orders || []);
+  } catch (e) {
+    console.error(e);
+    if (takeaway) takeaway.innerHTML = '<p class="text-red-600 text-sm">Error loading takeaway orders.</p>';
+  }
+}
+
 function loadUnpaidOrders() {
   const grid = document.getElementById('cashier-tables-grid');
   if (grid) grid.innerHTML = '<p class="col-span-full text-slate-500">Loading table grid...</p>';
-  fetchCashierTableGrid()
-    .then((zones) => {
+  Promise.all([fetchCashierTableGrid(), fetchActiveTakeawayOrders()])
+    .then(([zones, takeawayOrders]) => {
       cashierZones = zones || [];
       if (cashierZones.length) {
         if (!cashierActiveZoneId || !cashierZones.some((z) => z.id === cashierActiveZoneId)) {
@@ -351,6 +416,7 @@ function loadUnpaidOrders() {
       }
       renderCashierZoneTabs();
       renderCashierTablesGrid();
+      renderTakeawayOrders(takeawayOrders || []);
     })
     .catch((e) => {
       console.error(e);
@@ -367,7 +433,14 @@ function selectOrder(order) {
   document.getElementById('receipt-placeholder').classList.add('hidden');
   const container = document.getElementById('receipt-container');
   container.classList.remove('hidden');
-  document.getElementById('receipt-table-number').textContent = order.table_number;
+  const isTakeaway = String(order.order_type || '').toLowerCase() === 'takeaway';
+  const checkoutHeaderEl = document.getElementById('checkout-header');
+  const customer = String(order.customer_name || '').trim() || 'Walk-in';
+  if (checkoutHeaderEl) {
+    checkoutHeaderEl.textContent = isTakeaway
+      ? `Checkout - Takeaway (Customer: ${customer})`
+      : `Checkout - Table ${order.table_number}`;
+  }
   const itemsRows = (order.items || [])
     .map(
       (i) =>
@@ -410,7 +483,10 @@ function renderReceiptForPrint(order) {
     const rpTendered = document.getElementById('rp-tendered');
     const rpChange = document.getElementById('rp-change');
 
-    if (rpTable) rpTable.textContent = order.table_number ?? '';
+    const isTakeaway = String(order.order_type || '').toLowerCase() === 'takeaway';
+    if (rpTable) rpTable.textContent = isTakeaway
+      ? `TAKEAWAY - ${String(order.customer_name || '').trim() || 'Walk-in'}`
+      : (order.table_number ?? '');
     if (rpServedBy) rpServedBy.textContent = order.served_by_name || '—';
     if (rpDatetime) rpDatetime.textContent = order.created_at ? new Date(order.created_at).toLocaleString() : '';
     if (rpMethod) rpMethod.textContent = order.payment_method || '';
@@ -516,6 +592,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     document.getElementById('receipt-placeholder').classList.remove('hidden');
     // Reload grid from backend after payment.
     loadUnpaidOrders();
+    loadTakeawayOrders();
   } catch (e) {
     console.error(e);
     if (window.toast) window.toast.error('Payment failed');
@@ -1396,8 +1473,9 @@ function connectCounterWebSocket() {
         loadUnpaidOrders();
         // If we are currently viewing this table, refresh the receipt too.
         const data = msg.data;
-        if (selectedOrderId != null && data.order_id === selectedOrderId) {
-          fetchActiveOrderByTable(data.table_id || data.table_number)
+        const tableRef = data.table_id || data.table_number;
+        if (selectedOrderId != null && data.order_id === selectedOrderId && tableRef) {
+          fetchActiveOrderByTable(tableRef)
             .then((order) => selectOrder(order))
             .catch(() => {});
         }
