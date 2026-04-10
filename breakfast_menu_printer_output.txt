@@ -152,3 +152,100 @@ Item: နန်းပြားသုပ်
 Qty: 1
 Note: နံနံပင်မထည့်
 [ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #19
+Time: 2026-04-10T03:28:20.969585
+---------------------------------
+1x လက်ဖက်ရည်
+   *** Note: ပေါ့ဆိမ့် ***
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #19
+Time: 2026-04-10T03:28:20.969585
+---------------------------------
+1x ခေါက်ဆွဲသုပ်
+   *** Note: ကြက်သွန်နီမထည့် ***
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #19
+Time: 2026-04-10T03:28:20.969585
+---------------------------------
+1x ကြက်ကီးမားပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 15
+Order: #20
+Time: 2026-04-10T03:48:23.158785
+---------------------------------
+1x တို့ဟူးသုပ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 15
+Order: #20
+Time: 2026-04-10T03:48:23.158785
+---------------------------------
+1x မြန်မာမုန့်အစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 15
+Order: #20
+Time: 2026-04-10T03:48:23.158785
+---------------------------------
+1x လက်ဖက်ရည်
+   *** Note: ပုံမှန်ဆိမ့် ***
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 15
+Order: #20
+Time: 2026-04-10T03:48:23.158785
+---------------------------------
+1x လက်ဖက်ရည်
+   *** Note: ပေါ့ဆိမ့် ***
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #19
+Time: 2026-04-10T03:28:20.969585
+---------------------------------
+1x တို့ဟူးသုပ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #19
+Time: 2026-04-10T03:28:20.969585
+---------------------------------
+5x dim sum
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 10
+Order: #21
+Time: 2026-04-10T04:05:19.926085
+---------------------------------
+3x dim sum
+---------------------------------
+[ --- CUT TICKET --- ]
+� ***
+---------------------------------
+[ --- CUT TICKET --- ]
