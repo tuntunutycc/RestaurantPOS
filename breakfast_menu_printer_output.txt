@@ -249,3 +249,39 @@ Time: 2026-04-10T04:05:19.926085
 � ***
 ---------------------------------
 [ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #22
+Time: 2026-04-10T04:47:48.122008
+---------------------------------
+1x တို့ဟူးသုပ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #22
+Time: 2026-04-10T04:47:48.122008
+---------------------------------
+1x မြီးရှည်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #22
+Time: 2026-04-10T04:47:48.122008
+---------------------------------
+1x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #22
+Time: 2026-04-10T04:47:48.122008
+---------------------------------
+1x တို့ဟူးကြော်
+---------------------------------
+[ --- CUT TICKET --- ]
