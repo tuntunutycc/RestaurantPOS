@@ -28,6 +28,30 @@ router = APIRouter(prefix="/api")
 OPEN_ORDER_STATUSES = ("open", "dining")
 
 
+def _normalized_item_status_value(item_status) -> str:
+    return str(getattr(item_status, "value", item_status or "pending")).strip().lower()
+
+
+def _recalculate_order_total_excluding_cancelled(order: Order) -> float:
+    subtotal = sum(
+        float(getattr(oi, "subtotal", 0.0) or 0.0)
+        for oi in (order.order_items or [])
+        if _normalized_item_status_value(getattr(oi, "item_status", None)) != "cancelled"
+    )
+    discount_type = (getattr(order, "discount_type", None) or "").strip().lower() or None
+    discount_value = float(getattr(order, "discount_value", 0.0) or 0.0)
+    if discount_value < 0:
+        discount_value = 0.0
+
+    discount_amount = 0.0
+    if discount_type == "percentage" and discount_value > 0:
+        discount_amount = subtotal * (discount_value / 100.0)
+    elif discount_type == "amount" and discount_value > 0:
+        discount_amount = discount_value
+
+    return round(max(subtotal - discount_amount, 0.0), 2)
+
+
 def _printer_name_for_category(category_name: str | None) -> str:
     """
     Resolve a target printer name from menu category.
@@ -541,7 +565,7 @@ def get_order_details(
     )
 
 
-@router.put("/orders/{order_id}/items/{item_id}/status")
+@router.put("/orders/{order_id}/items/{item_id}/status", response_model=OrderResponseDetail)
 async def update_order_item_status(
     request: Request,
     order_id: int,
@@ -550,34 +574,44 @@ async def update_order_item_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    oi = (
-        db.query(OrderItem)
-        .filter(
-            OrderItem.id == item_id,
-            OrderItem.order_id == order_id,
+    order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
+        .filter(Order.id == order_id)
         .first()
     )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    oi = next((item for item in (order.order_items or []) if item.id == item_id), None)
     if not oi:
         raise HTTPException(status_code=404, detail="Order item not found")
 
     normalized_status = (body.status or "").strip().lower()
-    allowed = {"pending", "cooking", "served"}
+    allowed = {"pending", "cooking", "served", "cancelled"}
     if normalized_status not in allowed:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid status '{body.status}'. Allowed: pending, cooking, served",
+            detail=f"Invalid status '{body.status}'. Allowed: pending, cooking, served, cancelled",
         )
 
     oi.item_status = normalized_status
+    order.total_amount = _recalculate_order_total_excluding_cancelled(order)
     db.commit()
-    db.refresh(oi)
-
-    table_id = (
-        db.query(Order.table_id)
+    updated_order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
+        )
         .filter(Order.id == order_id)
-        .scalar()
+        .first()
     )
+    if not updated_order:
+        raise HTTPException(status_code=404, detail="Order not found after update")
 
     manager = getattr(request.app.state, "ws_manager", None)
     if manager:
@@ -587,24 +621,31 @@ async def update_order_item_status(
                 "refresh": True,
                 "order_id": order_id,
                 "item_id": item_id,
-                "table_id": table_id,
-                "item_status": getattr(getattr(oi, "item_status", None), "value", oi.item_status),
+                "table_id": updated_order.table_id,
+                "item_status": _normalized_item_status_value(getattr(oi, "item_status", None)),
+                "total_amount": float(updated_order.total_amount),
             },
         )
+        await manager.broadcast(
+            "order_updated",
+            {
+                "id": updated_order.id,
+                "status": updated_order.status,
+                "total_amount": float(updated_order.total_amount),
+            },
+        )
+        if (updated_order.order_type or "").strip().lower() == "takeaway":
+            await manager.broadcast(
+                "takeaways_updated",
+                {
+                    "order_id": updated_order.id,
+                    "order_type": updated_order.order_type,
+                    "status": updated_order.status,
+                    "total_amount": float(updated_order.total_amount),
+                },
+            )
 
-    return {
-        "id": oi.id,
-        "order_id": oi.order_id,
-        "menu_item_id": oi.menu_item_id,
-        "menu_item_name": getattr(getattr(oi, "menu_item", None), "name", None),
-        "quantity": oi.quantity,
-        "subtotal": float(oi.subtotal),
-        "item_status": getattr(getattr(oi, "item_status", None), "value", oi.item_status),
-        "waiter_name": getattr(getattr(oi, "created_by", None), "username", None),
-        "selected_modifiers": getattr(oi, "selected_modifiers", []) or [],
-        "note": getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
-        "special_instructions": getattr(oi, "special_instructions", None),
-    }
+    return OrderResponseDetail.model_validate(updated_order)
 
 
 @router.post("/orders/submit", response_model=OrderSubmitResponse)

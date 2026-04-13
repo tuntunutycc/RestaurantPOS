@@ -21,12 +21,14 @@ function escapeHtml(text) {
 
 function showError(msg) {
   if (window.toast?.error) window.toast.error(msg);
-  else window.alert(msg);
+  else if (window.CustomDialog?.alert) window.CustomDialog.alert('Error', msg);
+  else console.warn(msg);
 }
 
 function showSuccess(msg) {
   if (window.toast?.success) window.toast.success(msg);
-  else window.alert(msg);
+  else if (window.CustomDialog?.alert) window.CustomDialog.alert('Success', msg);
+  else console.info(msg);
 }
 
 async function fetchJson(url, options = {}) {

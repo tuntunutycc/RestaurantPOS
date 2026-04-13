@@ -45,7 +45,7 @@ class TokenResponse(BaseModel):
 
 StaffRole = Literal["admin", "waiter", "kitchen", "cashier"]
 TableStatusLiteral = Literal["available", "occupied"]
-OrderItemStatusLiteral = Literal["pending", "cooking", "served"]
+OrderItemStatusLiteral = Literal["pending", "cooking", "served", "cancelled"]
 
 
 class UserCreateRequest(BaseModel):
@@ -433,6 +433,56 @@ class TodaySalesSummaryResponse(BaseModel):
     total_sales: float
     total_orders: int
     average_order_value: float
+
+
+class TopSellingItemResponse(BaseModel):
+    """One row for top-selling items chart."""
+
+    item_name: str
+    quantity_sold: int
+
+
+class HourlySalesTrendResponse(BaseModel):
+    """One row for hourly sales trend chart."""
+
+    hour: str
+    total: float
+
+
+class DailySalesPointResponse(BaseModel):
+    """One row for daily sales history chart."""
+
+    date: str
+    total: float
+
+
+class MonthlySalesPointResponse(BaseModel):
+    """One row for monthly sales history chart."""
+
+    month: str
+    total: float
+
+
+class CategorySalesPointResponse(BaseModel):
+    """One row for category sales breakdown chart."""
+
+    category_name: str
+    total_sales: float
+
+
+class CancelledItemCountResponse(BaseModel):
+    """One row for top cancelled items list."""
+
+    item_name: str
+    count: int
+
+
+class CancellationsSummaryResponse(BaseModel):
+    """Summary payload for cancellations analytics."""
+
+    total_cancelled_items: int
+    total_lost_revenue: float
+    top_cancelled_items: List[CancelledItemCountResponse]
 
 
 class ActiveTakeawayOrderResponse(BaseModel):

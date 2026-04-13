@@ -1,0 +1,273 @@
+const translations = {
+  en: {
+    app_waiter_title: "Waiter POS - Take Order",
+    app_counter_title: "Counter / Admin",
+    menu: "Menu",
+    cart: "Cart",
+    no_active_order: "No Active Order",
+    clear_context: "Cancel / Clear Context",
+    cart_empty: "Cart is empty",
+    zone_table_selection: "Zone & Table Selection",
+    loading_menu: "Loading menu...",
+    loading_tables: "Loading tables...",
+    active_takeaway_orders: "Active Takeaway Orders",
+    no_active_takeaway_orders: "No active takeaway orders.",
+    selected: "Selected",
+    none: "None",
+    submit_order: "Submit Order",
+    table_details: "Table Details",
+    add_more_items: "Add More Items",
+    select_occupied_table: "Select an occupied table.",
+    customize_item: "Customize Item",
+    special_instructions: "Special Instructions",
+    add_to_cart: "Add to Cart",
+    new_takeaway_order: "New Takeaway Order",
+    enter_customer_name_optional: "Enter customer name (optional)",
+    customer_name: "Customer Name",
+    start_order: "Start Order",
+    all: "All",
+    info: "Info",
+    confirm_action: "Confirm Action",
+    attention: "Attention",
+    select_context_first: "Please select a Table or create a Takeaway order first.",
+    guest: "Guest",
+    walk_in: "Walk-in",
+    pending: "Pending",
+    served: "Served",
+    ordered: "Ordered",
+    mark_as_served: "Mark as Served",
+    cancel_item: "Cancel Item",
+    cancelled: "Cancelled",
+    waiter: "Waiter",
+    undo: "Undo",
+    loading_order_details: "Loading order details...",
+    no_ordered_items_found: "No ordered items found.",
+    no_active_order_for_table: "No active order found for this table.",
+    order_submitted: "Order submitted.",
+    failed_to_submit_order: "Failed to submit order",
+    dashboard: "Dashboard",
+    cashier_billing: "Cashier / Billing",
+    menu_management: "Menu Management",
+    user_management: "User Management",
+    table_management: "Table Management",
+    table_floor_grid: "Table Floor Grid",
+    tap_occupied_table_hint: "Tap an occupied table to open billing. Available tables are empty.",
+    loading_table_grid: "Loading table grid...",
+    loading_takeaway_orders: "Loading takeaway orders...",
+    error_loading_takeaway_orders: "Error loading takeaway orders.",
+    error_loading_table_grid: "Error loading table grid.",
+    no_tables_in_zone: "No tables in this zone.",
+    no_takeaway_orders: "No takeaway orders.",
+    served_by: "Served by",
+    subtotal: "Subtotal",
+    discount: "Discount",
+    discount_type: "Discount Type",
+    discount_value: "Discount Value",
+    payment_method: "Payment Method",
+    amount_tendered: "Amount Tendered",
+    change: "Change",
+    confirm_payment: "Confirm Payment",
+    select_table_left_hint: "Select a table on the left to view its consolidated order and grand total.",
+    processing: "Processing...",
+    payment_failed: "Payment failed",
+    payment_success: "Payment processed successfully.",
+    table_is_empty: "Table is currently empty",
+    load_failed: "Load Failed",
+    enter_valid_amount_tendered: "Enter a valid amount tendered.",
+    amount_less_than_total: "Amount tendered is less than total.",
+    grand_total: "Grand Total",
+    item: "Item",
+    qty: "Qty",
+    insufficient: "Insufficient",
+    create_new_takeaway_order: "New Takeaway Order",
+    create_fresh_takeaway_cart: "Create a fresh takeaway cart",
+    takeaway_mode_enabled: "Takeaway order mode enabled.",
+    checkout: "Checkout",
+    takeaway: "Takeaway",
+    cancel: "Cancel",
+    confirm: "Confirm",
+    close: "Close",
+    save: "Save",
+    delete: "Delete",
+    edit: "Edit",
+    submit: "Submit",
+    login: "Login",
+    logout: "Logout",
+    table: "Table",
+    order: "Order",
+    orders: "Orders",
+    total: "Total",
+    payment: "Payment",
+    customer: "Customer",
+    search: "Search",
+    loading: "Loading...",
+    success: "Success",
+    error: "Error",
+    unauthorized_message: "You are not allowed to access that page.",
+    no_chart_data_today: "No chart data available for today.",
+  },
+  my: {
+    app_waiter_title: "ဝိတ်တာ POS - အော်ဒါယူမည်",
+    app_counter_title: "ကောင်တာ / အက်မင်",
+    menu: "မီနူး",
+    cart: "လှည်း",
+    no_active_order: "လက်ရှိအော်ဒါမရှိပါ",
+    clear_context: "ပယ်ဖျက် / Context ရှင်းမည်",
+    cart_empty: "လှည်းထဲ ပစ္စည်းမရှိပါ",
+    zone_table_selection: "ဇုန် နှင့် စားပွဲ ရွေးချယ်မှု",
+    loading_menu: "မီနူးဖတ်နေသည်...",
+    loading_tables: "စားပွဲများ ဖတ်နေသည်...",
+    active_takeaway_orders: "လက်ရှိ ပါဆယ်အော်ဒါများ",
+    no_active_takeaway_orders: "လက်ရှိ ပါဆယ်အော်ဒါ မရှိပါ။",
+    selected: "ရွေးထားသည်",
+    none: "မရှိ",
+    submit_order: "အော်ဒါတင်မည်",
+    table_details: "စားပွဲအသေးစိတ်",
+    add_more_items: "ပစ္စည်းထပ်ထည့်မည်",
+    select_occupied_table: "အသုံးပြုနေသော စားပွဲကိုရွေးပါ။",
+    customize_item: "ပစ္စည်းကို ပြင်ဆင်မည်",
+    special_instructions: "ထူးခြားညွှန်ကြားချက်",
+    add_to_cart: "လှည်းထဲ ထည့်မည်",
+    new_takeaway_order: "ပါဆယ်အော်ဒါ အသစ်",
+    enter_customer_name_optional: "ဝယ်သူအမည်ထည့်ပါ (မဖြစ်မနေမဟုတ်)",
+    customer_name: "ဝယ်သူအမည်",
+    start_order: "အော်ဒါစမည်",
+    all: "အားလုံး",
+    info: "အသိပေးချက်",
+    confirm_action: "လုပ်ဆောင်ချက်အတည်ပြုရန်",
+    attention: "သတိပြုရန်",
+    select_context_first: "အရင်ဆုံး စားပွဲတစ်ခုရွေးပါ သို့မဟုတ် ပါဆယ်အော်ဒါဖန်တီးပါ။",
+    guest: "ဧည့်သည်",
+    walk_in: "လမ်းလျှောက်ဝင်",
+    pending: "စောင့်ဆိုင်း",
+    served: "ပို့ပြီး",
+    ordered: "မှာထားသည်",
+    mark_as_served: "ပို့ပြီးဟုမှတ်မည်",
+    cancel_item: "ပစ္စည်းဖျက်မည်",
+    cancelled: "ဖျက်လိုက်သည်",
+    waiter: "ဝိတ်တာ",
+    undo: "နောက်ပြန်",
+    loading_order_details: "အော်ဒါအသေးစိတ် ဖတ်နေသည်...",
+    no_ordered_items_found: "မှာထားသည့်ပစ္စည်း မတွေ့ပါ။",
+    no_active_order_for_table: "ဤစားပွဲအတွက် လက်ရှိအော်ဒါ မတွေ့ပါ။",
+    order_submitted: "အော်ဒါတင်ပြီးပါပြီ။",
+    failed_to_submit_order: "အော်ဒါတင်မရပါ",
+    dashboard: "ဒက်ရှ်ဘုတ်",
+    cashier_billing: "ငွေရှင်း / ဘီလ်",
+    menu_management: "မီနူးစီမံခန့်ခွဲမှု",
+    user_management: "အသုံးပြုသူစီမံခန့်ခွဲမှု",
+    table_management: "စားပွဲစီမံခန့်ခွဲမှု",
+    table_floor_grid: "စားပွဲခင်းကွက်",
+    tap_occupied_table_hint: "အသုံးပြုနေသော စားပွဲကိုနှိပ်ပြီး ငွေရှင်းမည်။ Available ဆိုတာ စားပွဲလွတ် ဖြစ်သည်။",
+    loading_table_grid: "စားပွဲခင်းကွက် ဖတ်နေသည်...",
+    loading_takeaway_orders: "ပါဆယ်အော်ဒါများ ဖတ်နေသည်...",
+    error_loading_takeaway_orders: "ပါဆယ်အော်ဒါများ ဖတ်မရပါ။",
+    error_loading_table_grid: "စားပွဲခင်းကွက် ဖတ်မရပါ။",
+    no_tables_in_zone: "ဤဇုန်တွင် စားပွဲမရှိပါ။",
+    no_takeaway_orders: "ပါဆယ်အော်ဒါ မရှိပါ။",
+    served_by: "ဝန်ဆောင်မှုပေးသူ",
+    subtotal: "စုစုပေါင်းခွဲ",
+    discount: "လျှော့ဈေး",
+    discount_type: "လျှော့ဈေးအမျိုးအစား",
+    discount_value: "လျှော့ဈေးတန်ဖိုး",
+    payment_method: "ငွေပေးချေမှုနည်းလမ်း",
+    amount_tendered: "ပေးချေငွေပမာဏ",
+    change: "ပြန်အမ်းငွေ",
+    confirm_payment: "ငွေပေးချေမှု အတည်ပြုမည်",
+    select_table_left_hint: "ဘယ်ဘက်က စားပွဲကိုရွေးပြီး စုစုပေါင်းအော်ဒါနှင့် ငွေရှင်းချက်ကိုကြည့်ပါ။",
+    processing: "လုပ်ဆောင်နေသည်...",
+    payment_failed: "ငွေပေးချေမှု မအောင်မြင်ပါ",
+    payment_success: "ငွေပေးချေမှု အောင်မြင်ပါသည်။",
+    table_is_empty: "ဤစားပွဲတွင် အော်ဒါမရှိပါ",
+    load_failed: "ဖတ်ယူမှု မအောင်မြင်ပါ",
+    enter_valid_amount_tendered: "မှန်ကန်သော ပေးချေငွေ ထည့်ပါ။",
+    amount_less_than_total: "ပေးချေငွေသည် စုစုပေါင်းထက်နည်းနေပါသည်။",
+    grand_total: "စုစုပေါင်း",
+    item: "ပစ္စည်း",
+    qty: "အရေအတွက်",
+    insufficient: "မလုံလောက်ပါ",
+    create_new_takeaway_order: "ပါဆယ်အော်ဒါ အသစ်",
+    create_fresh_takeaway_cart: "ပါဆယ်လှည်းအသစ် ဖန်တီးမည်",
+    takeaway_mode_enabled: "ပါဆယ်အော်ဒါ မုဒ်ကို ဖွင့်ပြီးပါပြီ။",
+    checkout: "ငွေရှင်းမည်",
+    takeaway: "ပါဆယ်",
+    cancel: "ပယ်ဖျက်မည်",
+    confirm: "အတည်ပြုမည်",
+    close: "ပိတ်မည်",
+    save: "သိမ်းမည်",
+    delete: "ဖျက်မည်",
+    edit: "ပြင်ဆင်မည်",
+    submit: "တင်ပြမည်",
+    login: "ဝင်မည်",
+    logout: "ထွက်မည်",
+    table: "စားပွဲ",
+    order: "အော်ဒါ",
+    orders: "အော်ဒါများ",
+    total: "စုစုပေါင်း",
+    payment: "ငွေပေးချေမှု",
+    customer: "ဝယ်သူ",
+    search: "ရှာဖွေရန်",
+    loading: "ဖတ်ရှုနေသည်...",
+    success: "အောင်မြင်သည်",
+    error: "အမှား",
+    unauthorized_message: "ဤစာမျက်နှာကို သင်ဝင်ရောက်ခွင့်မရှိပါ။",
+    no_chart_data_today: "ယနေ့အတွက် ဇယားဒေတာ မရှိပါ။",
+  },
+};
+
+let currentLang = localStorage.getItem("pos_lang") || "en";
+if (!translations[currentLang]) currentLang = "en";
+
+function getTranslation(key) {
+  if (!key) return "";
+  const langMap = translations[currentLang] || translations.en;
+  return langMap[key] ?? translations.en[key] ?? key;
+}
+
+function updateUILanguage() {
+  const nodes = document.querySelectorAll("[data-i18n]");
+  nodes.forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (!key) return;
+    const text = getTranslation(key);
+    if (el.hasAttribute("data-i18n-html")) el.innerHTML = text;
+    else el.innerText = text;
+  });
+  document.documentElement.setAttribute("lang", currentLang);
+}
+
+function toggleLanguage() {
+  currentLang = currentLang === "en" ? "my" : "en";
+  localStorage.setItem("pos_lang", currentLang);
+  window.currentLang = currentLang;
+  updateUILanguage();
+  return currentLang;
+}
+
+window.i18n = {
+  translations,
+  get currentLang() {
+    return currentLang;
+  },
+  setLanguage(lang) {
+    if (!translations[lang]) return currentLang;
+    currentLang = lang;
+    localStorage.setItem("pos_lang", currentLang);
+    window.currentLang = currentLang;
+    updateUILanguage();
+    return currentLang;
+  },
+  t: getTranslation,
+  updateUILanguage,
+  toggleLanguage,
+};
+
+window.currentLang = currentLang;
+window.updateUILanguage = updateUILanguage;
+window.toggleLanguage = toggleLanguage;
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", updateUILanguage);
+} else {
+  updateUILanguage();
+}

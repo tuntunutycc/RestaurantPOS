@@ -88,6 +88,8 @@
     const user = getUser();
     const name = (user && user.username) || "User";
     const role = (user && user.role) || "";
+    const lang = window.i18n?.currentLang || "en";
+    const langLabel = lang === "my" ? "မြန်မာ" : "EN";
     container.innerHTML =
       '<div class="flex flex-wrap items-center justify-between gap-2 mb-4 p-3 bg-slate-200 rounded-lg">' +
       '<div class="flex items-center gap-3">' +
@@ -98,10 +100,22 @@
       escapeHtml(role) +
       ")</span>" +
       "</div>" +
-      '<button type="button" id="pos-logout-btn" class="px-3 py-1.5 bg-slate-600 text-white text-sm font-medium rounded hover:bg-slate-700">Logout</button>' +
+      '<div class="flex items-center gap-2">' +
+      `<button type="button" id="pos-lang-toggle-btn" class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">` +
+      `${escapeHtml(langLabel)} / မြန်မာ</button>` +
+      '<button type="button" id="pos-logout-btn" data-i18n="logout" class="px-3 py-1.5 bg-slate-600 text-white text-sm font-medium rounded hover:bg-slate-700">Logout</button>' +
+      "</div>" +
       "</div>";
     const btn = document.getElementById("pos-logout-btn");
     if (btn) btn.addEventListener("click", clearAuth);
+    const langBtn = document.getElementById("pos-lang-toggle-btn");
+    if (langBtn && window.toggleLanguage) {
+      langBtn.addEventListener("click", () => {
+        const next = window.toggleLanguage();
+        langBtn.textContent = `${next === "my" ? "မြန်မာ" : "EN"} / မြန်မာ`;
+      });
+    }
+    if (window.updateUILanguage) window.updateUILanguage();
   }
 
   function escapeHtml(s) {
@@ -114,10 +128,13 @@
   function consumeUnauthorizedFlag() {
     if (localStorage.getItem(UNAUTHORIZED_FLAG)) {
       localStorage.removeItem(UNAUTHORIZED_FLAG);
+      const msg = window.i18n?.t?.("unauthorized_message") || "You are not allowed to access that page.";
       if (window.toast && window.toast.error) {
-        window.toast.error("You are not allowed to access that page.");
+        window.toast.error(msg);
+      } else if (window.CustomDialog?.alert) {
+        window.CustomDialog.alert(window.i18n?.t?.("error") || "Error", msg);
       } else {
-        alert("You are not allowed to access that page.");
+        console.warn(msg);
       }
     }
   }

@@ -20,6 +20,7 @@ const panelMenu = document.getElementById('panel-menu');
 const panelUsers = document.getElementById('panel-users');
 const panelTables = document.getElementById('panel-tables');
 let hasInitializedDefaultPanel = false;
+let activeDashboardTab = 'overview';
 
 function showPanel(panel) {
   if (!panel) return;
@@ -67,11 +68,68 @@ function showPanel(panel) {
   }
 }
 
+function applyDashboardTabState(nextTab) {
+  activeDashboardTab = nextTab;
+  const buttons = document.querySelectorAll('[data-dashboard-tab-btn]');
+  const sections = document.querySelectorAll('[data-dashboard-tab-content]');
+  buttons.forEach((btn) => {
+    const key = btn.getAttribute('data-dashboard-tab-btn');
+    const isActive = key === nextTab;
+    btn.classList.toggle('border-blue-600', isActive);
+    btn.classList.toggle('text-blue-700', isActive);
+    btn.classList.toggle('font-semibold', isActive);
+    btn.classList.toggle('border-transparent', !isActive);
+    btn.classList.toggle('text-slate-500', !isActive);
+    btn.classList.toggle('font-medium', !isActive);
+  });
+  sections.forEach((section) => {
+    const key = section.getAttribute('data-dashboard-tab-content');
+    section.classList.toggle('hidden', key !== nextTab);
+  });
+  if (nextTab === 'overview') {
+    Promise.allSettled([loadTopItemsChart(), loadHourlyTrendChart()]).then((results) => {
+      if (results.some((r) => r.status === 'rejected')) {
+        console.error('Dashboard chart loading failed:', results);
+      }
+    });
+  }
+  if (nextTab === 'history' && !hasLoadedSalesHistoryTab) {
+    const filterBtn = document.getElementById('btn-filter-history');
+    if (filterBtn) filterBtn.click();
+    hasLoadedSalesHistoryTab = true;
+  }
+  if (nextTab === 'insights' && !hasLoadedInsightsTab) {
+    Promise.allSettled([loadCategorySalesChart(), loadCancellationsReport()]).then((results) => {
+      if (results.some((r) => r.status === 'rejected')) {
+        console.error('Insights loading failed:', results);
+      }
+    });
+    hasLoadedInsightsTab = true;
+  }
+}
+
+function bindDashboardSubTabs() {
+  const buttons = document.querySelectorAll('[data-dashboard-tab-btn]');
+  if (!buttons.length) return;
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-dashboard-tab-btn') || 'overview';
+      applyDashboardTabState(key);
+    });
+  });
+  applyDashboardTabState('overview');
+}
+
 if (tabDashboard && panelDashboard) tabDashboard.addEventListener('click', () => showPanel(panelDashboard));
 tabCashier.addEventListener('click', () => showPanel(panelCashier));
 tabMenu.addEventListener('click', () => showPanel(panelMenu));
 if (tabUsers && panelUsers) tabUsers.addEventListener('click', () => showPanel(panelUsers));
 if (tabTables && panelTables) tabTables.addEventListener('click', () => showPanel(panelTables));
+window.addEventListener('DOMContentLoaded', () => {
+  setSalesHistoryDefaultDates();
+  bindSalesHistoryFilters();
+  bindDashboardSubTabs();
+});
 
 // Fallback delegated tab handler (handles dynamic/edge cases where direct listeners fail).
 document.addEventListener('click', (e) => {
@@ -143,11 +201,364 @@ let selectedOrderSubtotal = 0;
 let cashierZones = [];
 let cashierActiveZoneId = null;
 let menuItemsCache = [];
+let hourlyChart = null;
+let topItemsChart = null;
+let dailySalesChart = null;
+let monthlySalesChart = null;
+let hasLoadedSalesHistoryTab = false;
+let categoryChart = null;
+let cancelledItemsChart = null;
+let hasLoadedInsightsTab = false;
+
+function t(key, fallback) {
+  return window.i18n?.t?.(key) || fallback || key;
+}
 
 function formatCurrencyKs(value) {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;
   return `${safe.toLocaleString('en-US', { maximumFractionDigits: 2 })} Ks`;
+}
+
+function destroyDashboardCharts() {
+  if (topItemsChart) {
+    topItemsChart.destroy();
+    topItemsChart = null;
+  }
+  if (hourlyChart) {
+    hourlyChart.destroy();
+    hourlyChart = null;
+  }
+}
+
+function setChartEmptyState(canvasId, emptyId, isEmpty) {
+  const canvas = document.getElementById(canvasId);
+  const emptyEl = document.getElementById(emptyId);
+  if (canvas) canvas.classList.toggle('hidden', isEmpty);
+  if (emptyEl) emptyEl.classList.toggle('hidden', !isEmpty);
+}
+
+function formatDateInputValue(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function setSalesHistoryDefaultDates() {
+  const startInput = document.getElementById('filter-start-date');
+  const endInput = document.getElementById('filter-end-date');
+  if (!startInput || !endInput) return;
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - 29);
+  endInput.value = formatDateInputValue(today);
+  startInput.value = formatDateInputValue(start);
+}
+
+async function loadDailySalesChart(startDate, endDate) {
+  const canvas = document.getElementById('dailySalesChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const params = new URLSearchParams();
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
+  const url = `${API_BASE}/api/reports/daily-sales${params.toString() ? `?${params.toString()}` : ''}`;
+  const res = await fetch(url, { headers: { ...window.auth.getAuthHeaders() } });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
+  const rows = await res.json().catch(() => []);
+  if (!res.ok) throw new Error((rows && rows.detail) || 'Failed to load daily sales');
+
+  const labels = (rows || []).map((x) => String(x.date || ''));
+  const values = (rows || []).map((x) => Number(x.total || 0));
+  if (dailySalesChart) dailySalesChart.destroy();
+  dailySalesChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: t('total', 'Total'),
+          data: values,
+          backgroundColor: '#3b82f6',
+          borderColor: '#2563eb',
+          borderWidth: 1,
+          borderRadius: 6,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true } },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+async function loadMonthlySalesChart(year) {
+  const canvas = document.getElementById('monthlySalesChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const queryYear = Number(year) || new Date().getFullYear();
+  const res = await fetch(`${API_BASE}/api/reports/monthly-sales?year=${encodeURIComponent(queryYear)}`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
+  const rows = await res.json().catch(() => []);
+  if (!res.ok) throw new Error((rows && rows.detail) || 'Failed to load monthly sales');
+
+  const labels = (rows || []).map((x) => String(x.month || ''));
+  const values = (rows || []).map((x) => Number(x.total || 0));
+  if (monthlySalesChart) monthlySalesChart.destroy();
+  monthlySalesChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: t('total', 'Total'),
+          data: values,
+          borderColor: '#14b8a6',
+          backgroundColor: 'rgba(20, 184, 166, 0.2)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointBackgroundColor: '#14b8a6',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true } },
+    },
+  });
+}
+
+async function loadCategorySalesChart() {
+  const canvas = document.getElementById('categorySalesChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const res = await fetch(`${API_BASE}/api/reports/category-sales`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
+  const rows = await res.json().catch(() => []);
+  if (!res.ok) throw new Error((rows && rows.detail) || 'Failed to load category sales');
+
+  const labels = (rows || []).map((x) => String(x.category_name || t('none', 'None')));
+  const values = (rows || []).map((x) => Number(x.total_sales || 0));
+  if (categoryChart) categoryChart.destroy();
+
+  categoryChart = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: t('total', 'Total'),
+          data: values,
+          backgroundColor: ['#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#f59e0b', '#8b5cf6', '#f97316'],
+          borderColor: '#ffffff',
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom' } },
+    },
+  });
+}
+
+async function loadCancellationsReport() {
+  const countEl = document.getElementById('kpi-cancelled-count');
+  const lostRevenueEl = document.getElementById('kpi-lost-revenue');
+  const canvas = document.getElementById('cancelledItemsChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  const res = await fetch(`${API_BASE}/api/reports/cancellations`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data && data.detail) || 'Failed to load cancellations report');
+
+  const totalCancelled = Number(data.total_cancelled_items || 0);
+  const lostRevenue = Number(data.total_lost_revenue || 0);
+  if (countEl) countEl.textContent = String(totalCancelled);
+  if (lostRevenueEl) lostRevenueEl.textContent = `$${lostRevenue.toFixed(2)}`;
+
+  const topItems = Array.isArray(data.top_cancelled_items) ? data.top_cancelled_items : [];
+  const labels = topItems.map((x) => String(x.item_name || ''));
+  const values = topItems.map((x) => Number(x.count || 0));
+  if (cancelledItemsChart) cancelledItemsChart.destroy();
+
+  cancelledItemsChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: t('cancelled', 'Cancelled'),
+          data: values,
+          backgroundColor: 'rgba(239, 68, 68, 0.7)',
+          borderColor: 'rgba(239, 68, 68, 1)',
+          borderWidth: 1,
+          borderRadius: 6,
+        },
+      ],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { x: { beginAtZero: true } },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function bindSalesHistoryFilters() {
+  const btn = document.getElementById('btn-filter-history');
+  const startInput = document.getElementById('filter-start-date');
+  const endInput = document.getElementById('filter-end-date');
+  if (!btn || !startInput || !endInput) return;
+
+  btn.addEventListener('click', async () => {
+    const start = startInput.value || '';
+    const end = endInput.value || '';
+    try {
+      await loadDailySalesChart(start, end);
+      const year = end ? Number(String(end).slice(0, 4)) : new Date().getFullYear();
+      await loadMonthlySalesChart(year);
+    } catch (err) {
+      console.error('Sales history charts failed:', err);
+      if (window.toast?.error) window.toast.error(err.message || 'Failed to load sales history');
+    }
+  });
+}
+
+async function loadTopItemsChart() {
+  const canvas = document.getElementById('topItemsChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const res = await fetch(`${API_BASE}/api/reports/top-items`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
+  const rows = await res.json().catch(() => []);
+  if (!res.ok) throw new Error((rows && rows.detail) || 'Failed to load top items');
+
+  const labels = (rows || []).map((x) => x.item_name || x.menu_item_name || t('none', 'None'));
+  const values = (rows || []).map((x) => Number(x.quantity_sold || 0));
+  const palette = ['#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#f59e0b'];
+  const hasData = values.length > 0 && values.some((v) => v > 0);
+  if (topItemsChart) topItemsChart.destroy();
+  if (!hasData) {
+    setChartEmptyState('topItemsChart', 'topItemsChartEmpty', true);
+    return;
+  }
+  setChartEmptyState('topItemsChart', 'topItemsChartEmpty', false);
+
+  topItemsChart = new Chart(canvas.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: t('qty', 'Qty'),
+          data: values,
+          backgroundColor: palette,
+          borderColor: '#ffffff',
+          borderWidth: 2,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' },
+      },
+    },
+  });
+}
+
+async function loadHourlyTrendChart() {
+  const canvas = document.getElementById('hourlyTrendChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const res = await fetch(`${API_BASE}/api/reports/hourly-trend`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
+  const rows = await res.json().catch(() => []);
+  if (!res.ok) throw new Error((rows && rows.detail) || 'Failed to load hourly trend');
+
+  const labels = (rows || []).map((x) => String(x.hour || ''));
+  const values = (rows || []).map((x) => Number(x.total ?? x.total_sales ?? 0));
+  const hasData = values.length > 0 && values.some((v) => v > 0);
+  if (hourlyChart) hourlyChart.destroy();
+  if (!hasData) {
+    setChartEmptyState('hourlyTrendChart', 'hourlyTrendChartEmpty', true);
+    return;
+  }
+  setChartEmptyState('hourlyTrendChart', 'hourlyTrendChartEmpty', false);
+
+  hourlyChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: t('total', 'Total'),
+          data: values,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.2)',
+          fill: true,
+          tension: 0.4,
+          pointRadius: 3,
+          pointBackgroundColor: '#2563eb',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom' },
+      },
+      scales: {
+        y: { beginAtZero: true },
+      },
+    },
+  });
+}
+
+async function dialogAlert(message, type = 'error', _title = 'Notice') {
+  const title = type === 'success' ? t('success', 'Success') : type === 'info' ? t('info', 'Info') : t('error', 'Error');
+  if (window.CustomDialog?.alert) {
+    await window.CustomDialog.alert(title, message);
+    return;
+  }
+  if (type === 'success' && window.toast?.success) {
+    window.toast.success(message);
+    return;
+  }
+  if (type === 'info' && window.toast?.info) {
+    window.toast.info(message);
+    return;
+  }
+  if (window.toast?.error) {
+    window.toast.error(message);
+    return;
+  }
+  console.warn(`[${title}] ${message}`);
+}
+
+async function dialogConfirm(message, _title = 'Confirm') {
+  const title = t('confirm_action', 'Confirm Action');
+  if (window.CustomDialog?.confirm) {
+    const result = await window.CustomDialog.confirm(title, message);
+    return Boolean(result);
+  }
+  if (window.toast?.info) window.toast.info(message);
+  return false;
 }
 
 async function loadDashboardSummary() {
@@ -178,6 +589,14 @@ async function loadDashboardSummary() {
   } catch (err) {
     console.error(err);
     if (window.toast) window.toast.error('Failed to load dashboard summary');
+  }
+  if (activeDashboardTab === 'overview') {
+    Promise.allSettled([loadTopItemsChart(), loadHourlyTrendChart()]).then((results) => {
+      const hasFailure = results.some((r) => r.status === 'rejected');
+      if (hasFailure) {
+        console.error('Dashboard chart loading failed:', results);
+      }
+    });
   }
 }
 
@@ -210,7 +629,7 @@ function recalculateCheckoutTotals() {
   const grandTotalEl = document.getElementById('receipt-grand-total');
   if (subtotalEl) subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
   if (discountEl) discountEl.textContent = `-$${discountAmount.toFixed(2)}`;
-  if (grandTotalEl) grandTotalEl.textContent = `Grand Total: $${finalTotal.toFixed(2)}`;
+  if (grandTotalEl) grandTotalEl.textContent = `${t('grand_total', 'Grand Total')}: $${finalTotal.toFixed(2)}`;
 
   selectedOrderTotal = finalTotal;
 
@@ -221,7 +640,7 @@ function recalculateCheckoutTotals() {
   if (!changeSpan) return finalTotal;
   if (Number.isNaN(change)) changeSpan.textContent = '$0.00';
   else if (change >= 0) changeSpan.textContent = `$${change.toFixed(2)}`;
-  else changeSpan.textContent = 'Insufficient';
+  else changeSpan.textContent = t('insufficient', 'Insufficient');
   return finalTotal;
 }
 
@@ -300,7 +719,7 @@ function renderCashierTablesGrid() {
   if (!grid) return;
   const tables = getCashierActiveZoneTables();
   if (!tables.length) {
-    grid.innerHTML = '<p class="col-span-full text-slate-500">No tables in this zone.</p>';
+    grid.innerHTML = `<p class="col-span-full text-slate-500">${escapeHtml(t('no_tables_in_zone', 'No tables in this zone.'))}</p>`;
     return;
   }
   grid.innerHTML = tables
@@ -330,16 +749,14 @@ function renderCashierTablesGrid() {
       const status = btn.dataset.cashierTableStatus;
       const tableName = btn.dataset.cashierTableName || String(tableId);
       if (status === 'available') {
-        if (window.toast) window.toast.info('Table is currently empty');
-        else alert('Table is currently empty');
+        await dialogAlert(t('table_is_empty', 'Table is currently empty'), 'info', t('table', 'Table'));
         return;
       }
       try {
         const order = await fetchActiveOrderByTable(tableId);
         selectOrder(order);
       } catch (e) {
-        if (window.toast) window.toast.error(e.message || `No active order for Table ${tableName}`);
-        else alert(e.message || `No active order for Table ${tableName}`);
+        await dialogAlert(e.message || `${t('no_active_order_for_table', 'No active order found for this table.')}`, 'error', t('load_failed', 'Load Failed'));
       }
     });
   });
@@ -352,12 +769,12 @@ function renderTakeawayOrders(orders) {
     .sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
 
   if (!takeawayOrders.length) {
-    container.innerHTML = '<p class="text-slate-500 text-sm">No active takeaway orders.</p>';
+    container.innerHTML = `<p class="text-slate-500 text-sm">${escapeHtml(t('no_active_takeaway_orders', 'No active takeaway orders.'))}</p>`;
     return;
   }
 
   container.innerHTML = takeawayOrders.map((o) => {
-    const customer = String(o.customer_name || '').trim() || 'Walk-in';
+    const customer = String(o.customer_name || '').trim() || t('walk_in', 'Walk-in');
     const items = Array.isArray(o.items) ? o.items : [];
     const pending = items.filter((i) => String(i.item_status || '').toLowerCase() !== 'served').length;
     const served = items.filter((i) => String(i.item_status || '').toLowerCase() === 'served').length;
@@ -368,13 +785,13 @@ function renderTakeawayOrders(orders) {
         class="w-full text-left border border-orange-200 rounded-md p-2 bg-orange-50 hover:bg-orange-100"
       >
         <div class="flex items-center justify-between gap-2">
-          <span class="text-sm font-medium text-orange-800">Order #${o.id}</span>
-          <span class="text-xs text-orange-700">Total: $${Number(o.total_amount || 0).toFixed(2)}</span>
+          <span class="text-sm font-medium text-orange-800">${escapeHtml(t('order', 'Order'))} #${o.id}</span>
+          <span class="text-xs text-orange-700">${escapeHtml(t('total', 'Total'))}: $${Number(o.total_amount || 0).toFixed(2)}</span>
         </div>
-        <div class="text-xs text-orange-700 mt-0.5">Customer: ${escapeHtml(customer)}</div>
+        <div class="text-xs text-orange-700 mt-0.5">${escapeHtml(t('customer', 'Customer'))}: ${escapeHtml(customer)}</div>
         <div class="mt-1.5 flex gap-1">
-          <span class="text-[11px] px-2 py-0.5 rounded bg-amber-100 text-amber-800">Pending: ${pending}</span>
-          <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Served: ${served}</span>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-amber-100 text-amber-800">${escapeHtml(t('pending', 'Pending'))}: ${pending}</span>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">${escapeHtml(t('served', 'Served'))}: ${served}</span>
         </div>
       </button>
     `;
@@ -391,19 +808,19 @@ function renderTakeawayOrders(orders) {
 
 async function loadTakeawayOrders() {
   const takeaway = document.getElementById('cashier-takeaway-orders');
-  if (takeaway) takeaway.innerHTML = '<p class="text-slate-500 text-sm">Loading takeaway orders...</p>';
+  if (takeaway) takeaway.innerHTML = `<p class="text-slate-500 text-sm">${escapeHtml(t('loading_takeaway_orders', 'Loading takeaway orders...'))}</p>`;
   try {
     const orders = await fetchActiveTakeawayOrders();
     renderTakeawayOrders(orders || []);
   } catch (e) {
     console.error(e);
-    if (takeaway) takeaway.innerHTML = '<p class="text-red-600 text-sm">Error loading takeaway orders.</p>';
+    if (takeaway) takeaway.innerHTML = `<p class="text-red-600 text-sm">${escapeHtml(t('error_loading_takeaway_orders', 'Error loading takeaway orders.'))}</p>`;
   }
 }
 
 function loadUnpaidOrders() {
   const grid = document.getElementById('cashier-tables-grid');
-  if (grid) grid.innerHTML = '<p class="col-span-full text-slate-500">Loading table grid...</p>';
+  if (grid) grid.innerHTML = `<p class="col-span-full text-slate-500">${escapeHtml(t('loading_table_grid', 'Loading table grid...'))}</p>`;
   Promise.all([fetchCashierTableGrid(), fetchActiveTakeawayOrders()])
     .then(([zones, takeawayOrders]) => {
       cashierZones = zones || [];
@@ -420,7 +837,7 @@ function loadUnpaidOrders() {
     })
     .catch((e) => {
       console.error(e);
-      if (grid) grid.innerHTML = '<p class="col-span-full text-red-600">Error loading table grid.</p>';
+      if (grid) grid.innerHTML = `<p class="col-span-full text-red-600">${escapeHtml(t('error_loading_table_grid', 'Error loading table grid.'))}</p>`;
     });
 }
 
@@ -435,11 +852,11 @@ function selectOrder(order) {
   container.classList.remove('hidden');
   const isTakeaway = String(order.order_type || '').toLowerCase() === 'takeaway';
   const checkoutHeaderEl = document.getElementById('checkout-header');
-  const customer = String(order.customer_name || '').trim() || 'Walk-in';
+  const customer = String(order.customer_name || '').trim() || t('walk_in', 'Walk-in');
   if (checkoutHeaderEl) {
     checkoutHeaderEl.textContent = isTakeaway
-      ? `Checkout - Takeaway (Customer: ${customer})`
-      : `Checkout - Table ${order.table_number}`;
+      ? `${t('checkout', 'Checkout')} - ${t('takeaway', 'Takeaway')} (${t('customer', 'Customer')}: ${customer})`
+      : `${t('checkout', 'Checkout')} - ${t('table', 'Table')} ${order.table_number}`;
   }
   const itemsRows = (order.items || [])
     .map(
@@ -449,7 +866,7 @@ function selectOrder(order) {
     .join('');
   document.getElementById('receipt-content').innerHTML = `
     <table class="w-full text-sm text-slate-700">
-      <thead><tr class="border-b border-slate-200"><th class="text-left py-1">Item</th><th class="text-right py-1">Qty</th><th class="text-right py-1">Subtotal</th></tr></thead>
+      <thead><tr class="border-b border-slate-200"><th class="text-left py-1">${escapeHtml(t('item', 'Item'))}</th><th class="text-right py-1">${escapeHtml(t('qty', 'Qty'))}</th><th class="text-right py-1">${escapeHtml(t('subtotal', 'Subtotal'))}</th></tr></thead>
       <tbody>${itemsRows}</tbody>
     </table>
   `;
@@ -545,20 +962,18 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
   const currentFinalTotal = recalculateCheckoutTotals();
 
   if (Number.isNaN(tendered) || tendered <= 0) {
-    if (window.toast) window.toast.error('Enter a valid amount tendered.');
-    else alert('Enter a valid amount tendered.');
+    await dialogAlert(t('enter_valid_amount_tendered', 'Enter a valid amount tendered.'), 'error', t('error', 'Error'));
     return;
   }
   if (tendered < currentFinalTotal) {
-    if (window.toast) window.toast.error('Amount tendered is less than total.');
-    else alert('Amount tendered is less than total.');
+    await dialogAlert(t('amount_less_than_total', 'Amount tendered is less than total.'), 'error', t('error', 'Error'));
     return;
   }
 
   const method = methodSelect ? methodSelect.value || 'cash' : 'cash';
 
   btn.disabled = true;
-  btn.textContent = 'Processing…';
+  btn.textContent = t('processing', 'Processing...');
   try {
     const res = await fetch(`${API_BASE}/api/orders/${selectedOrderId}/checkout`, {
       method: 'PUT',
@@ -573,12 +988,10 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      if (window.toast) window.toast.error(data.detail || 'Payment failed');
-      else alert(data.detail || 'Payment failed');
+      await dialogAlert(data.detail || t('payment_failed', 'Payment failed'), 'error', t('error', 'Error'));
       return;
     }
-    if (window.toast) window.toast.success('Payment processed successfully.');
-    else alert('Payment processed successfully.');
+    await dialogAlert(t('payment_success', 'Payment processed successfully.'), 'success', t('success', 'Success'));
 
     // Populate printable receipt and trigger print
     renderReceiptForPrint(data);
@@ -595,11 +1008,10 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     loadTakeawayOrders();
   } catch (e) {
     console.error(e);
-    if (window.toast) window.toast.error('Payment failed');
-    else alert('Payment failed');
+    await dialogAlert(t('payment_failed', 'Payment failed'), 'error', t('error', 'Error'));
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Confirm Payment';
+    btn.textContent = t('confirm_payment', 'Confirm Payment');
   }
 });
 
@@ -772,8 +1184,7 @@ if (userForm) {
       if (window.auth && window.auth.checkUnauthorized(res)) return;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (window.toast) window.toast.error(data.detail || 'Failed to save user');
-        else alert(data.detail || 'Failed to save user');
+        await dialogAlert(data.detail || 'Failed to save user', 'error', 'Save User');
         return;
       }
       if (window.toast) window.toast.success('User saved successfully.');
@@ -781,8 +1192,7 @@ if (userForm) {
       await loadUsers();
     } catch (err) {
       console.error(err);
-      if (window.toast) window.toast.error('Failed to save user');
-      else alert('Failed to save user');
+      await dialogAlert('Failed to save user', 'error', 'Save User');
     }
   });
 }
@@ -792,7 +1202,7 @@ if (btnDeleteUser) {
   btnDeleteUser.addEventListener('click', async () => {
     const userId = document.getElementById('user-id').value;
     if (!userId) return;
-    const ok = confirm('Delete this user?');
+    const ok = await dialogConfirm('Delete this user?', 'Delete User');
     if (!ok) return;
     try {
       const res = await fetch(`${API_BASE}/api/admin/users/${encodeURIComponent(userId)}`, {
@@ -802,8 +1212,7 @@ if (btnDeleteUser) {
       if (window.auth && window.auth.checkUnauthorized(res)) return;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (window.toast) window.toast.error(data.detail || 'Delete failed');
-        else alert(data.detail || 'Delete failed');
+        await dialogAlert(data.detail || 'Delete failed', 'error', 'Delete User');
         return;
       }
       if (window.toast) window.toast.success('User deleted.');
@@ -811,8 +1220,7 @@ if (btnDeleteUser) {
       await loadUsers();
     } catch (e) {
       console.error(e);
-      if (window.toast) window.toast.error('Delete failed');
-      else alert('Delete failed');
+      await dialogAlert('Delete failed', 'error', 'Delete User');
     }
   });
 }
@@ -918,8 +1326,7 @@ if (kanbanZoneForm) {
       if (window.auth && window.auth.checkUnauthorized(res)) return;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (window.toast) window.toast.error(data.detail || 'Failed to create zone');
-        else alert(data.detail || 'Failed to create zone');
+        await dialogAlert(data.detail || 'Failed to create zone', 'error', 'Create Zone');
         return;
       }
       if (window.toast) window.toast.success('Zone created.');
@@ -927,8 +1334,7 @@ if (kanbanZoneForm) {
       await loadTableManagementData();
     } catch (err) {
       console.error(err);
-      if (window.toast) window.toast.error('Failed to create zone');
-      else alert('Failed to create zone');
+      await dialogAlert('Failed to create zone', 'error', 'Create Zone');
     }
   });
 }
@@ -946,7 +1352,7 @@ if (kanbanBoard) {
     if (deleteZoneBtn) {
       const zoneId = deleteZoneBtn.getAttribute('data-delete-zone-id');
       if (!zoneId) return;
-      if (!confirm('Delete this zone and its tables?')) return;
+      if (!await dialogConfirm('Delete this zone and its tables?', 'Delete Zone')) return;
       try {
         const res = await fetch(`${API_BASE}/api/zones/${encodeURIComponent(zoneId)}`, {
           method: 'DELETE',
@@ -955,16 +1361,14 @@ if (kanbanBoard) {
         if (window.auth && window.auth.checkUnauthorized(res)) return;
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          if (window.toast) window.toast.error(data.detail || 'Delete failed');
-          else alert(data.detail || 'Delete failed');
+          await dialogAlert(data.detail || 'Delete failed', 'error', 'Delete Zone');
           return;
         }
         if (window.toast) window.toast.success('Zone deleted.');
         await loadTableManagementData();
       } catch (err) {
         console.error(err);
-        if (window.toast) window.toast.error('Delete failed');
-        else alert('Delete failed');
+        await dialogAlert('Delete failed', 'error', 'Delete Zone');
       }
       return;
     }
@@ -972,7 +1376,7 @@ if (kanbanBoard) {
     if (deleteTableBtn) {
       const tableId = deleteTableBtn.getAttribute('data-delete-table-id');
       if (!tableId) return;
-      if (!confirm('Delete this table?')) return;
+      if (!await dialogConfirm('Delete this table?', 'Delete Table')) return;
       try {
         const res = await fetch(`${API_BASE}/api/tables/${encodeURIComponent(tableId)}`, {
           method: 'DELETE',
@@ -981,16 +1385,14 @@ if (kanbanBoard) {
         if (window.auth && window.auth.checkUnauthorized(res)) return;
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          if (window.toast) window.toast.error(data.detail || 'Delete failed');
-          else alert(data.detail || 'Delete failed');
+          await dialogAlert(data.detail || 'Delete failed', 'error', 'Delete Table');
           return;
         }
         if (window.toast) window.toast.success('Table deleted.');
         await loadTableManagementData();
       } catch (err) {
         console.error(err);
-        if (window.toast) window.toast.error('Delete failed');
-        else alert('Delete failed');
+        await dialogAlert('Delete failed', 'error', 'Delete Table');
       }
       return;
     }
@@ -1026,8 +1428,7 @@ if (kanbanBoard) {
         if (window.auth && window.auth.checkUnauthorized(res)) return;
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          if (window.toast) window.toast.error(data.detail || 'Failed to create table');
-          else alert(data.detail || 'Failed to create table');
+          await dialogAlert(data.detail || 'Failed to create table', 'error', 'Create Table');
           return;
         }
         if (window.toast) window.toast.success('Table created.');
@@ -1035,8 +1436,7 @@ if (kanbanBoard) {
         await loadTableManagementData();
       } catch (err) {
         console.error(err);
-        if (window.toast) window.toast.error('Failed to create table');
-        else alert('Failed to create table');
+        await dialogAlert('Failed to create table', 'error', 'Create Table');
       }
     }
   });
@@ -1058,8 +1458,7 @@ if (kanbanBoard) {
       if (window.auth && window.auth.checkUnauthorized(res)) return;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (window.toast) window.toast.error(data.detail || 'Failed to create table');
-        else alert(data.detail || 'Failed to create table');
+        await dialogAlert(data.detail || 'Failed to create table', 'error', 'Create Table');
         return;
       }
       if (window.toast) window.toast.success('Table created.');
@@ -1067,8 +1466,7 @@ if (kanbanBoard) {
       await loadTableManagementData();
     } catch (err) {
       console.error(err);
-      if (window.toast) window.toast.error('Failed to create table');
-      else alert('Failed to create table');
+      await dialogAlert('Failed to create table', 'error', 'Create Table');
     }
   });
 }
@@ -1261,8 +1659,7 @@ function renderMenuItems(items) {
         await loadMenuData();
       } catch (err) {
         console.error(err);
-        if (window.toast) window.toast.error(err.message || 'Failed to update availability');
-        else alert(err.message || 'Failed to update availability');
+        await dialogAlert(err.message || 'Failed to update availability', 'error', 'Update Item');
         btn.disabled = false;
       }
     });
@@ -1280,7 +1677,7 @@ function renderMenuItems(items) {
     btn.addEventListener('click', async () => {
       const itemId = Number(btn.getAttribute('data-delete-menu-item-id'));
       if (!itemId) return;
-      const confirmed = window.confirm('Delete this menu item permanently?');
+      const confirmed = await dialogConfirm('Delete this menu item permanently?', 'Delete Menu Item');
       if (!confirmed) return;
       btn.disabled = true;
       try {
@@ -1288,8 +1685,7 @@ function renderMenuItems(items) {
         await loadMenuData();
       } catch (err) {
         console.error(err);
-        if (window.toast) window.toast.error(err.message || 'Failed to delete menu item');
-        else alert(err.message || 'Failed to delete menu item');
+        await dialogAlert(err.message || 'Failed to delete menu item', 'error', 'Delete Menu Item');
         btn.disabled = false;
       }
     });
@@ -1343,14 +1739,14 @@ document.getElementById('form-category').addEventListener('submit', async (e) =>
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      alert(err.detail || 'Failed to create category');
+      await dialogAlert(err.detail || 'Failed to create category', 'error', 'Create Category');
       return;
     }
     input.value = '';
     await loadMenuData();
   } catch (err) {
     console.error(err);
-    alert('Failed to create category');
+    await dialogAlert('Failed to create category', 'error', 'Create Category');
   }
 });
 
@@ -1368,13 +1764,13 @@ document.getElementById('item-image-file').addEventListener('change', async (e) 
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      alert(data.detail || 'Upload failed');
+      await dialogAlert(data.detail || 'Upload failed', 'error', 'Upload Failed');
       return;
     }
     document.getElementById('item-image-url').value = data.url || '';
   } catch (err) {
     console.error(err);
-    alert('Upload failed');
+    await dialogAlert('Upload failed', 'error', 'Upload Failed');
   }
   e.target.value = '';
 });
@@ -1395,8 +1791,7 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
   if (!name || isNaN(price) || price < 0 || !categoryId) return;
   if (discountPrice !== null && (Number.isNaN(discountPrice) || discountPrice < 0)) return;
   if (imageFile && !imageUrl) {
-    if (window.toast) window.toast.error('Please wait for image upload to finish.');
-    else alert('Please wait for image upload to finish.');
+    await dialogAlert('Please wait for image upload to finish.', 'error', 'Upload In Progress');
     return;
   }
   const btn = document.getElementById('btn-submit-menu-item');
@@ -1427,7 +1822,11 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
       if (window.auth && window.auth.checkUnauthorized(res)) return;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to create menu item'));
+        await dialogAlert(
+          Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to create menu item'),
+          'error',
+          'Create Menu Item',
+        );
         return;
       }
     }
@@ -1442,7 +1841,7 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
     await loadMenuData();
   } catch (err) {
     console.error(err);
-    alert(err.message || (isEditMode ? 'Failed to update menu item' : 'Failed to create menu item'));
+    await dialogAlert(err.message || (isEditMode ? 'Failed to update menu item' : 'Failed to create menu item'), 'error', 'Menu Item');
   } finally {
     btn.disabled = false;
   }

@@ -63,6 +63,7 @@ class OrderItemStatus(str, PyEnum):
     pending = "pending"
     cooking = "cooking"
     served = "served"
+    cancelled = "cancelled"
 
 
 class Zone(Base):
@@ -143,7 +144,7 @@ class OrderItem(Base):
         CheckConstraint("quantity > 0", name="ck_order_items_quantity_positive"),
         CheckConstraint("subtotal >= 0", name="ck_order_items_subtotal_nonnegative"),
         CheckConstraint(
-            "status IN ('pending','cooking','served')",
+            "status IN ('pending','cooking','served','cancelled')",
             name="ck_order_items_status_valid",
         ),
         Index("ix_order_items_order_status", "order_id", "status"),
