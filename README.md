@@ -10,8 +10,9 @@ This README is architecture-first so new programmers (and AI agents) can quickly
 
 - **Backend:** FastAPI, SQLAlchemy, Pydantic, WebSocket
 - **Database:** SQLite (default dev), PostgreSQL-ready via `DATABASE_URL`
-- **Frontend:** Static HTML + Vanilla JS + Tailwind CDN
+- **Frontend:** Static HTML + Vanilla JS + Tailwind CDN + Chart.js
 - **Auth:** JWT (Bearer token), role-based access checks
+- **UX Utilities:** `CustomDialog` (no native alert/confirm/prompt), custom i18n (`en` / `my`)
 
 ---
 
@@ -42,10 +43,10 @@ This README is architecture-first so new programmers (and AI agents) can quickly
 
 - `routers/auth.py` - login + who-am-I
 - `routers/menu.py` - category/menu CRUD + availability toggle + upload
-- `routers/orders.py` - ordering, takeaway list, status updates, checkout
+- `routers/orders.py` - ordering, takeaway list, item status updates (served/pending/cancelled), checkout
 - `routers/tables.py` - zones/tables CRUD + status/grid
 - `routers/users.py` - admin staff management
-- `routers/reports.py` - daily summary report
+- `routers/reports.py` - summary + overview/history/insights reporting APIs
 
 ### Frontend pages
 
@@ -56,6 +57,7 @@ This README is architecture-first so new programmers (and AI agents) can quickly
 - `static/table-dashboard.html` + `table-dashboard.js` - table-level live board
 - `static/auth.js` - token storage and role guards
 - `static/toast.js` - shared toast notifications
+- `static/i18n.js` - bilingual translation dictionary + runtime language switching
 
 ---
 
@@ -86,6 +88,8 @@ This README is architecture-first so new programmers (and AI agents) can quickly
 
 - Clicking occupied table / existing takeaway opens details sidebar.
 - Item statuses can be toggled served/pending there.
+- Individual order items can also be cancelled from order details.
+- Cancelled items are excluded from order totals after backend recalculation.
 - "Add More Items" action is available for dine-in context.
 - For takeaway details, add-more action is intentionally hidden.
 
@@ -168,6 +172,21 @@ This README is architecture-first so new programmers (and AI agents) can quickly
 - `PUT /api/admin/users/{user_id}`
 - `DELETE /api/admin/users/{user_id}`
 - `GET /api/reports/summary/today`
+- `GET /api/reports/top-items`
+- `GET /api/reports/hourly-trend`
+- `GET /api/reports/daily-sales`
+- `GET /api/reports/monthly-sales`
+- `GET /api/reports/category-sales`
+- `GET /api/reports/cancellations`
+
+### Reports Endpoint Shape (Quick Reference)
+
+- `GET /api/reports/top-items` -> `[ { item_name, quantity_sold } ]`
+- `GET /api/reports/hourly-trend` -> `[ { hour, total } ]`
+- `GET /api/reports/daily-sales?start_date=&end_date=` -> `[ { date, total } ]`
+- `GET /api/reports/monthly-sales?year=` -> `[ { month, total } ]`
+- `GET /api/reports/category-sales` -> `[ { category_name, total_sales } ]`
+- `GET /api/reports/cancellations` -> `{ total_cancelled_items, total_lost_revenue, top_cancelled_items[] }`
 
 ---
 
@@ -218,6 +237,9 @@ Default admin:
   4. `static/waiter.js`
   5. `static/counter.js`
 - Prefer modifying shared helpers first (e.g., `toast.js`, `auth.js`) before duplicating logic.
+- Keep UI dialogs consistent via `window.CustomDialog`; do not reintroduce native browser dialogs.
+- Keep the cart-first waiter workflow and takeaway-as-virtual-zone behavior intact.
+- For UI text changes, update `static/i18n.js` keys and `data-i18n` mappings together.
 - Keep WebSocket event names and payloads backward compatible when possible.
 - If changing order lifecycle, verify:
   - waiter submit
