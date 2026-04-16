@@ -1,0 +1,159 @@
+import os
+from collections.abc import Generator
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from auth import hash_password
+from database import Base, get_db
+from models import User
+from routers import auth as auth_router
+from routers import menu as menu_router
+from routers import orders as orders_router
+from routers import reports as reports_router
+from routers import tables as tables_router
+from routers import users as users_router
+from websocket_manager import ConnectionManager
+
+
+@pytest.fixture(scope="session")
+def test_engine():
+    # Single in-memory DB shared across sessions via StaticPool.
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    return engine
+
+
+@pytest.fixture()
+def db_session(test_engine) -> Generator[Session, None, None]:
+    TestingSessionLocal = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=test_engine,
+    )
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def _override_get_db(db: Session):
+    def _get_db_override():
+        try:
+            yield db
+        finally:
+            pass
+
+    return _get_db_override
+
+
+@pytest.fixture()
+def app(db_session: Session) -> FastAPI:
+    # Build a test app that avoids `main.py` lifespan migrations touching real files.
+    app = FastAPI()
+
+    # Provide the ws manager expected by order/table routers.
+    app.state.ws_manager = ConnectionManager()
+
+    # Include routers (mirrors production wiring but without `main.py` lifespan).
+    app.include_router(auth_router.router)
+    app.include_router(menu_router.router)
+    app.include_router(orders_router.router)
+    app.include_router(reports_router.router)
+    app.include_router(tables_router.router)
+    app.include_router(users_router.router)
+
+    app.dependency_overrides[get_db] = _override_get_db(db_session)
+    return app
+
+
+@pytest.fixture()
+def client(app: FastAPI) -> TestClient:
+    return TestClient(app)
+
+
+@pytest.fixture()
+def seed_users(db_session: Session) -> dict[str, User]:
+    """
+    Seed a minimal set of users for RBAC/auth tests.
+    Note: PIN users still require `password_hash` (model is not nullable).
+    """
+    # Ensure a clean slate for user table inside the shared in-memory DB.
+    db_session.query(User).delete()
+    db_session.commit()
+
+    admin = User(
+        username="admin",
+        role="admin",
+        password_hash=hash_password("admin123"),
+        pin_code=None,
+    )
+    waiter = User(
+        username="waiter1",
+        role="waiter",
+        password_hash=hash_password("changeme"),
+        pin_code="1111",
+    )
+    cashier = User(
+        username="cashier1",
+        role="cashier",
+        password_hash=hash_password("changeme"),
+        pin_code="2222",
+    )
+    kitchen = User(
+        username="kitchen1",
+        role="kitchen",
+        password_hash=hash_password("changeme"),
+        pin_code="3333",
+    )
+    db_session.add_all([admin, waiter, cashier, kitchen])
+    db_session.commit()
+    db_session.refresh(admin)
+    db_session.refresh(waiter)
+    db_session.refresh(cashier)
+    db_session.refresh(kitchen)
+    return {"admin": admin, "waiter": waiter, "cashier": cashier, "kitchen": kitchen}
+
+
+@pytest.fixture()
+def auth_headers(client: TestClient, seed_users: dict[str, User]):
+    """
+    Factory that returns Authorization headers for a given role.
+    Usage: headers = auth_headers("admin") / auth_headers("waiter") / auth_headers("cashier") / auth_headers("kitchen")
+    """
+
+    def _get(role: str) -> dict[str, str]:
+        role = str(role or "").strip().lower()
+        if role == "admin":
+            res = client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+            assert res.status_code == 200, res.text
+            token = res.json()["access_token"]
+            return {"Authorization": f"Bearer {token}"}
+        if role == "waiter":
+            res = client.post("/api/auth/login-pin", json={"pin_code": "1111"})
+            assert res.status_code == 200, res.text
+            token = res.json()["access_token"]
+            return {"Authorization": f"Bearer {token}"}
+        if role == "cashier":
+            res = client.post("/api/auth/login-pin", json={"pin_code": "2222"})
+            assert res.status_code == 200, res.text
+            token = res.json()["access_token"]
+            return {"Authorization": f"Bearer {token}"}
+        if role == "kitchen":
+            res = client.post("/api/auth/login-pin", json={"pin_code": "3333"})
+            assert res.status_code == 200, res.text
+            token = res.json()["access_token"]
+            return {"Authorization": f"Bearer {token}"}
+        raise ValueError(f"Unknown role: {role}")
+
+    return _get
+

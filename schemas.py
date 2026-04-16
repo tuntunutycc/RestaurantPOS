@@ -46,6 +46,7 @@ class TokenResponse(BaseModel):
 StaffRole = Literal["admin", "waiter", "kitchen", "cashier"]
 TableStatusLiteral = Literal["available", "occupied"]
 OrderItemStatusLiteral = Literal["pending", "cooking", "served", "cancelled"]
+OrderStatusLiteral = Literal["pending", "open", "dining", "completed", "paid", "cancelled"]
 
 
 class UserCreateRequest(BaseModel):
@@ -288,6 +289,22 @@ class OrderSubmitResponse(BaseModel):
     message: str
 
 
+class OrderCreateResponse(BaseModel):
+    """Response for create-order endpoint with summary fields."""
+
+    id: int
+    table_number: int | None = None
+    status: str
+    total_amount: float
+
+
+class OrderStatusUpdateResponse(BaseModel):
+    """Response for order status update endpoint."""
+
+    id: int
+    status: str
+
+
 class OrderItemDetail(BaseModel):
     """Schema for an order line in detailed order response (menu item name + quantity + optional image)."""
 
@@ -321,6 +338,17 @@ class OrderItemRead(OrderItemDetailsResponse):
     """Read schema for order item including note."""
 
     pass
+
+
+class OrderItemStatusUpdateRequest(BaseModel):
+    """Request body for updating one order item's status."""
+
+    status: OrderItemStatusLiteral
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v):
+        return str(v or "").strip().lower()
 
 
 class OrderDetailsResponse(BaseModel):

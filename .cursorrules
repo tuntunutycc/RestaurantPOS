@@ -1,0 +1,32 @@
+# Cursor Agent Rules (Spec-Driven Development)
+
+## Non-negotiable mandates
+1. **Tech stack compliance**
+   - Adhere to the standards and conventions in `specs/tech-stack.md` for *all* code generation (backend, schemas, and frontend JS updates).
+   - Treat `specs/tech-stack.md` as the source of truth for architecture boundaries, API naming conventions, state management, realtime/WebSocket event contract expectations, and coding standards.
+
+2. **Mission alignment**
+   - Ensure every change’s behavior and UX align with `specs/mission.md` (Myanmar restaurant POS, core workflows for `admin`, `waiter`, `cashier`, money correctness/data consistency, and the stated Mission KPIs).
+   - Because `data inconsistency` is your least-acceptable risk, the agent must prioritize deterministic totals and correct order state transitions server-side.
+
+3. **Roadmap/SDD sequencing**
+   - For feature development, follow the sequence and granular steps in `specs/roadmap.md`:
+     - Phase 1 practices first (contract-driven boundaries, automated test harness, invariant tests, realtime contract documentation/checks, graceful degradation).
+     - Phase 2 practices next (edge-case regression tests, rounding/money correctness strategy, error handling standardization, SDD documentation completeness).
+     - Phase 3 practices for extension + PostgreSQL hardening + optional frontend evolution.
+   - Additionally enforce **Roadmap Governance (SDD)**: every merge requires `spec + contract updates + review checklist + automated tests`.
+
+## Required behavior when working
+- **Spec-first:** do not implement a feature unless there is a clear spec/contract impact that matches the SDD workflow.
+- **Contract-first:** update `schemas.py` / `response_model` before implementing UI changes.
+- **API contract integrity:** server responses must match the Pydantic schemas and be stable for the frontend.
+- **Automated tests gate:** when adding/modifying POS-critical functionality, provide/extend backend automated tests that cover:
+  - contract correctness (request/response shapes)
+  - key business invariants (totals, cancellation effects, checkout validation)
+  - role enforcement behavior (admin/waiter/cashier)
+- **Review checklist completeness:** include a checklist addressing security, roles, and edge cases before completing the work.
+
+## Scope assumptions
+- Current frontend is **static JavaScript** served by FastAPI; treat Next.js as later-stage only unless the user explicitly changes direction.
+- PostgreSQL is a later target; avoid introducing PostgreSQL-specific migration requirements before that decision is made, unless explicitly requested.
+

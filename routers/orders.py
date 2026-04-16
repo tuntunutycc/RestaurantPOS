@@ -2,23 +2,27 @@
 
 import asyncio
 import re
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from auth import get_current_user
+from auth import get_current_user, require_roles
 from database import get_db
 from models import MenuItem, Order, OrderItem, Table, User
 from schemas import (
     ActiveTakeawayOrderResponse,
     OrderCheckoutRequest,
+    OrderCreateResponse,
     OrderCreate,
     OrderDetailsResponse,
     OrderItemDetail,
     OrderItemDetailsResponse,
+    OrderItemStatusUpdateRequest,
     OrderResponseDetail,
+    OrderStatusUpdateResponse,
+    OrderStatusLiteral,
     OrderSubmitRequest,
     OrderSubmitResponse,
 )
@@ -136,6 +140,14 @@ def _selected_modifiers_total(selected_modifiers: list[dict]) -> float:
     return total
 
 
+def _round_money(value) -> float:
+    """Normalize money values to 2 decimal places deterministically."""
+    try:
+        return round(float(value or 0.0), 2)
+    except Exception:
+        return 0.0
+
+
 def _base_price_with_discount(menu_item: MenuItem) -> float:
     """
     Use discount price when it exists and is > 0, otherwise use standard price.
@@ -164,12 +176,12 @@ async def _broadcast_table_status_changed(request: Request, table: Table) -> Non
         await manager.broadcast("table_grid_updated", {"refresh": True})
 
 
-@router.post("/orders/")
+@router.post("/orders/", response_model=OrderCreateResponse)
 async def create_order(
     request: Request,
     order_data: OrderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     """
     Create or add to an order for a table (table-centric). If table already has an open/dining
@@ -214,9 +226,9 @@ async def create_order(
             selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
             modifiers_total = _selected_modifiers_total(selected_modifiers)
             base_price = _base_price_with_discount(menu_item)
-            subtotal = (base_price + modifiers_total) * line.quantity
+            subtotal = _round_money((base_price + modifiers_total) * line.quantity)
             note_value = (line.note or line.special_instructions or "").strip() or None
-            existing_total += subtotal
+            existing_total = _round_money(existing_total + subtotal)
             db.add(
                 OrderItem(
                     order_id=existing.id,
@@ -242,7 +254,7 @@ async def create_order(
                     special_instructions=note_value,
                 )
             )
-        existing.total_amount = round(existing_total, 2)
+        existing.total_amount = _round_money(existing_total)
         previous_status = table.status if table else None
         if table:
             table.status = "occupied"
@@ -274,9 +286,9 @@ async def create_order(
         selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
         modifiers_total = _selected_modifiers_total(selected_modifiers)
         base_price = _base_price_with_discount(menu_item)
-        subtotal = (base_price + modifiers_total) * line.quantity
+        subtotal = _round_money((base_price + modifiers_total) * line.quantity)
         note_value = (line.note or line.special_instructions or "").strip() or None
-        total_amount += subtotal
+        total_amount = _round_money(total_amount + subtotal)
         order_items_data.append(
             {
                 "menu_item_id": line.menu_item_id,
@@ -294,7 +306,7 @@ async def create_order(
         order_type=normalized_order_type,
         customer_name=(order_data.customer_name or "").strip() or None,
         status="open",
-        total_amount=round(total_amount, 2),
+        total_amount=_round_money(total_amount),
     )
     db.add(db_order)
     db.flush()
@@ -304,7 +316,7 @@ async def create_order(
                 order_id=db_order.id,
                 menu_item_id=item_data["menu_item_id"],
                 quantity=item_data["quantity"],
-                subtotal=item_data["subtotal"],
+                subtotal=_round_money(item_data["subtotal"]),
                 batch_status="pending",
                 created_by_id=current_user.id,
                 selected_modifiers=item_data["selected_modifiers"],
@@ -344,7 +356,7 @@ async def create_order(
 def list_orders(
     status: list[str] | None = Query(None, description="Filter by status(es), e.g. status=pending&status=open"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     """List orders, optionally filtered by status. Eager-loads items and menu_item to avoid N+1."""
     q = (
@@ -364,7 +376,7 @@ def list_orders(
 @router.get("/orders/active-takeaways", response_model=list[ActiveTakeawayOrderResponse])
 def list_active_takeaways(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     """
     Return all active (unpaid) takeaway orders with their related order items.
@@ -432,7 +444,7 @@ def _canonical_order_for_table(orders):
 @router.get("/orders/tables", response_model=list[OrderResponseDetail])
 def list_orders_by_table(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     """
     List one order per table (the canonical order for checkout). Cashier uses this so each
@@ -462,7 +474,7 @@ def list_orders_by_table(
 def get_active_order_by_table(
     table_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     """
     Get the single canonical order for a table (all items + grand total). Prefers the
@@ -489,22 +501,21 @@ def get_active_order_by_table(
 class OrderStatusUpdate(BaseModel):
     """Request body for updating order status."""
 
-    status: str
+    status: OrderStatusLiteral
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v):
+        return str(v or "").strip().lower()
 
 
-class OrderItemStatusUpdate(BaseModel):
-    """Request body for updating one order item's status."""
-
-    status: str
-
-
-@router.put("/orders/{order_id}/status")
+@router.put("/orders/{order_id}/status", response_model=OrderStatusUpdateResponse)
 async def update_order_status(
     request: Request,
     order_id: int,
     body: OrderStatusUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     """Update an order's status (e.g. completed). Broadcasts order_updated via WebSocket."""
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -523,7 +534,7 @@ async def update_order_status(
 def get_order_details(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     order = (
         db.query(Order)
@@ -570,9 +581,9 @@ async def update_order_item_status(
     request: Request,
     order_id: int,
     item_id: int,
-    body: OrderItemStatusUpdate,
+    body: OrderItemStatusUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     order = (
         db.query(Order)
@@ -653,7 +664,7 @@ async def submit_order(
     request: Request,
     body: OrderSubmitRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
 ):
     """
     Submit order endpoint supporting:
@@ -736,15 +747,15 @@ async def submit_order(
         selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
         modifiers_total = _selected_modifiers_total(selected_modifiers)
         base_price = _base_price_with_discount(menu_item)
-        subtotal = (base_price + modifiers_total) * line.quantity
+        subtotal = _round_money((base_price + modifiers_total) * line.quantity)
         note_value = (line.note or line.special_instructions or "").strip() or None
-        batch_total += subtotal
+        batch_total = _round_money(batch_total + subtotal)
         db.add(
             OrderItem(
                 order_id=order.id,
                 menu_item_id=line.menu_item_id,
                 quantity=line.quantity,
-                subtotal=subtotal,
+                subtotal=_round_money(subtotal),
                 batch_number=new_batch_number,
                 batch_status="pending",
                 created_by_id=current_user.id,
@@ -783,7 +794,7 @@ async def submit_order(
         )
 
     # Update order running total and persist
-    order.total_amount = float(order.total_amount) + batch_total
+    order.total_amount = _round_money(float(order.total_amount) + batch_total)
     previous_status = table.status if table else None
     if table:
         table.status = "occupied"
@@ -826,7 +837,7 @@ async def submit_order(
     return OrderSubmitResponse(
         id=order.id,
         table_number=order.table_number,
-        total_amount=order.total_amount,
+        total_amount=_round_money(order.total_amount),
         is_new_order=is_new_order,
         message=(
             (
@@ -851,7 +862,7 @@ async def checkout_order(
     order_id: int,
     body: OrderCheckoutRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles(["admin", "cashier"])),
 ):
     """
     Finalize payment for an order with optional order-level discount:
@@ -874,7 +885,11 @@ async def checkout_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    subtotal = sum(float(getattr(i, "subtotal", 0.0) or 0.0) for i in (order.order_items or []))
+    subtotal = _round_money(sum(
+        float(getattr(i, "subtotal", 0.0) or 0.0)
+        for i in (order.order_items or [])
+        if _normalized_item_status_value(getattr(i, "item_status", None)) != "cancelled"
+    ))
     normalized_discount_type = (body.discount_type or "").strip().lower() or None
     discount_value = float(body.discount_value or 0.0)
     if discount_value < 0:
@@ -887,9 +902,9 @@ async def checkout_order(
         discount_amount = subtotal * (discount_value / 100.0)
     elif normalized_discount_type == "amount" and discount_value > 0:
         discount_amount = discount_value
+    discount_amount = _round_money(discount_amount)
 
-    final_total = max(subtotal - discount_amount, 0.0)
-    final_total = round(final_total, 2)
+    final_total = _round_money(max(subtotal - discount_amount, 0.0))
 
     tendered = float(body.amount_tendered)
     if tendered < final_total:
@@ -898,14 +913,14 @@ async def checkout_order(
             detail=f"Amount tendered ({tendered:.2f}) is less than total ({final_total:.2f})",
         )
 
-    change = tendered - final_total
+    change = _round_money(tendered - final_total)
 
-    order.total_amount = final_total
+    order.total_amount = _round_money(final_total)
     order.discount_type = normalized_discount_type
-    order.discount_value = round(discount_value, 2) if normalized_discount_type else 0.0
+    order.discount_value = _round_money(discount_value) if normalized_discount_type else 0.0
     order.payment_method = body.payment_method
-    order.amount_tendered = tendered
-    order.change_amount = change
+    order.amount_tendered = _round_money(tendered)
+    order.change_amount = _round_money(change)
     order.status = "paid"
     # For takeaway orders, table_id is NULL, so skip table status update safely.
     table = db.query(Table).filter(Table.id == order.table_id).first() if order.table_id is not None else None

@@ -1,0 +1,154 @@
+# Roadmap
+
+This roadmap is structured for Spec-Driven Development (SDD): every step is tied to verifiable outputs (contracts, tests, and acceptance criteria).
+
+## Completed (Current Implementation Observed in Codebase)
+The current codebase already implements the core end-to-end POS workflows and realtime behavior required for a functional restaurant POS:
+- Authentication endpoints exist:
+  - `POST /api/auth/login`
+  - `POST /api/auth/login-pin`
+- Core admin/waiter/cashier UI exists as static HTML + JavaScript (served by FastAPI):
+  - waiter screen: dine-in/takeaway order taking + submitting batches
+  - counter screen: cashier checkout + reports dashboard
+  - table dashboard: item status controls and table/order detail sidebar
+- Backend POS domain endpoints exist:
+  - menu management (`/api/categories/`, `/api/menu-items/`)
+  - zones/tables management (`/api/zones`, `/api/tables`)
+  - order lifecycle (`/api/orders/submit`, `/api/orders/active-takeaways`, `/api/orders/active-by-table/{id}`, `/api/orders/{order_id}/details`, `/api/orders/{order_id}/items/{item_id}/status`)
+  - checkout (`/api/orders/{order_id}/checkout`)
+  - reports analytics (`/api/reports/*`)
+- WebSocket realtime exists:
+  - kitchen/KDS-style batch delivery (`new_order_batch`)
+  - table/cashier refresh (`order_updated`, `table_status_changed`, `table_grid_updated`)
+  - takeaways refresh (`takeaways_updated`)
+  - menu item realtime updates
+- Printing is implemented as a mock ticket writer:
+  - writes to local `*_output.txt` files per resolved printer name
+
+### Remediation Status (Completed)
+All planned remediation steps are now implemented and test-backed:
+- Step 0: Test harness established
+  - `pytest` + API test setup with isolated test DB and role-based auth helpers
+- Step 1: Cancellation vs checkout consistency fixed
+  - checkout excludes cancelled line items from payable subtotal
+  - cashier receipt rendering hides cancelled items
+- Step 2: API contract hardening complete
+  - critical order endpoints now use explicit `response_model`
+- Step 3: Comprehensive RBAC enforcement complete in `routers/orders.py`
+  - create/append/view endpoints: `admin`, `cashier`, `waiter`
+  - checkout endpoints: `admin`, `cashier` only
+  - unauthorized access returns `403`
+- Step 4: `order.status` literal validation complete
+  - strict allowed status literals with normalization
+  - invalid literals rejected with `422`
+- Step 5: Rounding determinism completed
+  - money values rounded to 2 decimals before save/response in key order flows
+  - invariant tests cover decimal-sensitive scenarios (e.g., `3.33 × 3 = 9.99`) and stable checkout change calculations
+
+Validation evidence:
+- Automated backend suite is green with invariant/contract/RBAC/cancellation tests.
+- Current result: `19 passed` in `pytest`.
+
+## Phase 1 (0–30 days): Fully Functional POS MVP
+### Goal
+Deliver end-to-end daily restaurant POS functionality for `admin`, `waiter`, and `cashier`.
+
+### Must-win outcomes (verifiable)
+- Login works for username/password and PIN.
+- Staff roles correctly gate sensitive actions (admin vs waiter vs cashier).
+- Admin can manage:
+  - categories
+  - menu items (including `is_available`, modifiers config, and images)
+  - zones and tables
+  - staff users
+- Waiter can:
+  - create dine-in orders for tables
+  - add-on items to an existing open/dining order for a table
+  - create takeaway orders
+  - submit items so kitchen/KDS receives new batches
+  - update item status (served/cooking/cancelled)
+- Cashier can:
+  - view one canonical order per table
+  - checkout with payment method, optional discount, tendered and change validation
+- Reports return stable analytics summaries for the current day and historical trends.
+
+### Implementable steps
+1. Contract hardening for critical order flows (completed)
+   - Add missing `response_model` types for the key order endpoints.
+   - Ensure request/response schemas are aligned to the specs and are stable for the frontend.
+2. Correctness alignment: cancellation and checkout totals (completed)
+   - Ensure totals computed during:
+     - item cancellation/state changes
+     - checkout
+     are consistent and exclude cancelled items using the same server-side rule.
+3. Backend RBAC enforcement for order APIs (completed)
+   - Add `require_roles(...)` to order endpoints so role boundaries are enforced server-side (not only by frontend gating).
+4. Automated test harness + merge-gate tests (completed)
+   - Add `pytest` + backend tests.
+   - Add tests for:
+     - role access (admin/waiter/cashier)
+     - order submit and checkout invariants
+     - cancellation effects on totals
+     - invalid status inputs
+5. Financial rounding determinism improvements (completed)
+   - Make rounding/2-decimal rules explicit and consistent across order submit/append, item updates, and checkout.
+
+## Phase 2 (31–90 days): Stable POS System
+### Goal
+Reduce production incidents and make the system predictable for staff under busy conditions.
+
+### Must-win outcomes (verifiable)
+- Order correctness improves (lower `order error rate`).
+- Staff adoption improves (reduce training time through consistent UX).
+- Checkout time is within acceptable bounds under typical load.
+
+### Implementable steps
+1. Strengthen domain rules with tests
+   - Add regression tests for edge cases:
+     - invalid quantities
+     - invalid statuses
+     - discount edge cases (0, negative, huge values)
+     - duplicate/rapid submits (define expected behavior)
+2. Improve money correctness strategy
+   - Define a contract-level rule for rounding (2 decimals).
+   - Plan refactor from `float` toward `Decimal`/`Numeric` while keeping API contracts stable.
+3. Backend error handling standardization
+   - Create a consistent error response format.
+   - Update frontend to handle these errors predictably.
+4. Documentation completeness for SDD
+   - Every feature spec must include:
+     - acceptance criteria (Given/When/Then)
+     - API contract updates (schemas + response_model)
+     - automated tests scope
+     - review checklist completion
+5. WebSocket reliability and payload stability
+   - Ensure event names and payload fields remain backwards compatible or are versioned.
+
+## Phase 3 (3–12 months): Extendable Platform
+### Goal
+Add new features safely without breaking existing workflows.
+
+### Implementable steps
+1. Data platform hardening (PostgreSQL)
+   - Create a PostgreSQL migration plan.
+   - Adopt migration tooling (e.g., Alembic) once moving beyond SQLite constraints.
+2. Frontend evolution (optional)
+   - Keep current JS UI in the short term (as you requested).
+   - Later stage: migrate to Next.js or another structured frontend only after contracts and tests are stable.
+3. Feature extension framework
+   - Establish “new feature templates”:
+     - feature spec template
+     - contract change checklist
+     - tests template
+     - UX review checklist
+4. Expand domain model (as requested)
+   - Add features only through spec + tests workflow, for example:
+     - tax, item categories by printer mapping customization
+     - shift/session tracking
+     - refunds or partial refunds
+     - inventory/purchasing (if needed)
+
+## Roadmap Governance (SDD)
+- Every merge requires: spec + contract updates + review checklist + automated tests.
+- Final decision authority: `developer` role (per our constitution draft).
+

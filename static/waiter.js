@@ -130,6 +130,60 @@ async function showSelectContextAlert() {
   showError(message);
 }
 
+function showNativeConfirmModal(title, message) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fixed inset-0 bg-black/40 z-[10000] flex items-center justify-center p-4';
+
+    const modal = document.createElement('div');
+    modal.className = 'w-full max-w-md bg-white rounded-lg shadow-2xl overflow-hidden';
+    modal.innerHTML = `
+      <div class="px-4 py-3 border-b border-slate-200">
+        <h3 class="text-lg font-semibold text-slate-800">${escapeHtml(title)}</h3>
+      </div>
+      <div class="px-4 py-4 text-sm text-slate-700">
+        ${escapeHtml(message)}
+      </div>
+      <div class="px-4 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
+        <button type="button" data-confirm-cancel class="px-3 py-2 rounded border border-slate-300 text-slate-700 hover:bg-slate-100">${escapeHtml(t('cancel', 'Cancel'))}</button>
+        <button type="button" data-confirm-ok class="px-4 py-2 rounded bg-rose-600 text-white hover:bg-rose-700">${escapeHtml(t('confirm', 'Confirm'))}</button>
+      </div>
+    `;
+
+    function cleanup(result) {
+      backdrop.remove();
+      resolve(result);
+    }
+
+    modal.querySelector('[data-confirm-cancel]')?.addEventListener('click', () => cleanup(false));
+    modal.querySelector('[data-confirm-ok]')?.addEventListener('click', () => cleanup(true));
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) cleanup(false);
+    });
+    document.addEventListener(
+      'keydown',
+      function onKeyDown(e) {
+        if (e.key === 'Escape') {
+          document.removeEventListener('keydown', onKeyDown);
+          cleanup(false);
+        }
+      },
+      { once: true }
+    );
+
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+  });
+}
+
+async function confirmAction(title, message) {
+  if (window.CustomDialog?.confirm) {
+    const result = await window.CustomDialog.confirm(title, message);
+    return isConfirmAccepted(result);
+  }
+  return showNativeConfirmModal(title, message);
+}
+
 async function ensureActiveOrderContextSelected() {
   if (activeOrderContext) return true;
   await showSelectContextAlert();
@@ -234,11 +288,36 @@ async function fetchOrderDetails(orderId) {
 }
 
 async function updateOrderItemStatus(orderId, itemId, status) {
-  return fetchJson(`${API_BASE}/api/orders/${orderId}/items/${itemId}/status`, {
+  const safeOrderId = Number(orderId);
+  const safeItemId = Number(itemId);
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  if (!Number.isFinite(safeOrderId) || safeOrderId <= 0 || !Number.isFinite(safeItemId) || safeItemId <= 0) {
+    throw new Error(`Invalid order/item id. orderId=${orderId}, itemId=${itemId}`);
+  }
+  const url = `${API_BASE}/api/orders/${safeOrderId}/items/${safeItemId}/status`;
+  console.log('[Waiter][updateOrderItemStatus] request', {
+    url,
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
+    orderId: safeOrderId,
+    itemId: safeItemId,
+    status: normalizedStatus,
   });
+  try {
+    return await fetchJson(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: normalizedStatus }),
+    });
+  } catch (err) {
+    console.error('[Waiter][updateOrderItemStatus] failed', {
+      url,
+      orderId: safeOrderId,
+      itemId: safeItemId,
+      status: normalizedStatus,
+      error: err,
+    });
+    throw err;
+  }
 }
 
 function getCategoriesWithItems() {
@@ -1114,10 +1193,21 @@ function renderTableDetailsItems(orderDetails) {
     if (statusBtn && content.contains(statusBtn)) {
       const itemId = Number(statusBtn.getAttribute('data-toggle-served-item-id'));
       const nextStatus = normalizeTrackingStatus(statusBtn.getAttribute('data-next-status'));
-      if (!tableDetailsOrderId || !itemId) return;
+      const orderIdForUpdate = Number(tableDetailsOrderId || orderDetails?.id || 0);
+      if (!orderIdForUpdate || !itemId) {
+        console.warn('[Waiter][status-toggle] missing identifiers', {
+          tableDetailsOrderId,
+          orderDetailsId: orderDetails?.id,
+          itemId,
+          nextStatus,
+        });
+        showError(t('load_failed', 'Load Failed'));
+        return;
+      }
       statusBtn.disabled = true;
       try {
-        const updatedOrder = await updateOrderItemStatus(tableDetailsOrderId, itemId, nextStatus);
+        console.log('[Waiter][status-toggle] click', { orderId: orderIdForUpdate, itemId, nextStatus });
+        const updatedOrder = await updateOrderItemStatus(orderIdForUpdate, itemId, nextStatus);
         renderTableDetailsItems(updatedOrder || orderDetails);
         if (nextStatus === 'served') showSuccess(`${t('item', 'Item')} ${t('served', 'Served')}.`);
         else showSuccess(`${t('item', 'Item')} ${t('pending', 'Pending')}.`);
@@ -1132,21 +1222,24 @@ function renderTableDetailsItems(orderDetails) {
 
     if (cancelBtn && content.contains(cancelBtn)) {
       const itemId = Number(cancelBtn.getAttribute('data-cancel-order-item-id'));
-      if (!tableDetailsOrderId || !itemId) return;
-      const dialog = window.CustomDialog?.confirm;
-      if (!dialog) {
+      const orderIdForUpdate = Number(tableDetailsOrderId || orderDetails?.id || 0);
+      if (!orderIdForUpdate || !itemId) {
+        console.warn('[Waiter][cancel-item] missing identifiers', {
+          tableDetailsOrderId,
+          orderDetailsId: orderDetails?.id,
+          itemId,
+        });
         showError(t('load_failed', 'Load Failed'));
         return;
       }
-      const confirmResult = await window.CustomDialog.confirm(
-        'Cancel Item',
-        'Did you check with the kitchen? Are you sure you want to cancel this item?',
-      );
-      const isConfirmed = isConfirmAccepted(confirmResult);
+      const confirmTitle = 'Cancel Item';
+      const confirmMessage = 'Did you check with the kitchen? Are you sure you want to cancel this item?';
+      const isConfirmed = await confirmAction(confirmTitle, confirmMessage);
       if (!isConfirmed) return;
       cancelBtn.disabled = true;
       try {
-        const updatedOrder = await updateOrderItemStatus(tableDetailsOrderId, itemId, 'cancelled');
+        console.log('[Waiter][cancel-item] click', { orderId: orderIdForUpdate, itemId, status: 'cancelled' });
+        const updatedOrder = await updateOrderItemStatus(orderIdForUpdate, itemId, 'cancelled');
         renderTableDetailsItems(updatedOrder || orderDetails);
         showSuccess(t('cancelled', 'Cancelled'));
         queueRefresh();

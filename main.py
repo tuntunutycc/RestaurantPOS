@@ -15,6 +15,109 @@ from routers import auth, menu, orders, reports, tables, users
 from websocket_manager import ConnectionManager
 
 
+def _ensure_order_items_cancelled_status_constraint():
+    """SQLite safety migration for legacy DBs missing cancelled status in check constraint."""
+    try:
+        from sqlalchemy import text
+
+        with engine.begin() as conn:
+            create_sql = conn.execute(
+                text("SELECT sql FROM sqlite_master WHERE type='table' AND name='order_items'")
+            ).scalar()
+            if not create_sql:
+                return
+
+            normalized_sql = str(create_sql).lower()
+            if (
+                "ck_order_items_status_valid" in normalized_sql
+                and "'cancelled'" in normalized_sql
+            ):
+                return
+
+            cols = {
+                row["name"]
+                for row in conn.execute(text("PRAGMA table_info(order_items)")).mappings()
+            }
+
+            def src(column: str, fallback_sql: str) -> str:
+                return column if column in cols else fallback_sql
+
+            conn.execute(text("PRAGMA foreign_keys=OFF"))
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE order_items_new (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        order_id INTEGER NOT NULL,
+                        menu_item_id INTEGER NOT NULL,
+                        quantity INTEGER NOT NULL,
+                        subtotal FLOAT NOT NULL,
+                        batch_number INTEGER NOT NULL DEFAULT 1,
+                        batch_status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                        status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                        selected_modifiers JSON NOT NULL DEFAULT '[]',
+                        note VARCHAR(1024),
+                        special_instructions VARCHAR(1024),
+                        created_by_id INTEGER,
+                        CONSTRAINT ck_order_items_quantity_positive CHECK (quantity > 0),
+                        CONSTRAINT ck_order_items_subtotal_nonnegative CHECK (subtotal >= 0),
+                        CONSTRAINT ck_order_items_status_valid CHECK (
+                            status IN ('pending','cooking','served','cancelled')
+                        ),
+                        FOREIGN KEY(order_id) REFERENCES orders (id),
+                        FOREIGN KEY(menu_item_id) REFERENCES menu_items (id),
+                        FOREIGN KEY(created_by_id) REFERENCES users (id)
+                    )
+                    """
+                )
+            )
+
+            conn.execute(
+                text(
+                    f"""
+                    INSERT INTO order_items_new (
+                        id, order_id, menu_item_id, quantity, subtotal,
+                        batch_number, batch_status, status, selected_modifiers,
+                        note, special_instructions, created_by_id
+                    )
+                    SELECT
+                        id,
+                        order_id,
+                        menu_item_id,
+                        quantity,
+                        subtotal,
+                        {src("batch_number", "1")},
+                        {src("batch_status", "'pending'")},
+                        LOWER(TRIM({src("status", "'pending'")})),
+                        {src("selected_modifiers", "'[]'")},
+                        {src("note", "NULL")},
+                        {src("special_instructions", "NULL")},
+                        {src("created_by_id", "NULL")}
+                    FROM order_items
+                    """
+                )
+            )
+
+            conn.execute(text("DROP TABLE order_items"))
+            conn.execute(text("ALTER TABLE order_items_new RENAME TO order_items"))
+            conn.execute(text("CREATE INDEX ix_order_items_id ON order_items (id)"))
+            conn.execute(
+                text("CREATE INDEX ix_order_items_order_status ON order_items (order_id, status)")
+            )
+            conn.execute(text("CREATE INDEX ix_order_items_batch_number ON order_items (batch_number)"))
+            conn.execute(
+                text("CREATE INDEX ix_order_items_order_batch ON order_items (order_id, batch_number)")
+            )
+            conn.execute(text("CREATE INDEX ix_order_items_menu_item_id ON order_items (menu_item_id)"))
+            conn.execute(text("CREATE INDEX ix_order_items_created_by_id ON order_items (created_by_id)"))
+            conn.execute(text("CREATE INDEX ix_order_items_order_id ON order_items (order_id)"))
+            conn.execute(text("CREATE INDEX ix_order_items_status ON order_items (status)"))
+            conn.execute(text("PRAGMA foreign_keys=ON"))
+    except Exception:
+        # Keep startup resilient in local/dev mode.
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Create database tables on startup."""
@@ -158,6 +261,7 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         pass
+    _ensure_order_items_cancelled_status_constraint()
     # Add payment fields to orders for cashier checkout.
     try:
         from sqlalchemy import text

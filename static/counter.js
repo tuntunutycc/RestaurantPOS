@@ -845,7 +845,8 @@ function selectOrder(order) {
   if (!order) return;
   selectedOrderId = order.id;
   selectedTableNumber = order.table_number;
-  selectedOrderSubtotal = (order.items || []).reduce((sum, i) => sum + (Number(i.subtotal) || 0), 0);
+  const visibleItems = (order.items || []).filter((i) => String(i?.item_status || '').toLowerCase() !== 'cancelled');
+  selectedOrderSubtotal = visibleItems.reduce((sum, i) => sum + (Number(i.subtotal) || 0), 0);
   selectedOrderTotal = selectedOrderSubtotal;
   document.getElementById('receipt-placeholder').classList.add('hidden');
   const container = document.getElementById('receipt-container');
@@ -858,7 +859,7 @@ function selectOrder(order) {
       ? `${t('checkout', 'Checkout')} - ${t('takeaway', 'Takeaway')} (${t('customer', 'Customer')}: ${customer})`
       : `${t('checkout', 'Checkout')} - ${t('table', 'Table')} ${order.table_number}`;
   }
-  const itemsRows = (order.items || [])
+  const itemsRows = visibleItems
     .map(
       (i) =>
         `<tr><td class="py-1">${escapeHtml(i.menu_item_name)}</td><td class="py-1 text-right">${i.quantity}</td><td class="py-1 text-right">$${Number(i.subtotal).toFixed(2)}</td></tr>`
@@ -911,7 +912,8 @@ function renderReceiptForPrint(order) {
     if (rpChange) rpChange.textContent = order.change_amount != null ? `$${Number(order.change_amount).toFixed(2)}` : '$0.00';
 
     let subtotal = 0;
-    const rows = (order.items || [])
+    const visibleItems = (order.items || []).filter((i) => String(i?.item_status || '').toLowerCase() !== 'cancelled');
+    const rows = visibleItems
       .map((item) => {
         subtotal += Number(item.subtotal) || 0;
         return `
