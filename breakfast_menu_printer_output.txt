@@ -355,3 +355,34 @@ Time: 2026-04-13T04:11:41.008895
 ---------------------------------
 [ --- CUT TICKET --- ]
 -- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #4
+Time: 2026-04-17T07:33:06.682693
+---------------------------------
+1x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #4
+Time: 2026-04-17T07:33:06.682693
+---------------------------------
+2x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #5
+Time: 2026-04-17T07:34:37.372380
+---------------------------------
+2x စီလုံတီး
+---------------------------------
+[ --- CUT TICKET --- ]
+[ --- CUT TICKET --- ]
