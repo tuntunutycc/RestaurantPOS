@@ -152,7 +152,57 @@ async def lifespan(app: FastAPI):
             conn.execute(
                 text(
                     "ALTER TABLE menu_items "
+                    "ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE menu_items ADD COLUMN deleted_at DATETIME"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE menu_items "
                     "ADD COLUMN modifiers_config JSON NOT NULL DEFAULT '[]'"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN menu_item_name_at_sale VARCHAR(255)"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN unit_price_at_sale FLOAT"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN category_name_at_sale VARCHAR(255)"
                 )
             )
     except Exception:
@@ -347,6 +397,23 @@ async def lifespan(app: FastAPI):
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE users ADD COLUMN pin_code VARCHAR(4)"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE users "
+                    "ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN deleted_at DATETIME"))
     except Exception:
         pass
     try:

@@ -44,6 +44,8 @@ class MenuItem(Base):
     description = Column(String(1024), nullable=True)
     image_url = Column(String(512), nullable=True)  # e.g. /images/menu/xxx.png
     is_available = Column(Boolean, nullable=False, default=True, index=True)
+    is_deleted = Column(Boolean, nullable=False, default=False, index=True)
+    deleted_at = Column(DateTime, nullable=True)
     # Flexible modifier groups/options config for this menu item.
     modifiers_config = Column(JSON, nullable=False, default=list)
     category_id = Column(
@@ -184,6 +186,10 @@ class OrderItem(Base):
     note = Column(String(1024), nullable=True)
     # Free-text instructions for kitchen (e.g. "No MSG").
     special_instructions = Column(String(1024), nullable=True)
+    # Historical snapshots to preserve reporting even if related records change/delete.
+    menu_item_name_at_sale = Column(String(255), nullable=True)
+    unit_price_at_sale = Column(Float, nullable=True)
+    category_name_at_sale = Column(String(255), nullable=True)
 
     # Who created this specific batch (ticket) in the dining session.
     # We store it per OrderItem row so Kitchen can show waiter per batch.
@@ -206,4 +212,6 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(32), nullable=False, index=True)  # admin, waiter, kitchen, cashier
     pin_code = Column(String(4), unique=True, nullable=True, index=True)  # exactly 4 chars, for staff
+    is_deleted = Column(Boolean, nullable=False, default=False, index=True)
+    deleted_at = Column(DateTime, nullable=True)
     created_order_items = relationship("OrderItem", back_populates="created_by")

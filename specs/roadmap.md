@@ -61,6 +61,12 @@ All planned remediation steps are now implemented and test-backed:
   - Harden delete safety: block deleting tables with non-finalized orders and return a clear `400` reason.
   - Preserve sales history safely by detaching finalized historical orders (`table_id = NULL`) when table deletion succeeds.
   - Add test coverage for successful delete, blocked delete with active order, and non-admin RBAC denial.
+- Step 8: System integrity audit for deletion safety (planned)
+  - Audit all FK relationships in `models.py` and remove destructive delete behavior for critical history.
+  - Harden user deletion so historical transactional rows survive (null-safe references + fallback labels).
+  - Harden menu item deletion with soft-delete-first policy for items with order history.
+  - Enforce backend/frontend null-safety when related rows are deleted or detached.
+  - Add invariant tests proving reports remain stable after user/menu-item deletion events.
 
 Validation evidence:
 - Automated backend suite is green with invariant/contract/RBAC/cancellation tests.
@@ -120,6 +126,18 @@ Deliver end-to-end daily restaurant POS functionality for `admin`, `waiter`, and
    - Block table deletion when non-finalized orders exist; allow deletion only after orders are finalized.
    - Detach finalized historical orders from deleted tables to preserve sales history.
    - Add test coverage for delete success, delete blocked by active order, and non-admin delete denial.
+8. System integrity + stability audit for data deletion (next)
+   - **FK strategy hardening**
+     - Prohibit critical-history cascades (especially order-history references).
+     - Use nullable references + `SET NULL` semantics where entity deletion is allowed.
+   - **Soft delete rollout**
+     - Add soft-delete lifecycle for `users` and `menu_items` (`is_deleted`, `deleted_at`, optional `deleted_by_id`).
+     - Keep hard delete only for entities with no historical references.
+   - **Null safety**
+     - Backend schemas/serializers/reports must return fallback values for missing related entities.
+     - Frontend screens must render `[Deleted User]` / `[Deleted Item]` without crashes.
+   - **Invariant tests**
+     - Add tests that delete/soft-delete users and menu items, then verify daily sales and analytics endpoints still return valid data.
 
 ## Phase 2 (31–90 days): Stable POS System
 ### Goal

@@ -88,12 +88,12 @@ function getMenuPriceHtml(menuItem) {
   if (discount > 0) {
     return `
       <div class="flex items-center gap-2 mt-0.5">
-        <span class="line-through text-gray-500 text-xs">$${normal.toFixed(2)}</span>
-        <span class="text-red-500 font-bold text-sm">$${discount.toFixed(2)}</span>
+        <span class="line-through text-gray-500 text-xs">${formatMoney(normal)}</span>
+        <span class="text-red-500 font-bold text-sm">${formatMoney(discount)}</span>
       </div>
     `;
   }
-  return `<span class="text-sm text-slate-600 block">$${normal.toFixed(2)}</span>`;
+  return `<span class="text-sm text-slate-600 block">${formatMoney(normal)}</span>`;
 }
 
 function buildCartLineKey(menuItemId, selectedModifiers, specialInstructions) {
@@ -677,7 +677,7 @@ function renderTakeawayOrdersList(orders) {
       card.innerHTML = `
         <div class="font-semibold text-slate-800">${escapeHtml(t('takeaway', 'Takeaway'))} - ${escapeHtml(customer)}</div>
         <div class="text-xs text-slate-600 mt-1">Order #${orderId}</div>
-        <div class="text-sm font-medium text-orange-700 mt-1">$${toNumber(order.total_amount, 0).toFixed(2)}</div>
+        <div class="text-sm font-medium text-orange-700 mt-1">${formatMoney(toNumber(order.total_amount, 0))}</div>
         <div class="mt-2 flex gap-1 flex-wrap">
           <span class="text-[11px] px-2 py-0.5 rounded bg-amber-100 text-amber-800">${escapeHtml(t('pending', 'Pending'))}: ${pending}</span>
           <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">${escapeHtml(t('served', 'Served'))}: ${served}</span>
@@ -863,7 +863,7 @@ function renderCart() {
 
   if (cart.size === 0) {
     list.innerHTML = `<li class="text-slate-500">${escapeHtml(t('cart_empty', 'Cart is empty'))}</li>`;
-    totalEl.textContent = '$0.00';
+    totalEl.textContent = formatMoney(0);
     renderSelectedTableLabel();
     updateCartUIContext();
     return;
@@ -877,10 +877,10 @@ function renderCart() {
     const discountPrice = toNumber(menu_item?.discount_price, 0);
     const normalPrice = toNumber(menu_item?.price, 0);
     const priceHtml = discountPrice > 0
-      ? `<div class="text-xs mt-0.5"><span class="line-through text-slate-400">$${normalPrice.toFixed(2)}</span> <span class="text-red-500 font-semibold">$${discountPrice.toFixed(2)}</span></div>`
+      ? `<div class="text-xs mt-0.5"><span class="line-through text-slate-400">${formatMoney(normalPrice)}</span> <span class="text-red-500 font-semibold">${formatMoney(discountPrice)}</span></div>`
       : '';
     const modifiersHtml = (selected_modifiers || []).length
-      ? `<div class="text-xs text-slate-500 mt-0.5">${(selected_modifiers || []).map((m) => `+ ${escapeHtml(m.name)}${toNumber(m.price, 0) ? ` ($${toNumber(m.price, 0).toFixed(2)})` : ''}`).join(', ')}</div>`
+      ? `<div class="text-xs text-slate-500 mt-0.5">${(selected_modifiers || []).map((m) => `+ ${escapeHtml(m.name)}${toNumber(m.price, 0) ? ` (${formatMoney(toNumber(m.price, 0))})` : ''}`).join(', ')}</div>`
       : '';
     const noteHtml = special_instructions
       ? `<div class="text-xs text-slate-500 italic mt-0.5">${escapeHtml(special_instructions)}</div>`
@@ -894,7 +894,7 @@ function renderCart() {
         ${modifiersHtml}
         ${noteHtml}
       </div>
-      <span class="font-medium">$${subtotal.toFixed(2)}</span>
+      <span class="font-medium">${formatMoney(subtotal)}</span>
       <div class="flex items-center gap-0">
         <button type="button" data-key="${escapeAttr(lineKey)}" class="qty-btn minus w-7 h-7 rounded border border-slate-300 bg-slate-100 hover:bg-slate-200">-</button>
         <span class="w-6 text-center text-sm">${quantity}</span>
@@ -907,7 +907,7 @@ function renderCart() {
   list.querySelectorAll('.qty-btn.minus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, -1)));
   list.querySelectorAll('.qty-btn.plus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, 1)));
 
-  totalEl.textContent = `$${total.toFixed(2)}`;
+  totalEl.textContent = formatMoney(total);
   renderSelectedTableLabel();
   updateCartUIContext();
 }
@@ -937,7 +937,7 @@ function updateModifierModalAddButton() {
   const addBtn = document.getElementById('modifier-modal-add');
   if (!addBtn || !modifierModalItem) return;
   const total = getEffectiveBasePrice(modifierModalItem) + modifiersTotal(getSelectedModifiersFromModal());
-  addBtn.textContent = `${t('add_to_cart', 'Add to Cart')} ($${total.toFixed(2)})`;
+  addBtn.textContent = `${t('add_to_cart', 'Add to Cart')} (${formatMoney(total)})`;
 }
 
 function validateRequiredModifierGroups() {
@@ -975,9 +975,9 @@ function openModifierModal(menuItem) {
   const basePrice = getEffectiveBasePrice(menuItem);
   const normalPrice = toNumber(menuItem.price, 0);
   if (toNumber(menuItem.discount_price, 0) > 0) {
-    base.innerHTML = `Base: <span class="line-through text-slate-400">$${normalPrice.toFixed(2)}</span> <span class="text-red-500 font-semibold">$${basePrice.toFixed(2)}</span>`;
+    base.innerHTML = `Base: <span class="line-through text-slate-400">${formatMoney(normalPrice)}</span> <span class="text-red-500 font-semibold">${formatMoney(basePrice)}</span>`;
   } else {
-    base.textContent = `Base: $${basePrice.toFixed(2)}`;
+    base.textContent = `Base: ${formatMoney(basePrice)}`;
   }
   noteEl.value = '';
 
@@ -1009,7 +1009,7 @@ function openModifierModal(menuItem) {
                   />
                   <span>${escapeHtml(opt?.name || 'Option')}</span>
                 </span>
-                <span class="text-slate-600">+${toNumber(opt?.price, 0).toFixed(2)}</span>
+                <span class="text-slate-600">+${formatMoney(toNumber(opt?.price, 0))}</span>
               </label>
             `).join('')}
           </div>
@@ -1161,7 +1161,7 @@ function renderTableDetailsItems(orderDetails) {
   content.innerHTML = `
     <div class="rounded-md border border-slate-200 bg-slate-50 p-3 mb-2">
       <p class="text-sm text-slate-600">${escapeHtml(t('grand_total', 'Grand Total'))}</p>
-      <p class="text-lg font-semibold text-slate-800">$${Number(orderDetails?.total_amount || 0).toFixed(2)}</p>
+      <p class="text-lg font-semibold text-slate-800">${formatMoney(Number(orderDetails?.total_amount || 0))}</p>
     </div>
     ${items.map((item) => {
     const status = normalizeTrackingStatus(item.item_status);

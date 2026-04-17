@@ -19,7 +19,11 @@ def login_pin(body: LoginPinRequest, db: Session = Depends(get_db)):
     Authenticate with 4-digit PIN. Returns JWT and user info (id, username, role).
     Used by staff (waiter, kitchen, cashier) for fast login.
     """
-    user = db.query(User).filter(User.pin_code == body.pin_code).first()
+    user = (
+        db.query(User)
+        .filter(User.pin_code == body.pin_code, User.is_deleted.is_(False))
+        .first()
+    )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -37,7 +41,11 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     """
     Authenticate with username and password. Returns JWT and user info.
     """
-    user = db.query(User).filter(User.username == body.username).first()
+    user = (
+        db.query(User)
+        .filter(User.username == body.username, User.is_deleted.is_(False))
+        .first()
+    )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

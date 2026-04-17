@@ -1,5 +1,6 @@
 """Menu API: categories and menu items."""
 
+from datetime import datetime
 import uuid
 from pathlib import Path
 
@@ -133,6 +134,7 @@ def list_menu_items(
 ):
     """Retrieve all menu items, optionally filtered by category_id. Requires authentication."""
     q = db.query(MenuItem)
+    q = q.filter(MenuItem.is_deleted.is_(False))
     if category_id is not None:
         q = q.filter(MenuItem.category_id == category_id)
     return q.all()
@@ -151,7 +153,11 @@ async def update_menu_item(
     Supports partial updates for name, price, description, category_id, image_url,
     is_available, and modifiers_config.
     """
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    db_item = (
+        db.query(MenuItem)
+        .filter(MenuItem.id == item_id, MenuItem.is_deleted.is_(False))
+        .first()
+    )
     if not db_item:
         raise HTTPException(status_code=404, detail="Menu item not found")
 
@@ -183,7 +189,11 @@ async def toggle_menu_item_availability(
     current_user: User = Depends(require_roles(["admin"])),
 ):
     """Toggle a menu item's availability. Admin only."""
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    db_item = (
+        db.query(MenuItem)
+        .filter(MenuItem.id == item_id, MenuItem.is_deleted.is_(False))
+        .first()
+    )
     if not db_item:
         raise HTTPException(status_code=404, detail="Menu item not found")
 
@@ -208,24 +218,17 @@ async def delete_menu_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(["admin"])),
 ):
-    """Delete a menu item only if it has no order history. Admin only."""
-    db_item = db.query(MenuItem).filter(MenuItem.id == item_id).first()
+    """Soft-delete a menu item. Historical order rows remain intact."""
+    db_item = (
+        db.query(MenuItem)
+        .filter(MenuItem.id == item_id, MenuItem.is_deleted.is_(False))
+        .first()
+    )
     if not db_item:
         raise HTTPException(status_code=404, detail="Menu item not found")
-
-    used_in_orders = (
-        db.query(OrderItem.id)
-        .filter(OrderItem.menu_item_id == item_id)
-        .first()
-        is not None
-    )
-    if used_in_orders:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete item with order history. Disable it instead.",
-        )
-
-    db.delete(db_item)
+    db_item.is_deleted = True
+    db_item.deleted_at = datetime.utcnow()
+    db_item.is_available = False
     db.commit()
 
     manager = getattr(request.app.state, "ws_manager", None)

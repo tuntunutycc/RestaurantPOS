@@ -396,6 +396,8 @@ class OrderResponseDetail(BaseModel):
         """Build from Order ORM: map order_items to items with menu_item name."""
         if hasattr(data, "order_items"):
             order = data
+            deleted_item_label = "[Deleted Item]"
+            deleted_user_label = "[Deleted User]"
             # Served by = waiter who created the latest batch (highest batch_number).
             latest_oi = None
             try:
@@ -403,19 +405,49 @@ class OrderResponseDetail(BaseModel):
             except Exception:
                 latest_oi = None
             served_by_name = (
-                getattr(getattr(latest_oi, "created_by", None), "username", None)
+                (
+                    getattr(getattr(latest_oi, "created_by", None), "username", None)
+                    if (
+                        latest_oi is not None
+                        and getattr(latest_oi, "created_by", None) is not None
+                        and not bool(getattr(getattr(latest_oi, "created_by", None), "is_deleted", False))
+                    )
+                    else (
+                        deleted_user_label
+                        if latest_oi is not None and getattr(latest_oi, "created_by_id", None) is not None
+                        else None
+                    )
+                )
                 if latest_oi is not None
                 else None
             )
             items = [
                 OrderItemDetail(
-                    menu_item_name=oi.menu_item.name,
+                    menu_item_name=(
+                        getattr(getattr(oi, "menu_item", None), "name", None)
+                        if (
+                            getattr(oi, "menu_item", None) is not None
+                            and not bool(getattr(getattr(oi, "menu_item", None), "is_deleted", False))
+                        )
+                        else (getattr(oi, "menu_item_name_at_sale", None) or deleted_item_label)
+                    ),
                     quantity=oi.quantity,
                     subtotal=float(oi.subtotal),
                     batch_number=getattr(oi, "batch_number", 1),
                     item_status=getattr(oi, "item_status", getattr(oi, "status", "pending")),
                     menu_item_image_url=getattr(oi.menu_item, "image_url", None),
-                    waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
+                    waiter_name=(
+                        getattr(getattr(oi, "created_by", None), "username", None)
+                        if (
+                            getattr(oi, "created_by", None) is not None
+                            and not bool(getattr(getattr(oi, "created_by", None), "is_deleted", False))
+                        )
+                        else (
+                            deleted_user_label
+                            if getattr(oi, "created_by_id", None) is not None
+                            else None
+                        )
+                    ),
                     selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
                     note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
                     special_instructions=getattr(oi, "special_instructions", None),

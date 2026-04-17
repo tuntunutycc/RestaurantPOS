@@ -71,7 +71,7 @@ def get_current_user(
         )
     user_id = int(payload["sub"])
     user = db.query(User).filter(User.id == user_id).first()
-    if not user:
+    if not user or bool(getattr(user, "is_deleted", False)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",

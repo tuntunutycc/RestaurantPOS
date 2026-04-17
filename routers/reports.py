@@ -22,6 +22,8 @@ from schemas import (
 )
 
 router = APIRouter(prefix="/api")
+DELETED_ITEM_LABEL = "[Deleted Item]"
+DELETED_CATEGORY_LABEL = "[Deleted Category]"
 
 
 @router.get("/reports/summary/today", response_model=TodaySalesSummaryResponse)
@@ -74,11 +76,15 @@ def get_top_selling_items_today(
     rows = (
         db.query(
             OrderItem.menu_item_id,
-            func.coalesce(MenuItem.name, "").label("menu_item_name"),
+            func.coalesce(
+                MenuItem.name,
+                OrderItem.menu_item_name_at_sale,
+                DELETED_ITEM_LABEL,
+            ).label("menu_item_name"),
             func.coalesce(func.sum(OrderItem.quantity), 0).label("quantity_sold"),
         )
         .join(Order, Order.id == OrderItem.order_id)
-        .join(MenuItem, MenuItem.id == OrderItem.menu_item_id)
+        .join(MenuItem, MenuItem.id == OrderItem.menu_item_id, isouter=True)
         .filter(
             Order.created_at >= start_of_day,
             Order.created_at < end_of_day,
@@ -233,11 +239,15 @@ def get_category_sales_breakdown(
 
     rows = (
         db.query(
-            func.coalesce(Category.name, "Uncategorized").label("category_name"),
+            func.coalesce(
+                Category.name,
+                OrderItem.category_name_at_sale,
+                DELETED_CATEGORY_LABEL,
+            ).label("category_name"),
             func.coalesce(func.sum(OrderItem.subtotal), 0.0).label("total_sales"),
         )
         .join(Order, Order.id == OrderItem.order_id)
-        .join(MenuItem, MenuItem.id == OrderItem.menu_item_id)
+        .join(MenuItem, MenuItem.id == OrderItem.menu_item_id, isouter=True)
         .join(Category, Category.id == MenuItem.category_id, isouter=True)
         .filter(
             Order.created_at >= start_dt,
@@ -245,7 +255,13 @@ def get_category_sales_breakdown(
             Order.status.in_(("paid", "completed")),
             OrderItem.item_status != "cancelled",
         )
-        .group_by(Category.name)
+        .group_by(
+            func.coalesce(
+                Category.name,
+                OrderItem.category_name_at_sale,
+                DELETED_CATEGORY_LABEL,
+            )
+        )
         .order_by(func.sum(OrderItem.subtotal).desc())
         .all()
     )
@@ -281,12 +297,22 @@ def get_cancellations_summary(
 
     top_rows = (
         db.query(
-            func.coalesce(MenuItem.name, "").label("item_name"),
+            func.coalesce(
+                MenuItem.name,
+                OrderItem.menu_item_name_at_sale,
+                DELETED_ITEM_LABEL,
+            ).label("item_name"),
             func.coalesce(func.sum(OrderItem.quantity), 0).label("cancel_count"),
         )
-        .join(MenuItem, MenuItem.id == OrderItem.menu_item_id)
+        .join(MenuItem, MenuItem.id == OrderItem.menu_item_id, isouter=True)
         .filter(OrderItem.item_status == "cancelled")
-        .group_by(MenuItem.name)
+        .group_by(
+            func.coalesce(
+                MenuItem.name,
+                OrderItem.menu_item_name_at_sale,
+                DELETED_ITEM_LABEL,
+            )
+        )
         .order_by(func.sum(OrderItem.quantity).desc())
         .limit(5)
         .all()

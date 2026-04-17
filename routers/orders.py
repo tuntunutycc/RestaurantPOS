@@ -30,6 +30,8 @@ from schemas import (
 router = APIRouter(prefix="/api")
 
 OPEN_ORDER_STATUSES = ("open", "dining")
+DELETED_ITEM_LABEL = "[Deleted Item]"
+DELETED_USER_LABEL = "[Deleted User]"
 
 
 def _normalized_item_status_value(item_status) -> str:
@@ -148,6 +150,26 @@ def _round_money(value) -> float:
         return 0.0
 
 
+def _display_menu_item_name(order_item: OrderItem) -> str:
+    menu_item = getattr(order_item, "menu_item", None)
+    if menu_item is not None and not bool(getattr(menu_item, "is_deleted", False)):
+        return (
+            getattr(menu_item, "name", None)
+            or getattr(order_item, "menu_item_name_at_sale", None)
+            or DELETED_ITEM_LABEL
+        )
+    return getattr(order_item, "menu_item_name_at_sale", None) or DELETED_ITEM_LABEL
+
+
+def _display_waiter_name(order_item: OrderItem) -> str | None:
+    created_by = getattr(order_item, "created_by", None)
+    if created_by is not None and not bool(getattr(created_by, "is_deleted", False)):
+        return getattr(created_by, "username", None)
+    if getattr(order_item, "created_by_id", None) is not None:
+        return DELETED_USER_LABEL
+    return None
+
+
 def _base_price_with_discount(menu_item: MenuItem) -> float:
     """
     Use discount price when it exists and is > 0, otherwise use standard price.
@@ -218,7 +240,11 @@ async def create_order(
         existing_total = float(existing.total_amount)
         added_items_detail = []
         for line in order_data.items:
-            menu_item = db.query(MenuItem).filter(MenuItem.id == line.menu_item_id).first()
+            menu_item = (
+                db.query(MenuItem)
+                .filter(MenuItem.id == line.menu_item_id, MenuItem.is_deleted.is_(False))
+                .first()
+            )
             if not menu_item:
                 raise HTTPException(status_code=404, detail=f"Menu item with id {line.menu_item_id} not found")
             if line.quantity < 1:
@@ -240,6 +266,9 @@ async def create_order(
                     selected_modifiers=selected_modifiers,
                     note=note_value,
                     special_instructions=note_value,
+                    menu_item_name_at_sale=menu_item.name,
+                    unit_price_at_sale=_round_money(base_price),
+                    category_name_at_sale=getattr(getattr(menu_item, "category", None), "name", None),
                 )
             )
             added_items_detail.append(
@@ -278,7 +307,11 @@ async def create_order(
     total_amount = 0.0
     order_items_data = []
     for line in order_data.items:
-        menu_item = db.query(MenuItem).filter(MenuItem.id == line.menu_item_id).first()
+        menu_item = (
+            db.query(MenuItem)
+            .filter(MenuItem.id == line.menu_item_id, MenuItem.is_deleted.is_(False))
+            .first()
+        )
         if not menu_item:
             raise HTTPException(status_code=404, detail=f"Menu item with id {line.menu_item_id} not found")
         if line.quantity < 1:
@@ -297,6 +330,9 @@ async def create_order(
                 "selected_modifiers": selected_modifiers,
                 "note": note_value,
                 "special_instructions": note_value,
+                "menu_item_name_at_sale": menu_item.name,
+                "unit_price_at_sale": _round_money(base_price),
+                "category_name_at_sale": getattr(getattr(menu_item, "category", None), "name", None),
             }
         )
 
@@ -322,6 +358,9 @@ async def create_order(
                 selected_modifiers=item_data["selected_modifiers"],
                 note=item_data["note"],
                 special_instructions=item_data["special_instructions"],
+                menu_item_name_at_sale=item_data["menu_item_name_at_sale"],
+                unit_price_at_sale=item_data["unit_price_at_sale"],
+                category_name_at_sale=item_data["category_name_at_sale"],
             )
         )
     previous_status = table.status if table else None
@@ -401,11 +440,11 @@ def list_active_takeaways(
             OrderItemDetailsResponse(
                 id=oi.id,
                 menu_item_id=oi.menu_item_id,
-                menu_item_name=getattr(getattr(oi, "menu_item", None), "name", ""),
+                menu_item_name=_display_menu_item_name(oi),
                 quantity=oi.quantity,
                 subtotal=float(oi.subtotal),
                 item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
-                waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
+                waiter_name=_display_waiter_name(oi),
                 selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
                 note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
                 special_instructions=getattr(oi, "special_instructions", None),
@@ -552,11 +591,11 @@ def get_order_details(
         OrderItemDetailsResponse(
             id=oi.id,
             menu_item_id=oi.menu_item_id,
-            menu_item_name=getattr(getattr(oi, "menu_item", None), "name", ""),
+            menu_item_name=_display_menu_item_name(oi),
             quantity=oi.quantity,
             subtotal=float(oi.subtotal),
             item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
-            waiter_name=getattr(getattr(oi, "created_by", None), "username", None),
+            waiter_name=_display_waiter_name(oi),
             selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
             note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
             special_instructions=getattr(oi, "special_instructions", None),
@@ -740,7 +779,7 @@ async def submit_order(
         menu_item = (
             db.query(MenuItem)
             .options(joinedload(MenuItem.category))
-            .filter(MenuItem.id == line.menu_item_id)
+            .filter(MenuItem.id == line.menu_item_id, MenuItem.is_deleted.is_(False))
             .first()
         )
         if not menu_item:
@@ -765,6 +804,9 @@ async def submit_order(
                 selected_modifiers=selected_modifiers,
                 note=note_value,
                 special_instructions=note_value,
+                menu_item_name_at_sale=menu_item.name,
+                unit_price_at_sale=_round_money(base_price),
+                category_name_at_sale=getattr(getattr(menu_item, "category", None), "name", None),
             )
         )
         batch_items_detail.append(

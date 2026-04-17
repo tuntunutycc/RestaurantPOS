@@ -214,12 +214,6 @@ function t(key, fallback) {
   return window.i18n?.t?.(key) || fallback || key;
 }
 
-function formatCurrencyKs(value) {
-  const n = Number(value);
-  const safe = Number.isFinite(n) ? n : 0;
-  return `${safe.toLocaleString('en-US', { maximumFractionDigits: 2 })} Ks`;
-}
-
 function destroyDashboardCharts() {
   if (topItemsChart) {
     topItemsChart.destroy();
@@ -383,7 +377,7 @@ async function loadCancellationsReport() {
   const totalCancelled = Number(data.total_cancelled_items || 0);
   const lostRevenue = Number(data.total_lost_revenue || 0);
   if (countEl) countEl.textContent = String(totalCancelled);
-  if (lostRevenueEl) lostRevenueEl.textContent = `$${lostRevenue.toFixed(2)}`;
+  if (lostRevenueEl) lostRevenueEl.textContent = formatMoney(lostRevenue);
 
   const topItems = Array.isArray(data.top_cancelled_items) ? data.top_cancelled_items : [];
   const labels = topItems.map((x) => String(x.item_name || ''));
@@ -614,9 +608,9 @@ async function loadDashboardSummary() {
     const totalOrders = Number(data.total_orders) || 0;
     const averageOrderValue = Number(data.average_order_value) || 0;
 
-    salesEl.textContent = formatCurrencyKs(totalSales);
+    salesEl.textContent = formatMoney(totalSales);
     ordersEl.textContent = String(Math.max(0, Math.floor(totalOrders)));
-    avgEl.textContent = formatCurrencyKs(averageOrderValue);
+    avgEl.textContent = formatMoney(averageOrderValue);
   } catch (err) {
     console.error(err);
     if (window.toast) window.toast.error('Failed to load dashboard summary');
@@ -666,10 +660,10 @@ function recalculateCheckoutTotals() {
   const discountEl = document.getElementById('receipt-discount-amount');
   const taxEl = document.getElementById('receipt-tax-amount');
   const grandTotalEl = document.getElementById('receipt-grand-total');
-  if (subtotalEl) subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
-  if (discountEl) discountEl.textContent = `-$${discountAmount.toFixed(2)}`;
-  if (taxEl) taxEl.textContent = `$${taxAmount.toFixed(2)}`;
-  if (grandTotalEl) grandTotalEl.textContent = `${t('grand_total', 'Grand Total')}: $${finalTotal.toFixed(2)}`;
+  if (subtotalEl) subtotalEl.textContent = formatMoney(subtotal);
+  if (discountEl) discountEl.textContent = formatMoneyNegative(discountAmount);
+  if (taxEl) taxEl.textContent = formatMoney(taxAmount);
+  if (grandTotalEl) grandTotalEl.textContent = `${t('grand_total', 'Grand Total')}: ${formatMoney(finalTotal)}`;
 
   selectedOrderTotal = finalTotal;
 
@@ -678,8 +672,8 @@ function recalculateCheckoutTotals() {
   const tendered = parseFloat(amountInput?.value || '0');
   const change = tendered - finalTotal;
   if (!changeSpan) return finalTotal;
-  if (Number.isNaN(change)) changeSpan.textContent = '$0.00';
-  else if (change >= 0) changeSpan.textContent = `$${change.toFixed(2)}`;
+  if (Number.isNaN(change)) changeSpan.textContent = formatMoney(0);
+  else if (change >= 0) changeSpan.textContent = formatMoney(change);
   else changeSpan.textContent = t('insufficient', 'Insufficient');
   return finalTotal;
 }
@@ -826,7 +820,7 @@ function renderTakeawayOrders(orders) {
       >
         <div class="flex items-center justify-between gap-2">
           <span class="text-sm font-medium text-orange-800">${escapeHtml(t('order', 'Order'))} #${o.id}</span>
-          <span class="text-xs text-orange-700">${escapeHtml(t('total', 'Total'))}: $${Number(o.total_amount || 0).toFixed(2)}</span>
+          <span class="text-xs text-orange-700">${escapeHtml(t('total', 'Total'))}: ${formatMoney(Number(o.total_amount || 0))}</span>
         </div>
         <div class="text-xs text-orange-700 mt-0.5">${escapeHtml(t('customer', 'Customer'))}: ${escapeHtml(customer)}</div>
         <div class="mt-1.5 flex gap-1">
@@ -902,7 +896,7 @@ function selectOrder(order) {
   const itemsRows = visibleItems
     .map(
       (i) =>
-        `<tr><td class="py-1">${escapeHtml(i.menu_item_name)}</td><td class="py-1 text-right">${i.quantity}</td><td class="py-1 text-right">$${Number(i.subtotal).toFixed(2)}</td></tr>`
+        `<tr><td class="py-1">${escapeHtml(i.menu_item_name)}</td><td class="py-1 text-right">${i.quantity}</td><td class="py-1 text-right">${formatMoney(Number(i.subtotal))}</td></tr>`
     )
     .join('');
   document.getElementById('receipt-content').innerHTML = `
@@ -920,7 +914,7 @@ function selectOrder(order) {
   const discountTypeSelect = document.getElementById('checkout-discount-type');
   const discountValueInput = document.getElementById('checkout-discount-value');
   if (amountInput) amountInput.value = '';
-  if (changeSpan) changeSpan.textContent = '$0.00';
+  if (changeSpan) changeSpan.textContent = formatMoney(0);
   if (methodSelect) methodSelect.value = 'cash';
   if (discountTypeSelect) discountTypeSelect.value = 'none';
   if (discountValueInput) {
@@ -951,8 +945,8 @@ function renderReceiptForPrint(order) {
     if (rpServedBy) rpServedBy.textContent = order.served_by_name || '—';
     if (rpDatetime) rpDatetime.textContent = order.created_at ? new Date(order.created_at).toLocaleString() : '';
     if (rpMethod) rpMethod.textContent = order.payment_method || '';
-    if (rpTendered) rpTendered.textContent = order.amount_tendered != null ? `$${Number(order.amount_tendered).toFixed(2)}` : '$0.00';
-    if (rpChange) rpChange.textContent = order.change_amount != null ? `$${Number(order.change_amount).toFixed(2)}` : '$0.00';
+    if (rpTendered) rpTendered.textContent = order.amount_tendered != null ? formatMoney(Number(order.amount_tendered)) : formatMoney(0);
+    if (rpChange) rpChange.textContent = order.change_amount != null ? formatMoney(Number(order.change_amount)) : formatMoney(0);
 
     let subtotal = 0;
     const visibleItems = (order.items || []).filter((i) => String(i?.item_status || '').toLowerCase() !== 'cancelled');
@@ -963,7 +957,7 @@ function renderReceiptForPrint(order) {
           <div class="flex justify-between gap-2">
             <span class="flex-1">${escapeHtml(item.menu_item_name)}</span>
             <span class="text-right">× ${item.quantity}</span>
-            <span class="text-right">$${Number(item.subtotal).toFixed(2)}</span>
+            <span class="text-right">${formatMoney(Number(item.subtotal))}</span>
           </div>
         `;
       })
@@ -975,10 +969,10 @@ function renderReceiptForPrint(order) {
     const taxableAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
     const taxAmount = roundMoney(Number(order.tax_amount) || (taxableAmount * 0.05));
     if (rpItems) rpItems.innerHTML = rows || '<div class="text-sm text-slate-600">No items</div>';
-    if (rpSubtotal) rpSubtotal.textContent = `$${subtotal.toFixed(2)}`;
-    if (rpDiscount) rpDiscount.textContent = `-$${discountAmount.toFixed(2)}`;
-    if (rpTax) rpTax.textContent = `$${taxAmount.toFixed(2)}`;
-    if (rpTotal) rpTotal.textContent = `$${Number(order.total_amount).toFixed(2)}`;
+    if (rpSubtotal) rpSubtotal.textContent = formatMoney(subtotal);
+    if (rpDiscount) rpDiscount.textContent = formatMoneyNegative(discountAmount);
+    if (rpTax) rpTax.textContent = formatMoney(taxAmount);
+    if (rpTotal) rpTotal.textContent = formatMoney(Number(order.total_amount));
   } catch (e) {
     // Don't block checkout if printing fails.
     console.error('Receipt print rendering failed:', e);
@@ -1790,8 +1784,8 @@ function renderMenuItems(items) {
       const available = m.is_available !== false;
       const hasDiscount = Number(m.discount_price) > 0;
       const priceLabel = hasDiscount
-        ? `<span class="truncate">${escapeHtml(m.name)} — <span class="line-through text-slate-400 text-xs">$${Number(m.price).toFixed(2)}</span> <span class="text-rose-600 font-semibold">$${Number(m.discount_price).toFixed(2)}</span></span>`
-        : `<span class="truncate">${escapeHtml(m.name)} — $${Number(m.price).toFixed(2)}</span>`;
+        ? `<span class="truncate">${escapeHtml(m.name)} — <span class="line-through text-slate-400 text-xs">${formatMoney(Number(m.price))}</span> <span class="text-rose-600 font-semibold">${formatMoney(Number(m.discount_price))}</span></span>`
+        : `<span class="truncate">${escapeHtml(m.name)} — ${formatMoney(Number(m.price))}</span>`;
       const badge = available
         ? '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Available</span>'
         : '<span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Sold Out</span>';

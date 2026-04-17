@@ -88,6 +88,31 @@ This POS system is currently built with:
   - valid enum literals for statuses
   - tendered >= final total on checkout
 
+## Mandatory Data Integrity Rules (Deletion Safety)
+- **Historical data is immutable in meaning:** deleting reference/master entities must not remove or rewrite paid/completed historical order facts.
+- **No destructive cascade on critical business history:** avoid `CASCADE` deletes on relationships that can erase orders/order-items/reporting evidence.
+- **Preferred FK behavior by entity type:**
+  - `User` references from transactional rows (e.g., `OrderItem.created_by_id`) must use `ON DELETE SET NULL` (or equivalent app-level nulling) so historical rows survive.
+  - `Table` references from `Order.table_id` must allow `NULL`; deleting a table must detach historical orders (`table_id = NULL`).
+  - `MenuItem` references from `OrderItem.menu_item_id` must preserve historical line items:
+    - preferred: **soft delete** menu items (`is_deleted`) and keep FK intact, or
+    - alternative: nullable FK + snapshot columns on `OrderItem` (e.g., item name/price at sale time) before using `SET NULL`.
+  - `Order` deletion is disallowed for paid/completed history. Cancellation must be represented by status transitions, not hard-delete.
+- **Backend null-safety contract:** API responses and report queries must never assume related rows exist; always use fallback labels for deleted references.
+  - Required fallback examples:
+    - deleted user -> `[Deleted User]`
+    - deleted menu item -> `[Deleted Item]`
+    - deleted table link -> `[Deleted Table]` (or existing detached table fallback)
+- **Frontend null-safety contract:** UI rendering must tolerate missing related objects (`null` foreign references) without throwing, and must display explicit fallback labels.
+- **Soft-delete policy (default for audit-heavy entities):**
+  - apply soft delete to `users` and `menu_items` (at minimum), using `is_deleted`, `deleted_at`, and optional `deleted_by_id`.
+  - hidden from default active lists, but preserved for historical joins/reports/admin audit views.
+- **Report stability invariant:** Daily/monthly/category/cancellation reports must remain queryable and correct even when referenced user/menu/table records are deleted or soft-deleted.
+- **Test gate for deletion changes:** any deletion behavior change requires invariant tests proving:
+  - historical orders/order-items persist,
+  - reports still compute successfully,
+  - UI/API fallback labels are returned for missing relations.
+
 ## Test Strategy (required for SDD merge gate)
 - Introduce automated tests with a backend test runner (e.g., `pytest`) for each feature.
 - Tests must verify:

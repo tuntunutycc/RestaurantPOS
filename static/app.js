@@ -48,7 +48,7 @@ function renderMenuItems(items) {
       const img = m.image_url
         ? `<img src="${escapeAttr(m.image_url)}" alt="" class="w-10 h-10 object-cover rounded inline-block mr-2 align-middle" />`
         : '';
-      return `<li class="py-2 flex items-center gap-2">${img}<span>${escapeHtml(m.name)} — $${Number(m.price).toFixed(2)}</span></li>`;
+      return `<li class="py-2 flex items-center gap-2">${img}<span>${escapeHtml(m.name)} — ${formatMoney(Number(m.price))}</span></li>`;
     })
     .join('');
 }
