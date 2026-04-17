@@ -386,3 +386,200 @@ Time: 2026-04-17T07:34:37.372380
 ---------------------------------
 [ --- CUT TICKET --- ]
 [ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #1
+Time: 2026-04-17T07:47:14.984064
+---------------------------------
+1x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #1
+Time: 2026-04-17T07:47:14.984064
+---------------------------------
+1x စီလုံတီး
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #1
+Time: 2026-04-17T07:47:14.984064
+---------------------------------
+2x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 2
+Order: #2
+Time: 2026-04-17T07:47:29.085314
+---------------------------------
+1x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 2
+Order: #2
+Time: 2026-04-17T07:47:29.085314
+---------------------------------
+1x စီလုံတီး
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 2
+Order: #2
+Time: 2026-04-17T07:47:29.085314
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #3
+Time: 2026-04-17T07:47:43.126588
+---------------------------------
+2x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+T --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #3
+Time: 2026-04-17T07:47:43.126588
+---------------------------------
+1x အုန်းနို့ခေါက်ဆွဲ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 7
+Order: #4
+Time: 2026-04-17T07:53:32.080747
+---------------------------------
+1x အုန်းနို့ခေါက်ဆွဲ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 7
+Order: #4
+Time: 2026-04-17T07:53:32.080747
+---------------------------------
+1x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 7
+Order: #4
+Time: 2026-04-17T07:53:32.080747
+---------------------------------
+1x နန်းကြီးသုပ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 2
+Order: #5
+Time: 2026-04-17T07:59:14.612510
+---------------------------------
+1x နန်းကြီးသုပ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 2
+Order: #5
+Time: 2026-04-17T07:59:14.612510
+---------------------------------
+1x အုန်းနို့ခေါက်ဆွဲ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 2
+Order: #5
+Time: 2026-04-17T07:59:14.612510
+---------------------------------
+2x စီလုံတီး
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 2
+Order: #5
+Time: 2026-04-17T07:59:14.612510
+---------------------------------
+1x စီလုံတီး
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #6
+Time: 2026-04-17T08:00:42.632219
+---------------------------------
+1x ကြက်သားဆန်ပြုတ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #6
+Time: 2026-04-17T08:00:42.632219
+---------------------------------
+1x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: ဧည့်သည်
+=================================
+Order: #7
+Time: 2026-04-17T08:14:47.948895
+---------------------------------
+2x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+-- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #8
+Time: 2026-04-17T08:16:02.036852
+---------------------------------
+1x လက်ဖက်ရည်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: breakfast_menu_printer
+Table: 1
+Order: #8
+Time: 2026-04-17T08:16:02.036852
+---------------------------------
+2x အုန်းနို့ခေါက်ဆွဲ
+---------------------------------
+[ --- CUT TICKET --- ]
