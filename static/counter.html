@@ -196,6 +196,9 @@
             <p class="text-sm text-slate-700">
               <span data-i18n="discount">Discount</span>: <span id="receipt-discount-amount" class="font-semibold">$0.00</span>
             </p>
+            <p class="text-sm text-slate-700">
+              <span>Tax (5%)</span>: <span id="receipt-tax-amount" class="font-semibold">$0.00</span>
+            </p>
             <p id="receipt-grand-total" class="text-lg font-semibold text-slate-800 border-t border-slate-200 pt-2 mt-2"></p>
 
             <div class="mt-4 space-y-3">
@@ -422,6 +425,15 @@
       <hr class="my-2" />
       <div id="rp-items" class="text-sm text-slate-700"></div>
       <hr class="my-2" />
+      <p class="text-sm text-slate-700">
+        Subtotal: <span id="rp-subtotal" class="font-semibold"></span>
+      </p>
+      <p class="text-sm text-slate-700">
+        Discount: <span id="rp-discount" class="font-semibold"></span>
+      </p>
+      <p class="text-sm text-slate-700">
+        Tax (5%): <span id="rp-tax" class="font-semibold"></span>
+      </p>
       <p class="text-sm text-slate-700">
         Total: <span id="rp-total" class="font-semibold"></span>
       </p>

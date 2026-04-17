@@ -552,13 +552,44 @@ async function dialogAlert(message, type = 'error', _title = 'Notice') {
 }
 
 async function dialogConfirm(message, _title = 'Confirm') {
-  const title = t('confirm_action', 'Confirm Action');
+  const title = _title || t('confirm_action', 'Confirm Action');
   if (window.CustomDialog?.confirm) {
     const result = await window.CustomDialog.confirm(title, message);
     return Boolean(result);
   }
-  if (window.toast?.info) window.toast.info(message);
-  return false;
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'fixed inset-0 z-[10000] bg-black/50 flex items-center justify-center p-4';
+    const modal = document.createElement('div');
+    modal.className = 'w-full max-w-md bg-white rounded-lg shadow-2xl overflow-hidden';
+    modal.innerHTML = `
+      <div class="px-4 py-3 border-b border-slate-200">
+        <h3 class="text-base font-semibold text-slate-800">${escapeHtml(title)}</h3>
+      </div>
+      <div class="px-4 py-4">
+        <p class="text-sm text-slate-700 leading-relaxed">${escapeHtml(message)}</p>
+      </div>
+      <div class="px-4 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+        <button type="button" data-confirm-cancel class="px-3 py-2 text-sm rounded-md bg-slate-200 text-slate-800 hover:bg-slate-300">
+          ${escapeHtml(t('cancel', 'Cancel'))}
+        </button>
+        <button type="button" data-confirm-ok class="px-3 py-2 text-sm rounded-md bg-rose-600 text-white hover:bg-rose-700">
+          ${escapeHtml(t('confirm_delete', 'Confirm Delete'))}
+        </button>
+      </div>
+    `;
+    const cleanup = (value) => {
+      backdrop.remove();
+      resolve(Boolean(value));
+    };
+    modal.querySelector('[data-confirm-cancel]')?.addEventListener('click', () => cleanup(false));
+    modal.querySelector('[data-confirm-ok]')?.addEventListener('click', () => cleanup(true));
+    backdrop.addEventListener('click', (e) => {
+      if (e.target === backdrop) cleanup(false);
+    });
+    document.body.appendChild(backdrop);
+    backdrop.appendChild(modal);
+  });
 }
 
 async function loadDashboardSummary() {
@@ -618,17 +649,26 @@ function calculateOrderDiscountAmount(subtotal, discountType, discountValue) {
   return 0;
 }
 
+function roundMoney(value) {
+  const safe = Number.isFinite(value) ? value : 0;
+  return Math.round(safe * 100) / 100;
+}
+
 function recalculateCheckoutTotals() {
   const subtotal = Number.isFinite(selectedOrderSubtotal) ? selectedOrderSubtotal : 0;
   const { type, value } = getCheckoutDiscountState();
-  const discountAmount = calculateOrderDiscountAmount(subtotal, type, value);
-  const finalTotal = Math.max(subtotal - discountAmount, 0);
+  const discountAmount = roundMoney(calculateOrderDiscountAmount(subtotal, type, value));
+  const taxableAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
+  const taxAmount = roundMoney(taxableAmount * 0.05);
+  const finalTotal = roundMoney(taxableAmount + taxAmount);
 
   const subtotalEl = document.getElementById('receipt-subtotal');
   const discountEl = document.getElementById('receipt-discount-amount');
+  const taxEl = document.getElementById('receipt-tax-amount');
   const grandTotalEl = document.getElementById('receipt-grand-total');
   if (subtotalEl) subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
   if (discountEl) discountEl.textContent = `-$${discountAmount.toFixed(2)}`;
+  if (taxEl) taxEl.textContent = `$${taxAmount.toFixed(2)}`;
   if (grandTotalEl) grandTotalEl.textContent = `${t('grand_total', 'Grand Total')}: $${finalTotal.toFixed(2)}`;
 
   selectedOrderTotal = finalTotal;
@@ -857,7 +897,7 @@ function selectOrder(order) {
   if (checkoutHeaderEl) {
     checkoutHeaderEl.textContent = isTakeaway
       ? `${t('checkout', 'Checkout')} - ${t('takeaway', 'Takeaway')} (${t('customer', 'Customer')}: ${customer})`
-      : `${t('checkout', 'Checkout')} - ${t('table', 'Table')} ${order.table_number}`;
+      : `${t('checkout', 'Checkout')} - ${t('table', 'Table')} ${orderTableLabel(order)}`;
   }
   const itemsRows = visibleItems
     .map(
@@ -897,6 +937,9 @@ function renderReceiptForPrint(order) {
     const rpDatetime = document.getElementById('rp-datetime');
     const rpItems = document.getElementById('rp-items');
     const rpTotal = document.getElementById('rp-total');
+    const rpSubtotal = document.getElementById('rp-subtotal');
+    const rpDiscount = document.getElementById('rp-discount');
+    const rpTax = document.getElementById('rp-tax');
     const rpMethod = document.getElementById('rp-method');
     const rpTendered = document.getElementById('rp-tendered');
     const rpChange = document.getElementById('rp-change');
@@ -904,7 +947,7 @@ function renderReceiptForPrint(order) {
     const isTakeaway = String(order.order_type || '').toLowerCase() === 'takeaway';
     if (rpTable) rpTable.textContent = isTakeaway
       ? `TAKEAWAY - ${String(order.customer_name || '').trim() || 'Walk-in'}`
-      : (order.table_number ?? '');
+      : `${orderTableLabel(order)}`;
     if (rpServedBy) rpServedBy.textContent = order.served_by_name || '—';
     if (rpDatetime) rpDatetime.textContent = order.created_at ? new Date(order.created_at).toLocaleString() : '';
     if (rpMethod) rpMethod.textContent = order.payment_method || '';
@@ -925,7 +968,16 @@ function renderReceiptForPrint(order) {
         `;
       })
       .join('');
+    subtotal = roundMoney(subtotal);
+    const discountType = String(order.discount_type || '').toLowerCase();
+    const discountValue = Number(order.discount_value) || 0;
+    const discountAmount = roundMoney(calculateOrderDiscountAmount(subtotal, discountType, discountValue));
+    const taxableAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
+    const taxAmount = roundMoney(Number(order.tax_amount) || (taxableAmount * 0.05));
     if (rpItems) rpItems.innerHTML = rows || '<div class="text-sm text-slate-600">No items</div>';
+    if (rpSubtotal) rpSubtotal.textContent = `$${subtotal.toFixed(2)}`;
+    if (rpDiscount) rpDiscount.textContent = `-$${discountAmount.toFixed(2)}`;
+    if (rpTax) rpTax.textContent = `$${taxAmount.toFixed(2)}`;
     if (rpTotal) rpTotal.textContent = `$${Number(order.total_amount).toFixed(2)}`;
   } catch (e) {
     // Don't block checkout if printing fails.
@@ -1235,9 +1287,11 @@ if (btnResetUser) {
 // —— Admin Table Management (Zones + Tables) ——
 let zonesState = [];
 let addTableZoneId = null;
+let editTableId = null;
 
 async function fetchTableGrid() {
-  const res = await fetch(`${API_BASE}/api/tables/grid`, {
+  const res = await fetch(`${API_BASE}/api/tables/grid?_ts=${Date.now()}`, {
+    cache: 'no-store',
     headers: { ...window.auth.getAuthHeaders() },
   });
   if (window.auth && window.auth.checkUnauthorized(res)) return [];
@@ -1246,8 +1300,30 @@ async function fetchTableGrid() {
   return data;
 }
 
+async function deleteTableById(tableId) {
+  const res = await fetch(`${API_BASE}/api/tables/${encodeURIComponent(tableId)}`, {
+    method: 'DELETE',
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return { unauthorized: true };
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = data && typeof data.detail === 'string' ? data.detail : 'Delete failed';
+    throw new Error(detail);
+  }
+  return data;
+}
+
 function tableDisplayName(t) {
   return t.name || t.name_or_number || `#${t.id}`;
+}
+
+function orderTableLabel(order) {
+  const isTakeaway = String(order?.order_type || '').toLowerCase() === 'takeaway';
+  if (isTakeaway) return t('takeaway', 'Takeaway');
+  if (order?.table_id == null && order?.table_number == null) return t('deleted_table', '[Deleted]');
+  if (order?.table_number != null) return order.table_number;
+  return t('unknown', 'Unknown');
 }
 
 function renderTableKanbanBoard(zones) {
@@ -1272,10 +1348,43 @@ function renderTableKanbanBoard(zones) {
           ${
             tables.length
               ? tables.map((table) => `
+                ${(() => {
+                  const isEdit = editTableId === table.id;
+                  if (isEdit) {
+                    const zoneOptions = zonesState
+                      .map((z) => `<option value="${z.id}" ${Number(z.id) === Number(table.zone_id) ? 'selected' : ''}>${escapeHtml(z.name)}</option>`)
+                      .join('');
+                    return `
+                <div class="bg-white border border-slate-200 rounded-md px-2 py-2 space-y-2">
+                  <input
+                    type="text"
+                    data-edit-table-input-id="${table.id}"
+                    value="${escapeAttr(tableDisplayName(table))}"
+                    class="w-full px-2 py-1.5 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <select
+                    data-edit-table-zone-id="${table.id}"
+                    class="w-full px-2 py-1.5 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    ${zoneOptions}
+                  </select>
+                  <div class="flex items-center justify-end gap-2">
+                    <button type="button" data-save-edit-table-id="${table.id}" class="px-2 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+                    <button type="button" data-cancel-edit-table-id="${table.id}" class="px-2 py-1.5 text-xs bg-slate-200 text-slate-800 rounded hover:bg-slate-300">Cancel</button>
+                  </div>
+                </div>
+                    `;
+                  }
+                  return `
                 <div class="bg-white border border-slate-200 rounded-md px-2 py-1.5 flex items-center justify-between">
                   <span class="text-xs font-medium text-slate-800 truncate pr-2">${escapeHtml(tableDisplayName(table))}</span>
-                  <button type="button" data-delete-table-id="${table.id}" class="w-6 h-6 rounded bg-rose-100 text-rose-700 hover:bg-rose-200 text-xs" title="Delete table">✕</button>
+                  <div class="flex items-center gap-1">
+                    <button type="button" data-edit-table-id="${table.id}" class="w-6 h-6 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 text-xs" title="Edit table">✎</button>
+                    <button type="button" data-delete-table-id="${table.id}" class="w-6 h-6 rounded bg-rose-100 text-rose-700 hover:bg-rose-200 text-xs" title="Delete table">✕</button>
+                  </div>
                 </div>
+                  `;
+                })()}
               `).join('')
               : '<p class="text-xs text-slate-500">No tables in this zone.</p>'
           }
@@ -1347,6 +1456,9 @@ if (kanbanBoard) {
     const target = e.target;
     const deleteZoneBtn = target.closest('[data-delete-zone-id]');
     const deleteTableBtn = target.closest('[data-delete-table-id]');
+    const editTableBtn = target.closest('[data-edit-table-id]');
+    const saveEditTableBtn = target.closest('[data-save-edit-table-id]');
+    const cancelEditTableBtn = target.closest('[data-cancel-edit-table-id]');
     const openAddBtn = target.closest('[data-open-add-table-zone-id]');
     const cancelAddBtn = target.closest('[data-cancel-table-zone-id]');
     const saveTableBtn = target.closest('[data-save-table-zone-id]');
@@ -1354,7 +1466,14 @@ if (kanbanBoard) {
     if (deleteZoneBtn) {
       const zoneId = deleteZoneBtn.getAttribute('data-delete-zone-id');
       if (!zoneId) return;
-      if (!await dialogConfirm('Delete this zone and its tables?', 'Delete Zone')) return;
+      const zone = (zonesState || []).find((z) => Number(z.id) === Number(zoneId));
+      const zoneName = zone?.name || `#${zoneId}`;
+      const zoneConfirm = await dialogConfirm(
+        `Are you sure you want to delete Zone ${zoneName} and its tables? This action cannot be undone.`,
+        'Delete Zone'
+      );
+      if (!zoneConfirm) return;
+      console.log('Attempting to delete zone:', zoneId);
       try {
         const res = await fetch(`${API_BASE}/api/zones/${encodeURIComponent(zoneId)}`, {
           method: 'DELETE',
@@ -1378,29 +1497,93 @@ if (kanbanBoard) {
     if (deleteTableBtn) {
       const tableId = deleteTableBtn.getAttribute('data-delete-table-id');
       if (!tableId) return;
-      if (!await dialogConfirm('Delete this table?', 'Delete Table')) return;
+      const table = (zonesState || [])
+        .flatMap((z) => z.tables || [])
+        .find((t) => Number(t.id) === Number(tableId));
+      const tableName = table?.name || table?.name_or_number || `#${tableId}`;
+      const tableConfirm = await dialogConfirm(
+        `Are you sure you want to delete Table ${tableName}? This action cannot be undone.`,
+        'Delete Table'
+      );
+      if (!tableConfirm) return;
+      console.log('Attempting to delete table:', tableId);
+      try {
+        const result = await deleteTableById(tableId);
+        if (result && result.unauthorized) return;
+        // Keep UI responsive even before round-trip reload completes.
+        zonesState = (zonesState || []).map((zone) => ({
+          ...zone,
+          tables: (zone.tables || []).filter((t) => Number(t.id) !== Number(tableId)),
+        }));
+        renderTableKanbanBoard(zonesState);
+        if (window.toast) window.toast.success('Table deleted.');
+        try {
+          await loadTableManagementData();
+        } catch (refreshErr) {
+          console.error(refreshErr);
+          if (window.toast) window.toast.error('Table list refresh failed. Please reload.');
+        }
+      } catch (err) {
+        console.error(err);
+        const message = err && err.message ? err.message : 'Delete failed';
+        if (window.toast) window.toast.error(message);
+        await dialogAlert(message, 'error', 'Delete Table');
+      }
+      return;
+    }
+
+    if (editTableBtn) {
+      const tableId = Number(editTableBtn.getAttribute('data-edit-table-id'));
+      if (!tableId) return;
+      editTableId = tableId;
+      addTableZoneId = null;
+      renderTableKanbanBoard(zonesState);
+      const input = document.querySelector(`[data-edit-table-input-id="${tableId}"]`);
+      if (input) input.focus();
+      return;
+    }
+
+    if (cancelEditTableBtn) {
+      editTableId = null;
+      renderTableKanbanBoard(zonesState);
+      return;
+    }
+
+    if (saveEditTableBtn) {
+      const tableId = Number(saveEditTableBtn.getAttribute('data-save-edit-table-id'));
+      const nameInput = document.querySelector(`[data-edit-table-input-id="${tableId}"]`);
+      const zoneSelect = document.querySelector(`[data-edit-table-zone-id="${tableId}"]`);
+      const tableName = (nameInput && nameInput.value || '').trim();
+      const zoneId = Number(zoneSelect && zoneSelect.value);
+      if (!tableName || !zoneId) {
+        if (window.toast) window.toast.error('Please provide table name and zone.');
+        return;
+      }
       try {
         const res = await fetch(`${API_BASE}/api/tables/${encodeURIComponent(tableId)}`, {
-          method: 'DELETE',
-          headers: { ...window.auth.getAuthHeaders() },
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+          body: JSON.stringify({ name: tableName, zone_id: zoneId }),
         });
         if (window.auth && window.auth.checkUnauthorized(res)) return;
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          await dialogAlert(data.detail || 'Delete failed', 'error', 'Delete Table');
+          await dialogAlert(data.detail || 'Failed to update table', 'error', 'Edit Table');
           return;
         }
-        if (window.toast) window.toast.success('Table deleted.');
+        if (window.toast) window.toast.success('Table updated.');
+        editTableId = null;
         await loadTableManagementData();
       } catch (err) {
         console.error(err);
-        await dialogAlert('Delete failed', 'error', 'Delete Table');
+        await dialogAlert('Failed to update table', 'error', 'Edit Table');
       }
       return;
     }
 
     if (openAddBtn) {
       addTableZoneId = Number(openAddBtn.getAttribute('data-open-add-table-zone-id'));
+      editTableId = null;
       renderTableKanbanBoard(zonesState);
       const input = document.querySelector(`[data-add-table-input-id="${addTableZoneId}"]`);
       if (input) input.focus();

@@ -125,6 +125,7 @@ class Order(Base):
     payment_method = Column(String(32), nullable=True)  # 'cash', 'mobile_money', etc.
     amount_tendered = Column(Float, nullable=True)
     change_amount = Column(Float, nullable=True)
+    tax_amount = Column(Float, nullable=True, default=0.0)
     discount_type = Column(String(32), nullable=True)  # 'percentage' or 'amount'
     discount_value = Column(Float, nullable=True, default=0.0)
 

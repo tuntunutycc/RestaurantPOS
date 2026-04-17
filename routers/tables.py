@@ -20,6 +20,7 @@ from schemas import (
 
 router = APIRouter(prefix="/api", tags=["zones-tables"])
 OPEN_ORDER_STATUSES = ("open", "dining")
+FINALIZED_ORDER_STATUSES = ("paid", "cancelled")
 
 
 async def _broadcast_table_grid_updated(request: Request) -> None:
@@ -215,20 +216,22 @@ def delete_table(
     if not table:
         raise HTTPException(status_code=404, detail="Table not found")
 
-    # Block deletion only if there are active/unpaid orders tied to this table.
-    active_statuses = ("open", "dining", "pending", "completed")
-    active_orders_count = (
+    # Block deletion when any non-finalized order is still tied to this table.
+    non_finalized_orders_count = (
         db.query(Order)
         .filter(
             Order.table_id == table_id,
-            Order.status.in_(active_statuses),
+            ~Order.status.in_(FINALIZED_ORDER_STATUSES),
         )
         .count()
     )
-    if active_orders_count > 0:
+    if non_finalized_orders_count > 0:
         raise HTTPException(
             status_code=400,
-            detail="Cannot delete table with active/unpaid orders",
+            detail=(
+                "Cannot delete table because it has active or pending orders. "
+                "Please finalize those orders first."
+            ),
         )
 
     # Keep historical paid orders, but detach them from the physical table record.

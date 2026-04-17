@@ -44,10 +44,27 @@ All planned remediation steps are now implemented and test-backed:
 - Step 5: Rounding determinism completed
   - money values rounded to 2 decimals before save/response in key order flows
   - invariant tests cover decimal-sensitive scenarios (e.g., `3.33 × 3 = 9.99`) and stable checkout change calculations
+- Step 6: Sales tax on net amount (completed)
+  - Introduce fixed 5% tax at checkout using Option B (tax on net amount after discount).
+  - Formula:
+    - `taxable_amount = max(subtotal - discount_amount, 0.0)`
+    - `tax_amount = _round_money(taxable_amount * 0.05)`
+    - `grand_total = _round_money(taxable_amount + tax_amount)`
+  - Contract/UI impact:
+    - include `tax_amount` in checkout/order response contracts
+    - show `Tax (5%)` in checkout modal, receipt view, and printable receipt
+  - Test impact:
+    - add invariant tests for rounding determinism and negative-safe tax/grand-total clamping
+- Step 7: Table management enhancements (in progress)
+  - Add admin table edit UX (rename + zone reassignment).
+  - Keep admin-only table update/delete endpoints enforced by backend RBAC.
+  - Harden delete safety: block deleting tables with non-finalized orders and return a clear `400` reason.
+  - Preserve sales history safely by detaching finalized historical orders (`table_id = NULL`) when table deletion succeeds.
+  - Add test coverage for successful delete, blocked delete with active order, and non-admin RBAC denial.
 
 Validation evidence:
 - Automated backend suite is green with invariant/contract/RBAC/cancellation tests.
-- Current result: `19 passed` in `pytest`.
+- Current result after Step 6: `20 passed` in `pytest`.
 
 ## Phase 1 (0–30 days): Fully Functional POS MVP
 ### Goal
@@ -92,6 +109,17 @@ Deliver end-to-end daily restaurant POS functionality for `admin`, `waiter`, and
      - invalid status inputs
 5. Financial rounding determinism improvements (completed)
    - Make rounding/2-decimal rules explicit and consistent across order submit/append, item updates, and checkout.
+6. Sales tax on net amount (completed)
+   - Add fixed 5% tax calculated after discount during checkout.
+   - Clamp taxable base to avoid negative tax and negative grand total.
+   - Extend contracts and UI/receipt rendering to expose `tax_amount` consistently.
+   - Add automated invariants for tax rounding and large-discount edge cases.
+7. Table management enhancements (in progress)
+   - Add admin-side table edit controls (rename + zone reassignment) and explicit delete actions in table management UI.
+   - Keep table mutations strictly admin-only.
+   - Block table deletion when non-finalized orders exist; allow deletion only after orders are finalized.
+   - Detach finalized historical orders from deleted tables to preserve sales history.
+   - Add test coverage for delete success, delete blocked by active order, and non-admin delete denial.
 
 ## Phase 2 (31–90 days): Stable POS System
 ### Goal

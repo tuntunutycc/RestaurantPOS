@@ -90,16 +90,18 @@ def test_checkout_decimal_change_amount_stable(client, db_session, auth_headers)
         headers=headers_cashier,
         json={
             "payment_method": "cash",
-            "amount_tendered": 10.00,
+            "amount_tendered": 11.00,
             "discount_type": None,
             "discount_value": 0,
         },
     )
     assert checkout.status_code == 200, checkout.text
     body = checkout.json()
-    assert body["total_amount"] == 9.99
-    assert body["change_amount"] == 0.01
-    assert f"{body['change_amount']:.2f}" == "0.01"
+    # Option B tax rule: taxable_amount = 9.99, tax = 0.50, grand total = 10.49
+    assert body["tax_amount"] == 0.50
+    assert body["total_amount"] == 10.49
+    assert body["change_amount"] == 0.51
+    assert f"{body['tax_amount']:.2f}" == "0.50"
 
 
 def test_checkout_excludes_cancelled_decimal_line_item(client, db_session, auth_headers):
@@ -139,6 +141,33 @@ def test_checkout_excludes_cancelled_decimal_line_item(client, db_session, auth_
     )
     assert checkout.status_code == 200, checkout.text
     body = checkout.json()
+    assert body["tax_amount"] == 0.00
+    assert body["total_amount"] == 0.00
+    assert body["change_amount"] == 1.00
+
+
+def test_checkout_tax_on_net_amount_large_discount_clamps_to_zero(client, db_session, auth_headers):
+    table, item = _seed_decimal_menu_and_table(db_session)
+    headers_waiter = auth_headers("waiter")
+    headers_cashier = auth_headers("cashier")
+
+    submit = _submit_one_batch(client, headers_waiter, table.id, item.id, 3)  # 9.99
+    assert submit.status_code == 200, submit.text
+    order_id = submit.json()["id"]
+
+    checkout = client.put(
+        f"/api/orders/{order_id}/checkout",
+        headers=headers_cashier,
+        json={
+            "payment_method": "cash",
+            "amount_tendered": 1.00,
+            "discount_type": "amount",
+            "discount_value": 99.00,
+        },
+    )
+    assert checkout.status_code == 200, checkout.text
+    body = checkout.json()
+    assert body["tax_amount"] == 0.00
     assert body["total_amount"] == 0.00
     assert body["change_amount"] == 1.00
 

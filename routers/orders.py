@@ -571,6 +571,9 @@ def get_order_details(
         customer_name=getattr(order, "customer_name", None),
         status=order.status,
         total_amount=float(order.total_amount),
+        tax_amount=float(getattr(order, "tax_amount", 0.0) or 0.0),
+        discount_type=getattr(order, "discount_type", None),
+        discount_value=float(getattr(order, "discount_value", 0.0) or 0.0),
         created_at=order.created_at,
         items=items,
     )
@@ -904,7 +907,9 @@ async def checkout_order(
         discount_amount = discount_value
     discount_amount = _round_money(discount_amount)
 
-    final_total = _round_money(max(subtotal - discount_amount, 0.0))
+    taxable_amount = _round_money(max(subtotal - discount_amount, 0.0))
+    tax_amount = _round_money(taxable_amount * 0.05)
+    final_total = _round_money(taxable_amount + tax_amount)
 
     tendered = float(body.amount_tendered)
     if tendered < final_total:
@@ -921,6 +926,7 @@ async def checkout_order(
     order.payment_method = body.payment_method
     order.amount_tendered = _round_money(tendered)
     order.change_amount = _round_money(change)
+    order.tax_amount = _round_money(tax_amount)
     order.status = "paid"
     # For takeaway orders, table_id is NULL, so skip table status update safely.
     table = db.query(Table).filter(Table.id == order.table_id).first() if order.table_id is not None else None

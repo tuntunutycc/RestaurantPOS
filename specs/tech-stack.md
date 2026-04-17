@@ -77,6 +77,11 @@ This POS system is currently built with:
   - item status changes
   - checkout
   - discount calculations
+- **Checkout tax rule (fixed 5%):** tax is calculated **after** discount is applied (tax on net amount), with backend as source of truth:
+  - `taxable_amount = max(subtotal - discount_amount, 0.0)`
+  - `tax_amount = _round_money(taxable_amount * 0.05)`
+  - `grand_total = _round_money(taxable_amount + tax_amount)`
+  - Safety constraint: if discount would make taxable amount negative, taxable amount, tax amount, and grand total are clamped safely at `0.0`.
 - Prefer explicit rounding rules (currently many computations round to 2 decimals; later we will move to `Decimal` + `Numeric` for stronger guarantees).
 - Always validate input constraints on the server:
   - quantity >= 1

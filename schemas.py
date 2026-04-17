@@ -359,6 +359,7 @@ class OrderDetailsResponse(BaseModel):
     customer_name: str | None = None
     status: str
     total_amount: float
+    tax_amount: float | None = 0.0
     discount_type: str | None = None
     discount_value: float | None = 0.0
     created_at: datetime
@@ -385,6 +386,7 @@ class OrderResponseDetail(BaseModel):
     payment_method: str | None = None
     amount_tendered: float | None = None
     change_amount: float | None = None
+    tax_amount: float | None = 0.0
     discount_type: str | None = None
     discount_value: float | None = 0.0
 
@@ -434,6 +436,7 @@ class OrderResponseDetail(BaseModel):
                 payment_method=getattr(order, "payment_method", None),
                 amount_tendered=getattr(order, "amount_tendered", None),
                 change_amount=getattr(order, "change_amount", None),
+                tax_amount=getattr(order, "tax_amount", 0.0),
                 discount_type=getattr(order, "discount_type", None),
                 discount_value=getattr(order, "discount_value", 0.0),
             )

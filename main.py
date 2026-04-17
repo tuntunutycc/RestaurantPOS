@@ -291,6 +291,12 @@ async def lifespan(app: FastAPI):
     try:
         from sqlalchemy import text
         with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN tax_amount FLOAT"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
             conn.execute(text("ALTER TABLE orders ADD COLUMN discount_type VARCHAR(32)"))
     except Exception:
         pass
