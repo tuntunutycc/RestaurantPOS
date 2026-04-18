@@ -214,6 +214,34 @@ function t(key, fallback) {
   return window.i18n?.t?.(key) || fallback || key;
 }
 
+/** Chart.js axes: MMK amounts via centralized currency helpers (see static/currency.js). */
+function chartMoneyTickValue(value) {
+  return typeof formatMoney === 'function' ? formatMoney(Number(value)) : String(value);
+}
+
+/** Tooltip for bar/line charts whose series values are money amounts. */
+function chartTooltipLabelMoney(ctx) {
+  const fmt = typeof formatMoney === 'function' ? formatMoney : (v) => String(Number(v));
+  const prefix = ctx.dataset?.label ? `${ctx.dataset.label}: ` : '';
+  const y = ctx.parsed?.y;
+  if (typeof y === 'number' && !Number.isNaN(y)) return `${prefix}${fmt(y)}`;
+  const x = ctx.parsed?.x;
+  if (typeof x === 'number' && !Number.isNaN(x)) return `${prefix}${fmt(x)}`;
+  return `${prefix}${fmt(Number(ctx.raw ?? 0))}`;
+}
+
+/** Doughnut slices where values are MMK (e.g. category sales). */
+function chartTooltipLabelMoneyDoughnut(ctx) {
+  const fmt = typeof formatMoney === 'function' ? formatMoney : (v) => String(Number(v));
+  const head = ctx.label ? `${ctx.label}: ` : '';
+  const p = ctx.parsed;
+  const n =
+    typeof p === 'number' && !Number.isNaN(p)
+      ? p
+      : Number(p?.r ?? p?.x ?? p?.y ?? ctx.raw ?? 0);
+  return `${head}${fmt(n)}`;
+}
+
 function destroyDashboardCharts() {
   if (topItemsChart) {
     topItemsChart.destroy();
@@ -280,8 +308,16 @@ async function loadDailySalesChart(startDate, endDate) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true } },
-      plugins: { legend: { display: false } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: chartMoneyTickValue },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: chartTooltipLabelMoney } },
+      },
     },
   });
 }
@@ -320,7 +356,15 @@ async function loadMonthlySalesChart(year) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true } },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: chartMoneyTickValue },
+        },
+      },
+      plugins: {
+        tooltip: { callbacks: { label: chartTooltipLabelMoney } },
+      },
     },
   });
 }
@@ -356,7 +400,10 @@ async function loadCategorySalesChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom' } },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: chartTooltipLabelMoneyDoughnut } },
+      },
     },
   });
 }
@@ -403,8 +450,23 @@ async function loadCancellationsReport() {
       indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
-      scales: { x: { beginAtZero: true } },
-      plugins: { legend: { display: false } },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: { stepSize: 1, callback: (v) => String(Math.round(Number(v))) },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const q = ctx.parsed?.x ?? ctx.raw;
+              return `${t('cancelled', 'Cancelled')}: ${Math.round(Number(q))}`;
+            },
+          },
+        },
+      },
     },
   });
 }
@@ -469,6 +531,14 @@ async function loadTopItemsChart() {
       maintainAspectRatio: false,
       plugins: {
         legend: { position: 'bottom' },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const q = ctx.parsed ?? ctx.raw;
+              return `${t('qty', 'Qty')}: ${Math.round(Number(q))}`;
+            },
+          },
+        },
       },
     },
   });
@@ -516,9 +586,13 @@ async function loadHourlyTrendChart() {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: true, position: 'bottom' },
+        tooltip: { callbacks: { label: chartTooltipLabelMoney } },
       },
       scales: {
-        y: { beginAtZero: true },
+        y: {
+          beginAtZero: true,
+          ticks: { callback: chartMoneyTickValue },
+        },
       },
     },
   });
@@ -592,9 +666,9 @@ async function loadDashboardSummary() {
   const avgEl = document.getElementById('kpi-average-order-value');
   if (!salesEl || !ordersEl || !avgEl) return;
 
-  salesEl.textContent = '0 Ks';
+  salesEl.textContent = formatMoney(0);
   ordersEl.textContent = '0';
-  avgEl.textContent = '0 Ks';
+  avgEl.textContent = formatMoney(0);
 
   try {
     const res = await fetch(`${API_BASE}/api/reports/summary/today`, {
@@ -1315,7 +1389,7 @@ function tableDisplayName(t) {
 function orderTableLabel(order) {
   const isTakeaway = String(order?.order_type || '').toLowerCase() === 'takeaway';
   if (isTakeaway) return t('takeaway', 'Takeaway');
-  if (order?.table_id == null && order?.table_number == null) return t('deleted_table', '[Deleted]');
+  if (order?.table_id == null && order?.table_number == null) return t('deleted_table', '[Deleted Table]');
   if (order?.table_number != null) return order.table_number;
   return t('unknown', 'Unknown');
 }

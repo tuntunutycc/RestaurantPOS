@@ -104,6 +104,46 @@ def test_checkout_decimal_change_amount_stable(client, db_session, auth_headers)
     assert f"{body['tax_amount']:.2f}" == "0.50"
 
 
+def test_paid_order_item_status_update_preserves_tax_inclusive_total(client, db_session, auth_headers):
+    """Paid orders must not have total_amount overwritten by pre-tax recalculation."""
+    table, item = _seed_decimal_menu_and_table(db_session)
+    headers_waiter = auth_headers("waiter")
+    headers_cashier = auth_headers("cashier")
+
+    submit = _submit_one_batch(client, headers_waiter, table.id, item.id, 3)
+    assert submit.status_code == 200, submit.text
+    order_id = submit.json()["id"]
+
+    checkout = client.put(
+        f"/api/orders/{order_id}/checkout",
+        headers=headers_cashier,
+        json={
+            "payment_method": "cash",
+            "amount_tendered": 11.00,
+            "discount_type": None,
+            "discount_value": 0,
+        },
+    )
+    assert checkout.status_code == 200, checkout.text
+    paid_total = float(checkout.json()["total_amount"])
+    assert paid_total == 10.49
+
+    details = client.get(
+        f"/api/orders/{order_id}/details",
+        headers=headers_waiter,
+    )
+    assert details.status_code == 200, details.text
+    oi_id = details.json()["items"][0]["id"]
+
+    update = client.put(
+        f"/api/orders/{order_id}/items/{oi_id}/status",
+        headers=headers_waiter,
+        json={"status": "cooking"},
+    )
+    assert update.status_code == 200, update.text
+    assert float(update.json()["total_amount"]) == paid_total
+
+
 def test_checkout_excludes_cancelled_decimal_line_item(client, db_session, auth_headers):
     table, item = _seed_decimal_menu_and_table(db_session)
     headers_waiter = auth_headers("waiter")

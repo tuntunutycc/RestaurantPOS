@@ -104,6 +104,9 @@ const translations = {
     success: "Success",
     error: "Error",
     unauthorized_message: "You are not allowed to access that page.",
+    deleted_table: "[Deleted Table]",
+    deleted_user: "[Deleted User]",
+    unknown: "Unknown",
     no_chart_data_today: "No chart data available for today.",
   },
   my: {
@@ -211,6 +214,9 @@ const translations = {
     success: "အောင်မြင်သည်",
     error: "အမှား",
     unauthorized_message: "ဤစာမျက်နှာကို သင်ဝင်ရောက်ခွင့်မရှိပါ။",
+    deleted_table: "[Deleted Table]",
+    deleted_user: "[Deleted User]",
+    unknown: "မသိရှိရ",
     no_chart_data_today: "ယနေ့အတွက် ဇယားဒေတာ မရှိပါ။",
   },
 };

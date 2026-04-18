@@ -652,7 +652,10 @@ async def update_order_item_status(
         )
 
     oi.item_status = normalized_status
-    order.total_amount = _recalculate_order_total_excluding_cancelled(order)
+    # Paid orders store tax-inclusive totals from checkout; never overwrite with pre-tax recalculation.
+    order_status = str(getattr(order, "status", "") or "").strip().lower()
+    if order_status != "paid":
+        order.total_amount = _recalculate_order_total_excluding_cancelled(order)
     db.commit()
     updated_order = (
         db.query(Order)

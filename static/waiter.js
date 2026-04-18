@@ -50,6 +50,12 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+/** Fallback when API omits waiter display string (spec: tech-stack deleted-user label). */
+function displayOrderWaiterLine(name) {
+  const s = name != null && String(name).trim() !== '' ? String(name).trim() : '';
+  return s || t('deleted_user', '[Deleted User]');
+}
+
 function escapeAttr(text) {
   const div = document.createElement('div');
   div.textContent = text ?? '';
@@ -1173,7 +1179,7 @@ function renderTableDetailsItems(orderDetails) {
         <div class="flex items-center justify-between gap-2 mb-2">
           <div>
             <p class="font-medium ${textClass}">${escapeHtml(item.menu_item_name)} x ${item.quantity}</p>
-            <p class="text-xs ${waiterClass}">${escapeHtml(t('waiter', 'Waiter'))}: ${escapeHtml(item.waiter_name || '-')}</p>
+            <p class="text-xs ${waiterClass}">${escapeHtml(t('waiter', 'Waiter'))}: ${escapeHtml(displayOrderWaiterLine(item.waiter_name))}</p>
           </div>
           <span data-item-status-badge>${statusBadgeHtml(status)}</span>
         </div>

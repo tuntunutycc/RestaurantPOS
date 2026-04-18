@@ -19,6 +19,15 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+function t(key, fallback) {
+  return window.i18n?.t?.(key) || fallback || key;
+}
+
+function displayOrderWaiterLine(name) {
+  const s = name != null && String(name).trim() !== '' ? String(name).trim() : '';
+  return s || t('deleted_user', '[Deleted User]');
+}
+
 function showError(msg) {
   if (window.toast?.error) window.toast.error(msg);
   else if (window.CustomDialog?.alert) window.CustomDialog.alert('Error', msg);
@@ -224,7 +233,7 @@ async function renderOrderDetails(orderId) {
           <div class="flex items-start justify-between gap-2">
             <div>
               <p class="font-medium text-slate-800">${escapeHtml(item.menu_item_name)} x ${item.quantity}</p>
-              <p class="text-xs text-slate-500">Waiter: ${escapeHtml(item.waiter_name || '-')}</p>
+              <p class="text-xs text-slate-500">${escapeHtml(t('waiter', 'Waiter'))}: ${escapeHtml(displayOrderWaiterLine(item.waiter_name))}</p>
             </div>
             <span class="text-xs px-2 py-1 rounded ${statusBadge(item.item_status)}">${escapeHtml(item.item_status)}</span>
           </div>
