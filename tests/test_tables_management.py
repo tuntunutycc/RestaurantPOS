@@ -50,7 +50,7 @@ def test_table_with_active_order_cannot_be_deleted(client, db_session, auth_head
     )
     assert res.status_code == 400, res.text
     detail = (res.json() or {}).get("detail", "")
-    assert "active or pending orders" in detail
+    assert "non-finalized orders" in detail
     assert db_session.query(Table).filter(Table.id == table.id).first() is not None
 
 
@@ -87,3 +87,48 @@ def test_delete_detaches_finalized_orders_history(client, db_session, auth_heade
     db_session.refresh(finalized_order)
     assert finalized_order.table_id is None
     assert finalized_order.total_amount == 25.0
+
+
+def test_table_with_completed_order_is_blocked_as_non_finalized(client, db_session, auth_headers):
+    _, table = _seed_zone_and_table(db_session)
+    order = Order(
+        table_id=table.id,
+        table_number=8,
+        order_type="dine_in",
+        status="completed",
+        total_amount=20.0,
+    )
+    db_session.add(order)
+    db_session.commit()
+
+    res = client.delete(
+        f"/api/tables/{table.id}",
+        headers=auth_headers("admin"),
+    )
+    assert res.status_code == 400, res.text
+    detail = (res.json() or {}).get("detail", "")
+    assert "Only paid or cancelled orders" in detail
+    assert db_session.query(Table).filter(Table.id == table.id).first() is not None
+
+
+def test_cancelled_order_allows_table_delete_and_detach(client, db_session, auth_headers):
+    _, table = _seed_zone_and_table(db_session)
+    cancelled_order = Order(
+        table_id=table.id,
+        table_number=10,
+        order_type="dine_in",
+        status="cancelled",
+        total_amount=0.0,
+    )
+    db_session.add(cancelled_order)
+    db_session.commit()
+    db_session.refresh(cancelled_order)
+
+    res = client.delete(
+        f"/api/tables/{table.id}",
+        headers=auth_headers("admin"),
+    )
+    assert res.status_code == 200, res.text
+
+    db_session.refresh(cancelled_order)
+    assert cancelled_order.table_id is None

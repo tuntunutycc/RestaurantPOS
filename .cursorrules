@@ -30,3 +30,8 @@
 - Current frontend is **static JavaScript** served by FastAPI; treat Next.js as later-stage only unless the user explicitly changes direction.
 - PostgreSQL is a later target; avoid introducing PostgreSQL-specific migration requirements before that decision is made, unless explicitly requested.
 
+## Interaction & Workflow Rules
+- **Ask before acting (Human-in-the-loop):** If any detail in the feature specs is ambiguous, incomplete, or lacks edge-case definitions, you MUST stop and ask me questions before writing any code. Do not make assumptions about business logic.
+- **Feature-scoped context:** When implementing a new feature, always refer to its specific folder (e.g., `specs/feature-[name]/`) and read `plan.md`, `requirements.md`, and `validation.md` completely before starting.
+- **Wrap-up & Changelog:** Upon completing a feature and successfully passing the validation tests, update the `CHANGELOG.md` with the applied changes before closing the task.
+

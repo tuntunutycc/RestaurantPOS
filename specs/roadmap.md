@@ -2,6 +2,116 @@
 
 This roadmap is structured for Spec-Driven Development (SDD): every step is tied to verifiable outputs (contracts, tests, and acceptance criteria).
 
+## Phase 0: Completed Features (Baseline)
+This baseline captures features that are currently implemented and functional in the existing codebase, grouped by module and role.
+
+### Authentication & Role Access (admin / waiter / cashier)
+- JWT-based authentication is implemented with both username/password and PIN login flows:
+  - `POST /api/auth/login`
+  - `POST /api/auth/login-pin`
+- Token validation and role-aware frontend guards are implemented for protected screens.
+- Backend RBAC is enforced via role guards on protected endpoints (orders, reports, tables/zones, users).
+- Roles are operationally enforced for core flows:
+  - waiter can submit/update orders but cannot checkout,
+  - cashier/admin can checkout,
+  - unauthorized role access returns `403`.
+
+### Admin: Staff User Management
+- Admin users can list/create/update/delete staff users via `/api/admin/users`.
+- User deletion is implemented as soft delete (`is_deleted`, `deleted_at`) rather than hard delete.
+- Safety constraints are implemented:
+  - cannot delete own account,
+  - cannot delete the last remaining admin.
+- Admin user management UI exists in the counter/admin screen.
+
+### Admin: Menu & Category Management
+- Category create/list endpoints are implemented.
+- Menu item create/list/update/delete endpoints are implemented.
+- Menu item availability toggle (`is_available`) is implemented.
+- Menu item soft delete is implemented (`is_deleted`, `deleted_at`) to preserve historical order linkage.
+- Modifier configuration support is implemented (`modifiers_config`) and used in order pricing.
+- Menu item image upload/serving is implemented (upload endpoint + static image serving).
+- Admin menu-management UI exists in the counter/admin screen.
+
+### Admin: Zone/Table Management
+- Zones and tables CRUD endpoints are implemented.
+- Admin-only table management UI exists, including edit (rename/zone reassignment) and delete actions.
+- Deletion safety constraints are implemented:
+  - block delete when active/non-finalized orders exist,
+  - detach historical finalized orders (`table_id = NULL`) when deleting table/zone-linked records.
+- Table status/grid endpoints are implemented for waiter/cashier/admin views.
+
+### Waiter: Order Taking & Item Lifecycle
+- Waiter dine-in and takeaway ordering flows are implemented in the waiter UI.
+- Table-centric order behavior is implemented:
+  - create a new open/dining order,
+  - append add-on items to existing open/dining order.
+- Submit/add-on batching is implemented using `batch_number`.
+- Per-line order details are implemented:
+  - quantity,
+  - selected modifiers,
+  - note/special instructions,
+  - waiter attribution (`created_by_id`).
+- Item status updates are implemented (`pending`, `cooking`, `served`, `cancelled`) through API + UI actions.
+- Cancelled-line handling is implemented so cancelled items are excluded from payable totals.
+
+### Cashier: Checkout & Receipt
+- Cashier table/takeaway active-order selection flows are implemented.
+- Checkout endpoint is implemented (`POST/PUT /api/orders/{order_id}/checkout`) with:
+  - payment method capture,
+  - optional discount (`percentage` or `amount`),
+  - amount tendered validation,
+  - change calculation,
+  - payment finalization (`status = paid`).
+- Money calculation invariants are implemented:
+  - deterministic rounding to 2 decimals,
+  - tax computed after discount (5% on net taxable amount),
+  - negative-safe clamping for taxable/tax/total.
+- Cashier receipt rendering and print-friendly receipt output are implemented in UI.
+
+### Reporting & Analytics
+- Reports endpoints are implemented for:
+  - today summary,
+  - top items,
+  - hourly trend,
+  - daily sales,
+  - monthly sales,
+  - category sales,
+  - cancellations analytics.
+- Dashboard charts/tabs are implemented in the counter/admin screen.
+- Historical-null-safe reporting behavior is implemented using fallback labels and snapshot columns where needed.
+
+### Realtime & Eventing (WebSocket)
+- `/ws` realtime endpoint and connection manager are implemented.
+- Broadcast events are implemented for operational refresh workflows, including:
+  - `new_order_batch`,
+  - `order_updated`,
+  - `order_completed`,
+  - `takeaways_updated`,
+  - `table_status_changed`,
+  - `table_grid_updated`,
+  - menu item update/delete/availability events.
+- Frontend listeners are implemented in waiter/counter/table-dashboard screens for live refresh.
+
+### Kitchen Ticket Dispatch (Mock Printing)
+- Kitchen dispatch is implemented as mock printer output writers (file-based) routed by item category/printer mapping.
+- Tickets are written to local `*_output.txt` files to simulate printer output.
+
+### Data Integrity & Null-Safety Baseline
+- Soft-delete lifecycle is implemented for `users` and `menu_items`.
+- Order and reporting payloads include deleted-reference-safe fallback behavior (e.g., deleted user/item labels).
+- Detached/deleted table links are handled without breaking order/report flows.
+
+### Test Coverage Baseline
+- Automated backend test harness is implemented with `pytest` and isolated test DB setup.
+- Test coverage includes core invariant and contract behavior:
+  - auth and role checks,
+  - order contracts and RBAC,
+  - cancellation/checkout money correctness,
+  - rounding and tax invariants,
+  - deletion-integrity behavior for historical data,
+  - table deletion safety constraints.
+
 ## Completed (Current Implementation Observed in Codebase)
 The current codebase already implements the core end-to-end POS workflows and realtime behavior required for a functional restaurant POS:
 - Authentication endpoints exist:
@@ -120,7 +230,7 @@ Deliver end-to-end daily restaurant POS functionality for `admin`, `waiter`, and
    - Clamp taxable base to avoid negative tax and negative grand total.
    - Extend contracts and UI/receipt rendering to expose `tax_amount` consistently.
    - Add automated invariants for tax rounding and large-discount edge cases.
-7. Table management enhancements (in progress)
+7. Table management enhancements (completed)
    - Add admin-side table edit controls (rename + zone reassignment) and explicit delete actions in table management UI.
    - Keep table mutations strictly admin-only.
    - Block table deletion when non-finalized orders exist; allow deletion only after orders are finalized.

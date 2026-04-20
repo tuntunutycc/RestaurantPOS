@@ -82,7 +82,8 @@ def update_zone(
 
 
 @router.delete("/zones/{zone_id}")
-def delete_zone(
+async def delete_zone(
+    request: Request,
     zone_id: int,
     db: Session = Depends(get_db),
     _admin: User = Depends(require_roles(["admin"])),
@@ -93,20 +94,19 @@ def delete_zone(
 
     table_ids = [t.id for t in (zone.tables or [])]
     if table_ids:
-        # Prevent deleting a zone that still has active/unpaid orders on its tables.
-        active_statuses = ("open", "dining", "pending", "completed")
-        active_orders_count = (
+        # Prevent deleting a zone when any non-finalized order is still tied to its tables.
+        non_finalized_orders_count = (
             db.query(Order)
             .filter(
                 Order.table_id.in_(table_ids),
-                Order.status.in_(active_statuses),
+                ~Order.status.in_(FINALIZED_ORDER_STATUSES),
             )
             .count()
         )
-        if active_orders_count > 0:
+        if non_finalized_orders_count > 0:
             raise HTTPException(
                 status_code=400,
-                detail="Cannot delete zone with active/unpaid table orders",
+                detail="Cannot delete zone with non-finalized table orders",
             )
 
         # Keep historical paid orders by detaching them from soon-to-be-deleted tables.
@@ -117,6 +117,7 @@ def delete_zone(
     # Zone -> tables deletion is cascaded by ORM relationship.
     db.delete(zone)
     db.commit()
+    await _broadcast_table_grid_updated(request)
     return {"deleted": True, "zone_id": zone_id}
 
 
@@ -202,12 +203,13 @@ async def update_table(
                     "status": _status_value(table.status),
                 },
             )
-        await _broadcast_table_grid_updated(request)
+    await _broadcast_table_grid_updated(request)
     return table
 
 
 @router.delete("/tables/{table_id}")
-def delete_table(
+async def delete_table(
+    request: Request,
     table_id: int,
     db: Session = Depends(get_db),
     _admin: User = Depends(require_roles(["admin"])),
@@ -229,8 +231,8 @@ def delete_table(
         raise HTTPException(
             status_code=400,
             detail=(
-                "Cannot delete table because it has active or pending orders. "
-                "Please finalize those orders first."
+                "Cannot delete table because it has non-finalized orders. "
+                "Only paid or cancelled orders are eligible for table deletion."
             ),
         )
 
@@ -241,6 +243,7 @@ def delete_table(
 
     db.delete(table)
     db.commit()
+    await _broadcast_table_grid_updated(request)
     return {"deleted": True, "table_id": table_id}
 
 
