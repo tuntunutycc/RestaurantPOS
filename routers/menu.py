@@ -13,6 +13,7 @@ from models import Category, MenuItem, OrderItem, User
 from schemas import (
     CategoryCreate,
     CategoryResponse,
+    CategoryUpdate,
     MenuItemCreate,
     MenuItemResponse,
     MenuItemUpdate,
@@ -30,8 +31,38 @@ def create_category(
     current_user: User = Depends(require_roles(["admin"])),
 ):
     """Create a new category. Admin only."""
-    db_category = Category(name=category.name)
+    db_category = Category(name=category.name, printer_route=category.printer_route)
     db.add(db_category)
+    db.commit()
+    db.refresh(db_category)
+    return db_category
+
+
+@router.put("/categories/{category_id}", response_model=CategoryResponse)
+def update_category(
+    category_id: int,
+    body: CategoryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["admin"])),
+):
+    """Update category name and/or kitchen printer route. Admin only."""
+    db_category = db.query(Category).filter(Category.id == category_id).first()
+    if not db_category:
+        raise HTTPException(status_code=404, detail=f"Category id {category_id} not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields provided to update")
+
+    if "name" in updates:
+        name = (updates["name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Category name must be non-empty")
+        db_category.name = name
+
+    if "printer_route" in updates:
+        db_category.printer_route = updates["printer_route"]
+
     db.commit()
     db.refresh(db_category)
     return db_category

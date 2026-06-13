@@ -28,8 +28,29 @@ class Category(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True)
+    # Kitchen print route: drinks | food | null (null defaults to food at dispatch).
+    printer_route = Column(String(32), nullable=True)
 
     menu_items = relationship("MenuItem", back_populates="category")
+
+
+class KitchenPrinterSettings(Base):
+    """Singleton kitchen printer backend mode (file vs LAN ESC/POS)."""
+
+    __tablename__ = "kitchen_printer_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    backend = Column(String(32), nullable=False, default="file")
+
+
+class PrinterRouteEndpoint(Base):
+    """LAN host/port for a kitchen printer route (drinks, food, ...)."""
+
+    __tablename__ = "printer_route_endpoints"
+
+    route_key = Column(String(32), primary_key=True)
+    host = Column(String(255), nullable=True)
+    port = Column(Integer, nullable=False, default=9100)
 
 
 class MenuItem(Base):

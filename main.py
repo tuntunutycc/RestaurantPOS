@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from auth import hash_password, require_roles
 from database import SessionLocal, engine
 from models import Base, Order, Table, User, Zone
-from routers import auth, menu, orders, reports, tables, users
+from routers import auth, kitchen_printers, menu, orders, reports, tables, users
 from websocket_manager import ConnectionManager
 
 
@@ -211,6 +211,12 @@ async def lifespan(app: FastAPI):
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE menu_items ADD COLUMN discount_price FLOAT"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE categories ADD COLUMN printer_route VARCHAR(32)"))
     except Exception:
         pass
     # Add batch_number to existing order_items if missing (SQLite dev migration).
@@ -457,6 +463,16 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    db = SessionLocal()
+    try:
+        from services.printing.settings import seed_kitchen_printer_settings
+
+        seed_kitchen_printer_settings(db)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
     # Ensure default admin exists (even if staff were added first via scripts)
     db = SessionLocal()
     try:
@@ -488,6 +504,7 @@ app.include_router(orders.router)
 app.include_router(reports.router)
 app.include_router(users.router)
 app.include_router(tables.router)
+app.include_router(kitchen_printers.router)
 
 
 @app.get("/api/health")

@@ -93,9 +93,13 @@ This baseline captures features that are currently implemented and functional in
   - menu item update/delete/availability events.
 - Frontend listeners are implemented in waiter/counter/table-dashboard screens for live refresh.
 
-### Kitchen Ticket Dispatch (Mock Printing)
-- Kitchen dispatch is implemented as mock printer output writers (file-based) routed by item category/printer mapping.
-- Tickets are written to local `*_output.txt` files to simulate printer output.
+### Kitchen Ticket Dispatch (LAN Printing)
+- Kitchen dispatch routes tickets by category `printer_route` (`drinks` | `food`, default `food`).
+- Admin configures route per category in counter menu management UI.
+- Server env maps routes to LAN endpoints (`PRINTER_DRINKS_HOST`, `PRINTER_FOOD_HOST`, port 9100).
+- `PRINTER_BACKEND=file` writes to `drinks_printer_output.txt` / `food_printer_output.txt` for dev/test.
+- `PRINTER_BACKEND=escpos_network` sends ESC/POS over TCP for Xprinter production use.
+- Print failures do not block order submit.
 
 ### Data Integrity & Null-Safety Baseline
 - Soft-delete lifecycle is implemented for `users` and `menu_items`.
@@ -132,8 +136,9 @@ The current codebase already implements the core end-to-end POS workflows and re
   - table/cashier refresh (`order_updated`, `table_status_changed`, `table_grid_updated`)
   - takeaways refresh (`takeaways_updated`)
   - menu item realtime updates
-- Printing is implemented as a mock ticket writer:
-  - writes to local `*_output.txt` files per resolved printer name
+- Printing is implemented as category-routed kitchen dispatch:
+  - file backend for dev (`drinks_printer_output.txt`, `food_printer_output.txt`)
+  - ESC/POS LAN backend for production (`PRINTER_BACKEND=escpos_network`)
 
 ### Remediation Status (Completed)
 All planned remediation steps are now implemented and test-backed:
@@ -177,6 +182,12 @@ All planned remediation steps are now implemented and test-backed:
   - Harden menu item deletion with soft-delete-first policy for items with order history.
   - Enforce backend/frontend null-safety when related rows are deleted or detached.
   - Add invariant tests proving reports remain stable after user/menu-item deletion events.
+- Step 9: Kitchen LAN Printing (category-routed Xprinter ESC/POS) (completed)
+  - Admin category `printer_route` (`drinks` | `food`, default food)
+  - Server env maps routes to LAN IP:port (`PRINTER_DRINKS_*`, `PRINTER_FOOD_*`)
+  - File backend for dev/test; ESC/POS network backend for production
+  - Non-blocking print failures on order submit
+  - Automated tests for routing + submit integrity (`tests/test_kitchen_printing.py`)
 
 Validation evidence:
 - Automated backend suite is green with invariant/contract/RBAC/cancellation tests.

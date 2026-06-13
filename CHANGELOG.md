@@ -1,5 +1,55 @@
 # Changelog
 
+## 2026-06-02 - feat/kitchen-lan-printing
+
+### Summary
+Implemented Step 9 kitchen LAN printing with admin category-level printer routing
+(`drinks` | `food`, default `food`), configurable ESC/POS network backend for
+Xprinter printers, and file backend for development without physical hardware.
+
+### Backend Changes
+- Added `Category.printer_route` column and startup migration in `main.py`.
+- Extended category schemas/API:
+  - `CategoryCreate`, `CategoryUpdate`, `CategoryResponse` include `printer_route`
+  - `PUT /api/categories/{category_id}` for admin route updates
+- Added `services/printing/` module:
+  - route resolver with unknown/null → `food` fallback
+  - ticket builder (single-item tickets, Myanmar text, takeaway header)
+  - `file` and `escpos_network` backends
+- Replaced `mock_send_to_printer` in `routers/orders.py` with `dispatch_kitchen_ticket`.
+- Print dispatch remains non-blocking on order submit (`return_exceptions=True`).
+
+### Frontend Changes
+- Counter menu admin:
+  - category create form includes printer route selector
+  - category list shows route badge + inline route update (Save)
+
+### Configuration
+- Added `.env.example` printer settings (optional env fallback):
+  - `PRINTER_BACKEND`, `PRINTER_DRINKS_HOST/PORT`, `PRINTER_FOOD_HOST/PORT`
+  - optional `KITCHEN_PRINT_OUTPUT_DIR`
+- **Admin UI (preferred):** Counter → Menu → Kitchen Printer Settings
+  - print mode (`file` / `escpos_network`)
+  - Drinks + Food counter LAN IP/port saved in database
+
+### Backend (UI settings)
+- Added `kitchen_printer_settings` + `printer_route_endpoints` tables.
+- Added `GET/PUT /api/admin/kitchen-printers` (admin only).
+- Print service loads backend + LAN endpoints from DB, with env fallback if host missing.
+
+### Spec / Docs
+- Added `specs/feature-kitchen-printing/` (requirements, plan, validation)
+- Updated `specs/roadmap.md` Step 9 and kitchen dispatch baseline notes
+- Updated `specs/tech-stack.md` orders router description
+
+### Test Coverage Added
+- `tests/test_kitchen_printing.py`:
+  - route resolver defaults/unknown fallback
+  - category API `printer_route` contract + 422 invalid literal
+  - drinks/food file routing on mixed submit
+  - unknown DB route fallback to food file
+  - submit success when print dispatch raises
+
 ## 2026-04-20 - feat/table-management
 
 ### Summary

@@ -1,7 +1,6 @@
 """Orders API: create and manage orders."""
 
 import asyncio
-import re
 from pydantic import BaseModel, field_validator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -11,6 +10,8 @@ from sqlalchemy.orm import Session, joinedload
 from auth import get_current_user, require_roles
 from database import get_db
 from models import MenuItem, Order, OrderItem, Table, User
+from services.printing.routes import resolve_printer_route
+from services.printing.service import dispatch_kitchen_ticket
 from schemas import (
     ActiveTakeawayOrderResponse,
     OrderCheckoutRequest,
@@ -56,61 +57,6 @@ def _recalculate_order_total_excluding_cancelled(order: Order) -> float:
         discount_amount = discount_value
 
     return round(max(subtotal - discount_amount, 0.0), 2)
-
-
-def _printer_name_for_category(category_name: str | None) -> str:
-    """
-    Resolve a target printer name from menu category.
-    Example: "Hot Drinks" -> "hot_drinks_printer".
-    """
-    cleaned = re.sub(r"[^a-z0-9]+", "_", (category_name or "").strip().lower()).strip("_")
-    return f"{cleaned or 'general'}_printer"
-
-
-async def mock_send_to_printer(
-    printer_name: str,
-    item_ticket: dict,
-    order_type: str = "dine_in",
-    customer_name: str | None = None,
-) -> None:
-    """
-    Mock printer writer for ONE item ticket.
-    Appends a standalone ticket to <printer_name>_output.txt.
-    """
-    output_path = f"{printer_name}_output.txt"
-    note_value = (item_ticket.get("note") or "").strip()
-    normalized_order_type = (order_type or "dine_in").strip().lower()
-    customer = (customer_name or "").strip() or "Walk-in"
-    header_block = (
-        "=================================\n"
-        "  [ *** TAKEAWAY / ပါဆယ် *** ]\n"
-        f"  Customer: {customer}\n"
-        "=================================\n"
-        if normalized_order_type == "takeaway"
-        else f"Table: {item_ticket.get('table_number', '')}\n"
-    )
-    ticket_text = (
-        "=== KITCHEN ITEM TICKET ===\n"
-        f"Printer: {printer_name}\n"
-        + header_block
-        + f"Order: #{item_ticket.get('order_id', '')}\n"
-        + f"Time: {item_ticket.get('date', '')}\n"
-        + "---------------------------------\n"
-        + f"{item_ticket.get('quantity', 1)}x {item_ticket.get('item_name', '')}\n"
-        + (f"   *** Note: {note_value} ***\n" if note_value else "")
-        + "---------------------------------\n"
-        + "[ --- CUT TICKET --- ]\n"
-    )
-    await asyncio.to_thread(
-        _append_text_file,
-        output_path,
-        ticket_text,
-    )
-
-
-def _append_text_file(path: str, text: str) -> None:
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(text)
 
 
 def _table_number_from_table(table: Table) -> int:
@@ -825,11 +771,11 @@ async def submit_order(
                 special_instructions=note_value,
             )
         )
-        category_name = getattr(getattr(menu_item, "category", None), "name", None)
-        printer_name = _printer_name_for_category(category_name)
+        category = getattr(menu_item, "category", None)
+        printer_route = resolve_printer_route(getattr(category, "printer_route", None))
         item_print_jobs.append(
             (
-                printer_name,
+                printer_route,
                 {
                     "item_name": menu_item.name,
                     "quantity": line.quantity,
@@ -871,13 +817,13 @@ async def submit_order(
     if item_print_jobs:
         await asyncio.gather(
             *[
-                mock_send_to_printer(
-                    printer_name,
+                dispatch_kitchen_ticket(
+                    printer_route,
                     item_ticket,
                     order_type=getattr(order, "order_type", "dine_in"),
                     customer_name=getattr(order, "customer_name", None),
                 )
-                for printer_name, item_ticket in item_print_jobs
+                for printer_route, item_ticket in item_print_jobs
             ],
             return_exceptions=True,
         )

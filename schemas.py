@@ -44,6 +44,8 @@ class TokenResponse(BaseModel):
 
 
 StaffRole = Literal["admin", "waiter", "kitchen", "cashier"]
+PrinterRouteLiteral = Literal["drinks", "food"]
+PrinterBackendLiteral = Literal["file", "escpos_network"]
 TableStatusLiteral = Literal["available", "occupied"]
 OrderItemStatusLiteral = Literal["pending", "cooking", "served", "cancelled"]
 OrderStatusLiteral = Literal["pending", "open", "dining", "completed", "paid", "cancelled"]
@@ -79,6 +81,51 @@ class CategoryCreate(BaseModel):
     """Schema for creating a category."""
 
     name: str
+    printer_route: PrinterRouteLiteral | None = None
+
+
+class CategoryUpdate(BaseModel):
+    """Schema for updating a category."""
+
+    name: str | None = None
+    printer_route: PrinterRouteLiteral | None = None
+
+
+class PrinterRouteEndpointResponse(BaseModel):
+    """LAN endpoint for one kitchen printer route."""
+
+    route_key: PrinterRouteLiteral
+    host: str | None = None
+    port: int = 9100
+
+
+class PrinterRouteEndpointUpdate(BaseModel):
+    """Update payload for one kitchen printer route endpoint."""
+
+    route_key: PrinterRouteLiteral
+    host: str | None = None
+    port: int = Field(default=9100, ge=1, le=65535)
+
+
+class KitchenPrinterSettingsResponse(BaseModel):
+    """Admin view of kitchen printer backend + route endpoints."""
+
+    backend: PrinterBackendLiteral = "file"
+    routes: list[PrinterRouteEndpointResponse]
+
+
+class KitchenPrinterSettingsUpdate(BaseModel):
+    """Admin update for kitchen printer backend + route endpoints."""
+
+    backend: PrinterBackendLiteral
+    routes: list[PrinterRouteEndpointUpdate]
+
+    @model_validator(mode="after")
+    def routes_must_include_known_keys(self):
+        keys = {route.route_key for route in self.routes}
+        if keys != {"drinks", "food"}:
+            raise ValueError("routes must include exactly drinks and food")
+        return self
 
 
 class ZoneCreate(BaseModel):
@@ -170,6 +217,7 @@ class CategoryResponse(BaseModel):
 
     id: int
     name: str
+    printer_route: PrinterRouteLiteral | None = None
 
 
 class ModifierOption(BaseModel):

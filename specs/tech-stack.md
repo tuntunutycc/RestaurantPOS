@@ -18,7 +18,7 @@ This POS system is currently built with:
 - Entry point: `main.py`
 - API routers: `routers/*`
   - `routers/auth.py`: login/token issuance
-  - `routers/orders.py`: order lifecycle, checkout, kitchen ticket dispatch (mock)
+  - `routers/orders.py`: order lifecycle, checkout, kitchen ticket dispatch (category-routed LAN/file)
   - `routers/menu.py`: categories + menu item CRUD
   - `routers/tables.py`: zones/tables management
   - `routers/users.py`: admin staff management

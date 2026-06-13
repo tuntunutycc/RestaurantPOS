@@ -1835,13 +1835,70 @@ function startMenuItemEdit(itemId) {
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function printerRouteLabel(route) {
+  const normalized = String(route || '').trim().toLowerCase();
+  if (normalized === 'drinks') return 'Drinks';
+  if (normalized === 'food') return 'Food counter';
+  return 'Food counter (default)';
+}
+
 function renderCategories(categories) {
   const el = document.getElementById('categories-list');
   if (!categories.length) {
     el.innerHTML = '<li class="text-slate-500">No categories yet.</li>';
     return;
   }
-  el.innerHTML = categories.map((c) => `<li class="py-1">${escapeHtml(c.name)}</li>`).join('');
+  el.innerHTML = categories
+    .map((c) => {
+      const currentRoute = String(c.printer_route || '').trim().toLowerCase();
+      return `
+        <li class="py-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100">
+          <div>
+            <span class="font-medium text-slate-800">${escapeHtml(c.name)}</span>
+            <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${escapeHtml(printerRouteLabel(currentRoute))}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <select data-category-route-id="${c.id}" class="text-sm px-2 py-1 border border-slate-300 rounded-md">
+              <option value="" ${currentRoute === '' ? 'selected' : ''}>Default (Food)</option>
+              <option value="food" ${currentRoute === 'food' ? 'selected' : ''}>Food counter</option>
+              <option value="drinks" ${currentRoute === 'drinks' ? 'selected' : ''}>Drinks</option>
+            </select>
+            <button type="button" data-save-category-route-id="${c.id}" class="text-xs px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save</button>
+          </div>
+        </li>
+      `;
+    })
+    .join('');
+
+  el.querySelectorAll('[data-save-category-route-id]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const categoryId = Number(btn.getAttribute('data-save-category-route-id'));
+      const select = el.querySelector(`[data-category-route-id="${categoryId}"]`);
+      if (!categoryId || !select) return;
+      const routeValue = String(select.value || '').trim();
+      const payload = routeValue ? { printer_route: routeValue } : { printer_route: null };
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/api/categories/${encodeURIComponent(categoryId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+          body: JSON.stringify(payload),
+        });
+        if (window.auth && window.auth.checkUnauthorized(res)) return;
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          await dialogAlert(err.detail || 'Failed to update printer route', 'error', 'Category Printer');
+          return;
+        }
+        await loadMenuData();
+      } catch (err) {
+        console.error(err);
+        await dialogAlert('Failed to update printer route', 'error', 'Category Printer');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 function renderMenuItems(items) {
@@ -1964,8 +2021,74 @@ function populateCategorySelect(categories) {
   if (currentValue) select.value = currentValue;
 }
 
+const kitchenPrinterForm = document.getElementById('form-kitchen-printers');
+if (kitchenPrinterForm) {
+  kitchenPrinterForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const backend = String(document.getElementById('printer-backend')?.value || 'file').trim();
+    const drinksHost = String(document.getElementById('printer-drinks-host')?.value || '').trim();
+    const drinksPort = Number(document.getElementById('printer-drinks-port')?.value || 9100);
+    const foodHost = String(document.getElementById('printer-food-host')?.value || '').trim();
+    const foodPort = Number(document.getElementById('printer-food-port')?.value || 9100);
+    const payload = {
+      backend,
+      routes: [
+        { route_key: 'drinks', host: drinksHost || null, port: drinksPort || 9100 },
+        { route_key: 'food', host: foodHost || null, port: foodPort || 9100 },
+      ],
+    };
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/kitchen-printers`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+        body: JSON.stringify(payload),
+      });
+      if (window.auth && window.auth.checkUnauthorized(res)) return;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        await dialogAlert(err.detail || 'Failed to save printer settings', 'error', 'Printer Settings');
+        return;
+      }
+      await loadKitchenPrinterSettings();
+      await dialogAlert('Printer settings saved.', 'success', 'Printer Settings');
+    } catch (err) {
+      console.error(err);
+      await dialogAlert('Failed to save printer settings', 'error', 'Printer Settings');
+    }
+  });
+}
+
+async function loadKitchenPrinterSettings() {
+  const form = document.getElementById('form-kitchen-printers');
+  if (!form) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/kitchen-printers`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    if (!res.ok) throw new Error('Failed to load kitchen printer settings');
+    const data = await res.json();
+    const backendEl = document.getElementById('printer-backend');
+    if (backendEl) backendEl.value = data.backend || 'file';
+    const routeMap = Object.fromEntries((data.routes || []).map((r) => [r.route_key, r]));
+    const drinks = routeMap.drinks || {};
+    const food = routeMap.food || {};
+    const drinksHost = document.getElementById('printer-drinks-host');
+    const drinksPort = document.getElementById('printer-drinks-port');
+    const foodHost = document.getElementById('printer-food-host');
+    const foodPort = document.getElementById('printer-food-port');
+    if (drinksHost) drinksHost.value = drinks.host || '';
+    if (drinksPort) drinksPort.value = drinks.port || 9100;
+    if (foodHost) foodHost.value = food.host || '';
+    if (foodPort) foodPort.value = food.port || 9100;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 async function loadMenuData() {
   try {
+    await loadKitchenPrinterSettings();
     const [categories, menuItems] = await Promise.all([fetchCategories(), fetchMenuItems()]);
     menuItemsCache = menuItems || [];
     renderCategories(categories);
@@ -1981,13 +2104,17 @@ async function loadMenuData() {
 document.getElementById('form-category').addEventListener('submit', async (e) => {
   e.preventDefault();
   const input = document.getElementById('category-name');
+  const routeSelect = document.getElementById('category-printer-route');
   const name = input.value.trim();
   if (!name) return;
+  const routeValue = routeSelect ? String(routeSelect.value || '').trim() : '';
+  const payload = { name };
+  if (routeValue) payload.printer_route = routeValue;
   try {
     const res = await fetch(`${API_BASE}/api/categories/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify(payload),
     });
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     if (!res.ok) {
@@ -1996,6 +2123,7 @@ document.getElementById('form-category').addEventListener('submit', async (e) =>
       return;
     }
     input.value = '';
+    if (routeSelect) routeSelect.value = '';
     await loadMenuData();
   } catch (err) {
     console.error(err);
