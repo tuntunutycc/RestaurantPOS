@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-06-23 - feat/kitchen-image-printing
+
+### Summary
+Extended kitchen LAN printing with server-side image render mode for Myanmar text compatibility on Xprinter/ESC/POS printers that cannot render Myanmar Unicode text directly.
+
+### Backend Changes
+- Added Pillow dependency for ticket image rendering.
+- Added `render_mode` and `paper_width_px` to `kitchen_printer_settings`.
+- Extended printer settings API:
+  - `render_mode`: `text` | `image`
+  - `paper_width_px`: `384` | `576`
+- Added image renderer and ESC/POS raster payload builder.
+- File backend now supports PNG preview output in image mode.
+- Network backend can send raster image ESC/POS payloads in image mode.
+- Existing text mode remains the default compatibility path.
+
+### Frontend Changes
+- Counter → Menu → Kitchen Printer Settings now includes:
+  - render mode selector
+  - paper width selector for 58mm/80mm printers
+
+### Spec / Docs
+- Updated `specs/feature-kitchen-printing/requirements.md`, `plan.md`, and `validation.md`.
+- Updated `specs/roadmap.md`, `specs/tech-stack.md`, and `.env.example`.
+
+### Test Coverage Added
+- Image mode file backend writes PNG output.
+- ESC/POS raster payload builder returns non-empty raster bytes.
+- Settings API validates render mode and paper width.
+- Validation run: `PYTHONPATH=. pytest -q` → `39 passed`.
+
 ## 2026-06-02 - feat/kitchen-lan-printing
 
 ### Summary

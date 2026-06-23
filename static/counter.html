@@ -270,6 +270,24 @@
             </select>
           </div>
           <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1" for="printer-render-mode">Render mode</label>
+              <select id="printer-render-mode" name="render_mode"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <option value="text">Text mode (ESC/POS text)</option>
+                <option value="image">Image mode (Myanmar font rendering)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-600 mb-1" for="printer-paper-width">Paper width</label>
+              <select id="printer-paper-width" name="paper_width_px"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <option value="576">80mm (576 px)</option>
+                <option value="384">58mm (384 px)</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
             <div class="border border-slate-200 rounded-md p-4 space-y-3">
               <h3 class="font-medium text-slate-700">Drinks printer</h3>
               <input type="text" id="printer-drinks-host" placeholder="LAN IP (e.g. 192.168.1.101)"

@@ -219,6 +219,52 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE categories ADD COLUMN printer_route VARCHAR(32)"))
     except Exception:
         pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE kitchen_printer_settings "
+                    "ADD COLUMN render_mode VARCHAR(32) NOT NULL DEFAULT 'text'"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE kitchen_printer_settings "
+                    "ADD COLUMN paper_width_px INTEGER NOT NULL DEFAULT 576"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE kitchen_printer_settings "
+                    "SET render_mode = 'text' "
+                    "WHERE render_mode IS NULL OR trim(render_mode) = ''"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE kitchen_printer_settings "
+                    "SET paper_width_px = 576 "
+                    "WHERE paper_width_px IS NULL OR paper_width_px NOT IN (384, 576)"
+                )
+            )
+    except Exception:
+        pass
     # Add batch_number to existing order_items if missing (SQLite dev migration).
     try:
         from sqlalchemy import text

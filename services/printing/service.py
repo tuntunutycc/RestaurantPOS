@@ -7,9 +7,14 @@ import logging
 from typing import Any
 
 from services.printing.backends.escpos_network import send_network_ticket
-from services.printing.backends.file import send_file_ticket
+from services.printing.backends.file import send_file_ticket, send_file_ticket_image
+from services.printing.image_renderer import render_ticket_image
 from services.printing.settings import load_printer_config
-from services.printing.ticket import build_escpos_payload, build_ticket_text
+from services.printing.ticket import (
+    build_escpos_raster_payload,
+    build_escpos_text_payload,
+    build_ticket_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +39,21 @@ async def dispatch_kitchen_ticket(
         order_type=order_type,
         customer_name=customer_name,
     )
-    escpos_payload = build_escpos_payload(ticket_text)
+    if config.render_mode == "image":
+        image = render_ticket_image(
+            ticket_text,
+            paper_width_px=config.paper_width_px,
+            font_path=config.font_path,
+        )
+        escpos_payload = build_escpos_raster_payload(image)
+        if config.backend == "escpos_network":
+            await asyncio.to_thread(send_network_ticket, config, route, escpos_payload)
+            return
 
+        await asyncio.to_thread(send_file_ticket_image, config, route, image)
+        return
+
+    escpos_payload = build_escpos_text_payload(ticket_text)
     if config.backend == "escpos_network":
         await asyncio.to_thread(send_network_ticket, config, route, escpos_payload)
         return

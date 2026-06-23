@@ -41,6 +41,8 @@ class KitchenPrinterSettings(Base):
 
     id = Column(Integer, primary_key=True, default=1)
     backend = Column(String(32), nullable=False, default="file")
+    render_mode = Column(String(32), nullable=False, default="text")
+    paper_width_px = Column(Integer, nullable=False, default=576)
 
 
 class PrinterRouteEndpoint(Base):

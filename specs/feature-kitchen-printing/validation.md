@@ -47,3 +47,41 @@
 - [ ] Full pytest suite green.
 - [ ] `CHANGELOG.md` updated.
 - [ ] `specs/roadmap.md` Step 9 marked with evidence.
+
+## I. Image Render Mode
+
+- [ ] Printer settings API returns `render_mode`.
+- [ ] Printer settings API returns `paper_width_px`.
+- [ ] Admin UI can save `text` mode.
+- [ ] Admin UI can save `image` mode.
+- [ ] Admin UI can save paper width `384`.
+- [ ] Admin UI can save paper width `576`.
+
+## J. File Backend Image Preview
+
+- [ ] File backend + text mode writes `.txt`.
+- [ ] File backend + image mode writes `.png`.
+- [ ] PNG output is non-empty.
+- [ ] PNG output dimensions match configured paper width.
+
+## K. ESC/POS Raster Payload
+
+- [ ] Text mode still builds ESC/POS text payload.
+- [ ] Image mode builds ESC/POS raster payload.
+- [ ] Raster payload includes init/feed/cut bytes.
+- [ ] Payload is non-empty for Myanmar item names.
+
+## L. Failure Safety
+
+- [ ] Missing configured font logs clear warning and falls back.
+- [ ] Image render failure does not fail order submit.
+- [ ] Network print failure still does not fail order submit.
+- [ ] Existing kitchen printing tests still pass.
+
+## M. Automated Tests
+
+- [ ] Test: settings API supports render mode + paper width.
+- [ ] Test: image mode file backend writes PNG.
+- [ ] Test: raster payload builder returns non-empty bytes.
+- [ ] Test: order submit succeeds when renderer raises.
+- [ ] Full suite passes: `PYTHONPATH=. pytest -q`.

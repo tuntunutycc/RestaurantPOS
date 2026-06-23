@@ -18,7 +18,7 @@ Server resolves route → LAN IP:port and prints one ticket per submitted line i
 - Trigger printing indirectly via `POST /api/orders/submit`.
 
 ### 2.3 System (Server)
-- Loads printer hardware endpoints from environment variables.
+- Loads printer hardware endpoints from admin-managed DB settings, with environment fallback.
 - Dispatches tickets after successful order persist + WebSocket broadcast.
 
 ## 3. Functional Requirements
@@ -73,6 +73,36 @@ Each ticket must include:
 - v1 registers `drinks` and `food`.
 - Future routes can be added via registry + env without rewriting order logic.
 
+### FR-9: Image Rendering Mode for Myanmar Tickets
+- System supports `render_mode = text | image`.
+- `text` mode keeps the existing ESC/POS text behavior.
+- `image` mode renders the kitchen ticket on the server as a monochrome image before printing.
+- Image mode is intended for Myanmar Unicode text on printers that cannot render Myanmar code pages.
+- Image mode must preserve existing one-item-one-ticket behavior.
+
+### FR-10: Render Settings
+- Admin can configure:
+  - `render_mode`: `text` or `image`
+  - `paper_width_px`: `384` for 58mm or `576` for 80mm
+- Defaults:
+  - `render_mode = text`
+  - `paper_width_px = 576`
+
+### FR-11: File Backend Image Preview
+- In `file` backend + `text` mode, system writes `.txt` ticket output as today.
+- In `file` backend + `image` mode, system writes PNG preview files:
+  - `drinks_printer_output.png`
+  - `food_printer_output.png`
+
+### FR-12: ESC/POS Raster Image Output
+- In `escpos_network` backend + `image` mode, system sends ESC/POS raster image bytes.
+- Payload includes printer init, raster image command, feed, and cut command.
+
+### FR-13: Font Handling
+- Image rendering should use a bundled Myanmar-capable font when configured/available.
+- If no configured font is available, renderer falls back to a system/default font so tests and ASCII tickets still work.
+- Missing or unusable font must be logged clearly.
+
 ## 4. Business Logic Rules
 
 ### BL-1: Default Route
@@ -89,6 +119,17 @@ Each ticket must include:
 
 ### BL-5: Server-side Only
 - Printing is executed on POS server, not client WebView/browser.
+
+### BL-6: Render Mode Safety
+- Printing remains a side effect.
+- Image render failures do not roll back orders.
+- Text mode remains the compatibility fallback.
+
+### BL-7: Paper Width
+- `paper_width_px` controls rendered image width.
+- Supported presets:
+  - `384` for 58mm
+  - `576` for 80mm
 
 ## 5. API / Contract Requirements
 
@@ -115,6 +156,8 @@ Each ticket must include:
   - empty selection persists as null → server uses food default
 - Kitchen printer LAN settings panel (Counter → Menu):
   - print mode: `file` or `escpos_network`
+  - render mode: `text` or `image`
+  - paper width: `384` or `576`
   - drinks/food LAN IP + port per route
   - persisted via `GET/PUT /api/admin/kitchen-printers`
 
@@ -124,6 +167,7 @@ Each ticket must include:
 ## 7. Non-Functional Requirements
 - Myanmar text on tickets should be attempted as UTF-8 in file mode.
 - ESC/POS mode: document encoding limitations; do not block submit on encoding issues.
+- Image render mode should reduce dependence on printer code pages by rendering Myanmar text server-side.
 - Deterministic route resolution for same category configuration.
 - Backward compatible: existing submit/WebSocket flows unchanged.
 
@@ -131,9 +175,9 @@ Each ticket must include:
 - Per-menu-item printer override
 - Cashier receipt ESC/POS (browser print remains)
 - Bluetooth/USB printer support
-- Admin UI for editing printer IP addresses (env-only in v1)
 - Kitchen KDS screen
 - Print retry queue / dead-letter persistence
+- Perfect Myanmar shaping across all operating systems/printers is not guaranteed without a suitable font and renderer support.
 
 ## 9. Acceptance Criteria
 - AC-1: Admin can set category `printer_route` to drinks or food.
@@ -144,3 +188,8 @@ Each ticket must include:
 - AC-6: `PRINTER_BACKEND=file` works without physical printer.
 - AC-7: Simulated print failure does not fail order submit (HTTP 200).
 - AC-8: Automated tests cover route resolution + non-blocking failure behavior.
+- AC-9: Admin can select text/image render mode.
+- AC-10: Admin can set paper width to 384 or 576.
+- AC-11: File backend image mode writes route-specific PNG output.
+- AC-12: ESC/POS network image mode builds non-empty raster payload.
+- AC-13: Order submit succeeds even if image rendering fails.

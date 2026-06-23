@@ -29,6 +29,12 @@ def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
     backend = (getattr(settings, "backend", None) or "file").strip().lower()
     if backend not in ("file", "escpos_network"):
         backend = "file"
+    render_mode = (getattr(settings, "render_mode", None) or "text").strip().lower()
+    if render_mode not in ("text", "image"):
+        render_mode = "text"
+    paper_width_px = int(getattr(settings, "paper_width_px", None) or 576)
+    if paper_width_px not in (384, 576):
+        paper_width_px = 576
     routes = [
         PrinterRouteEndpointResponse(
             route_key=route_key,
@@ -37,7 +43,12 @@ def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
         )
         for route_key in sorted(KNOWN_PRINTER_ROUTES)
     ]
-    return KitchenPrinterSettingsResponse(backend=backend, routes=routes)
+    return KitchenPrinterSettingsResponse(
+        backend=backend,
+        render_mode=render_mode,
+        paper_width_px=paper_width_px,
+        routes=routes,
+    )
 
 
 @router.get("/kitchen-printers", response_model=KitchenPrinterSettingsResponse)
@@ -62,6 +73,8 @@ def update_kitchen_printer_settings(
         raise HTTPException(status_code=500, detail="Kitchen printer settings are not initialized")
 
     settings.backend = body.backend
+    settings.render_mode = body.render_mode
+    settings.paper_width_px = body.paper_width_px
     endpoints = {
         row.route_key: row
         for row in db.query(PrinterRouteEndpoint)

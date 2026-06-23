@@ -2026,12 +2026,16 @@ if (kitchenPrinterForm) {
   kitchenPrinterForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const backend = String(document.getElementById('printer-backend')?.value || 'file').trim();
+    const renderMode = String(document.getElementById('printer-render-mode')?.value || 'text').trim();
+    const paperWidth = Number(document.getElementById('printer-paper-width')?.value || 576);
     const drinksHost = String(document.getElementById('printer-drinks-host')?.value || '').trim();
     const drinksPort = Number(document.getElementById('printer-drinks-port')?.value || 9100);
     const foodHost = String(document.getElementById('printer-food-host')?.value || '').trim();
     const foodPort = Number(document.getElementById('printer-food-port')?.value || 9100);
     const payload = {
       backend,
+      render_mode: renderMode,
+      paper_width_px: paperWidth,
       routes: [
         { route_key: 'drinks', host: drinksHost || null, port: drinksPort || 9100 },
         { route_key: 'food', host: foodHost || null, port: foodPort || 9100 },
@@ -2069,7 +2073,11 @@ async function loadKitchenPrinterSettings() {
     if (!res.ok) throw new Error('Failed to load kitchen printer settings');
     const data = await res.json();
     const backendEl = document.getElementById('printer-backend');
+    const renderModeEl = document.getElementById('printer-render-mode');
+    const paperWidthEl = document.getElementById('printer-paper-width');
     if (backendEl) backendEl.value = data.backend || 'file';
+    if (renderModeEl) renderModeEl.value = data.render_mode || 'text';
+    if (paperWidthEl) paperWidthEl.value = String(data.paper_width_px || 576);
     const routeMap = Object.fromEntries((data.routes || []).map((r) => [r.route_key, r]));
     const drinks = routeMap.drinks || {};
     const food = routeMap.food || {};

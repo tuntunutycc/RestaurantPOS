@@ -46,6 +46,7 @@ class TokenResponse(BaseModel):
 StaffRole = Literal["admin", "waiter", "kitchen", "cashier"]
 PrinterRouteLiteral = Literal["drinks", "food"]
 PrinterBackendLiteral = Literal["file", "escpos_network"]
+PrinterRenderModeLiteral = Literal["text", "image"]
 TableStatusLiteral = Literal["available", "occupied"]
 OrderItemStatusLiteral = Literal["pending", "cooking", "served", "cancelled"]
 OrderStatusLiteral = Literal["pending", "open", "dining", "completed", "paid", "cancelled"]
@@ -111,6 +112,8 @@ class KitchenPrinterSettingsResponse(BaseModel):
     """Admin view of kitchen printer backend + route endpoints."""
 
     backend: PrinterBackendLiteral = "file"
+    render_mode: PrinterRenderModeLiteral = "text"
+    paper_width_px: int = 576
     routes: list[PrinterRouteEndpointResponse]
 
 
@@ -118,13 +121,17 @@ class KitchenPrinterSettingsUpdate(BaseModel):
     """Admin update for kitchen printer backend + route endpoints."""
 
     backend: PrinterBackendLiteral
+    render_mode: PrinterRenderModeLiteral = "text"
+    paper_width_px: int = Field(default=576)
     routes: list[PrinterRouteEndpointUpdate]
 
     @model_validator(mode="after")
-    def routes_must_include_known_keys(self):
+    def settings_must_be_valid(self):
         keys = {route.route_key for route in self.routes}
         if keys != {"drinks", "food"}:
             raise ValueError("routes must include exactly drinks and food")
+        if self.paper_width_px not in (384, 576):
+            raise ValueError("paper_width_px must be 384 or 576")
         return self
 
 

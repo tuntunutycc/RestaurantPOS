@@ -12,6 +12,7 @@ from services.printing.config import (
     PrinterBackendName,
     PrinterConfig,
     PrinterEndpoint,
+    PrinterRenderModeName,
 )
 
 
@@ -27,7 +28,14 @@ def seed_kitchen_printer_settings(db: Session) -> None:
     """Ensure singleton settings row and default route endpoint rows exist."""
     settings = db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
     if not settings:
-        db.add(KitchenPrinterSettings(id=1, backend="file"))
+        db.add(
+            KitchenPrinterSettings(
+                id=1,
+                backend="file",
+                render_mode="text",
+                paper_width_px=576,
+            )
+        )
 
     existing_keys = {
         row.route_key
@@ -46,6 +54,11 @@ def _backend_from_env() -> PrinterBackendName:
     return "escpos_network" if backend_raw == "escpos_network" else "file"
 
 
+def _render_mode_from_env() -> PrinterRenderModeName:
+    render_mode_raw = os.getenv("PRINTER_RENDER_MODE", "text").strip().lower()
+    return "image" if render_mode_raw == "image" else "text"
+
+
 def _route_endpoint_from_env(route: str) -> PrinterEndpoint | None:
     host = os.getenv(f"PRINTER_{route.upper()}_HOST", "").strip()
     if not host:
@@ -62,6 +75,13 @@ def _load_printer_config_from_db(db: Session) -> PrinterConfig:
     backend: PrinterBackendName = (
         "escpos_network" if backend_raw == "escpos_network" else "file"
     )
+    render_mode_raw = (getattr(settings, "render_mode", None) or "").strip().lower()
+    render_mode: PrinterRenderModeName = (
+        "image" if render_mode_raw == "image" else "text"
+    )
+    paper_width_px = int(getattr(settings, "paper_width_px", None) or 576)
+    if paper_width_px not in (384, 576):
+        paper_width_px = 576
 
     endpoint_rows = {
         row.route_key: row
@@ -81,7 +101,19 @@ def _load_printer_config_from_db(db: Session) -> PrinterConfig:
         if env_endpoint:
             routes[route] = env_endpoint
 
-    return PrinterConfig(backend=backend, output_dir=output_dir, routes=routes)
+    if backend_raw == "":
+        backend = _backend_from_env()
+    if render_mode_raw == "":
+        render_mode = _render_mode_from_env()
+
+    return PrinterConfig(
+        backend=backend,
+        render_mode=render_mode,
+        paper_width_px=paper_width_px,
+        output_dir=output_dir,
+        routes=routes,
+        font_path=(os.getenv("KITCHEN_PRINT_FONT_PATH", "").strip() or None),
+    )
 
 
 def load_printer_config(db: Session | None = None) -> PrinterConfig:

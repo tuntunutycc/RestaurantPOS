@@ -96,9 +96,10 @@ This baseline captures features that are currently implemented and functional in
 ### Kitchen Ticket Dispatch (LAN Printing)
 - Kitchen dispatch routes tickets by category `printer_route` (`drinks` | `food`, default `food`).
 - Admin configures route per category in counter menu management UI.
-- Server env maps routes to LAN endpoints (`PRINTER_DRINKS_HOST`, `PRINTER_FOOD_HOST`, port 9100).
+- Admin configures route LAN endpoints in Counter → Menu → Kitchen Printer Settings.
 - `PRINTER_BACKEND=file` writes to `drinks_printer_output.txt` / `food_printer_output.txt` for dev/test.
 - `PRINTER_BACKEND=escpos_network` sends ESC/POS over TCP for Xprinter production use.
+- Image render mode can write PNG previews / send ESC/POS raster image payloads for Myanmar text compatibility.
 - Print failures do not block order submit.
 
 ### Data Integrity & Null-Safety Baseline
@@ -184,8 +185,9 @@ All planned remediation steps are now implemented and test-backed:
   - Add invariant tests proving reports remain stable after user/menu-item deletion events.
 - Step 9: Kitchen LAN Printing (category-routed Xprinter ESC/POS) (completed)
   - Admin category `printer_route` (`drinks` | `food`, default food)
-  - Server env maps routes to LAN IP:port (`PRINTER_DRINKS_*`, `PRINTER_FOOD_*`)
+  - Admin UI maps routes to LAN IP:port (`GET/PUT /api/admin/kitchen-printers`)
   - File backend for dev/test; ESC/POS network backend for production
+  - Image-rendered ticket mode for Myanmar Unicode output
   - Non-blocking print failures on order submit
   - Automated tests for routing + submit integrity (`tests/test_kitchen_printing.py`)
 

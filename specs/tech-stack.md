@@ -113,6 +113,17 @@ This POS system is currently built with:
   - reports still compute successfully,
   - UI/API fallback labels are returned for missing relations.
 
+## Kitchen Printing
+- Kitchen printing is a server-side side effect after successful order persistence.
+- Supported backends:
+  - `file` for local/dev validation without physical printers
+  - `escpos_network` for LAN Xprinter/ESC/POS devices
+- Supported render modes:
+  - `text`: ESC/POS text payload (compatible fallback)
+  - `image`: server-rendered raster image payload for Myanmar text compatibility
+- Admin printer settings live in the counter menu management screen and are exposed through `GET/PUT /api/admin/kitchen-printers`.
+- Print failures must not roll back order submit.
+
 ## Test Strategy (required for SDD merge gate)
 - Introduce automated tests with a backend test runner (e.g., `pytest`) for each feature.
 - Tests must verify:

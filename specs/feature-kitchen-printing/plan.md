@@ -73,9 +73,61 @@ Add `tests/test_kitchen_printing.py`:
 - Update `CHANGELOG.md` after tests green
 - Add `.env.example` printer vars
 
+### 9) Image render settings contract
+- Extend printer settings schemas:
+  - `render_mode: Literal["text", "image"]`
+  - `paper_width_px: int` (384 or 576)
+- Extend `kitchen_printer_settings` model/table:
+  - `render_mode`
+  - `paper_width_px`
+- Add startup migrations in `main.py`.
+
+### 10) Ticket renderer abstraction
+- Keep current `build_ticket_text()`.
+- Add image rendering module:
+  - `services/printing/image_renderer.py`
+- Responsibilities:
+  - render ticket text with a Myanmar-capable configured font when available
+  - output monochrome image bytes/PNG
+  - use configured width
+  - fall back gracefully when configured font is missing
+
+### 11) ESC/POS raster builder
+- Split payload builders into:
+  - text ESC/POS payload
+  - raster image ESC/POS payload
+- Keep current text behavior as `text` mode.
+
+### 12) Backend dispatch integration
+- Update `dispatch_kitchen_ticket()`:
+  - read `render_mode`
+  - if `text`: current flow
+  - if `image`: render image then send raster bytes
+- File backend:
+  - text mode writes `.txt`
+  - image mode writes `.png`
+- Network backend:
+  - text mode sends text ESC/POS
+  - image mode sends raster ESC/POS
+
+### 13) Admin UI settings
+- Extend Counter → Menu → Kitchen Printer Settings:
+  - render mode dropdown
+  - paper width selector/input
+- Persist via existing `GET/PUT /api/admin/kitchen-printers`.
+
+### 14) Tests
+- Add tests for:
+  - default render mode is text
+  - settings API accepts image mode + 384/576
+  - file backend image mode creates PNG
+  - raster payload is non-empty
+  - render failure does not fail submit
+
 ## Delivery Criteria
 - Admin can configure category printer route from counter UI.
 - Submit prints one ticket per item to correct route.
 - File backend enables dev without printer.
 - ESC/POS network backend ready for Xprinter LAN IP config.
+- Image render mode supports Myanmar-friendly ticket output through server-rendered raster images.
 - pytest green; validation checklist complete.

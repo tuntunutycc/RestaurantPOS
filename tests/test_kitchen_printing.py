@@ -4,8 +4,10 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from PIL import Image
 
 from models import Category, MenuItem, Table, Zone
+from services.printing.ticket import build_escpos_raster_payload
 from services.printing.routes import resolve_printer_route
 
 
@@ -98,7 +100,13 @@ def _patch_file_printer_output(monkeypatch, tmp_path):
     from services.printing.config import PrinterConfig
 
     def _fake_load_printer_config(db=None):
-        return PrinterConfig(backend="file", output_dir=str(tmp_path), routes={})
+        return PrinterConfig(
+            backend="file",
+            render_mode="text",
+            paper_width_px=576,
+            output_dir=str(tmp_path),
+            routes={},
+        )
 
     monkeypatch.setattr(
         "services.printing.service.load_printer_config",
@@ -184,6 +192,49 @@ def test_submit_succeeds_when_print_dispatch_raises(
     assert res.json()["total_amount"] > 0
 
 
+def test_file_backend_image_mode_writes_png(
+    client, db_session, auth_headers, tmp_path, monkeypatch
+):
+    from services.printing.config import PrinterConfig
+
+    def _fake_load_printer_config(db=None):
+        return PrinterConfig(
+            backend="file",
+            render_mode="image",
+            paper_width_px=384,
+            output_dir=str(tmp_path),
+            routes={},
+        )
+
+    monkeypatch.setattr(
+        "services.printing.service.load_printer_config",
+        _fake_load_printer_config,
+    )
+
+    table, drinks_item, _ = _seed_table_and_items(db_session, drinks_route="drinks")
+    res = _submit_items(
+        client,
+        auth_headers("waiter"),
+        table.id,
+        [{"menu_item_id": drinks_item.id, "quantity": 1, "selected_modifiers": []}],
+    )
+    assert res.status_code == 200, res.text
+
+    output_path = tmp_path / "drinks_printer_output.png"
+    assert output_path.exists()
+    with Image.open(output_path) as image:
+        assert image.size[0] == 384
+        assert image.size[1] > 0
+
+
+def test_escpos_raster_payload_non_empty():
+    image = Image.new("1", (384, 32), 255)
+    payload = build_escpos_raster_payload(image)
+    assert payload.startswith(b"\x1b\x40\x1d\x76\x30\x00")
+    assert payload.endswith(b"\n\n\x1d\x56\x00")
+    assert len(payload) > 100
+
+
 def test_admin_kitchen_printer_settings_api(client, auth_headers):
     get_res = client.get("/api/admin/kitchen-printers", headers=auth_headers("admin"))
     assert get_res.status_code == 200, get_res.text
@@ -196,6 +247,8 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
         headers=auth_headers("admin"),
         json={
             "backend": "escpos_network",
+            "render_mode": "image",
+            "paper_width_px": 384,
             "routes": [
                 {"route_key": "drinks", "host": "192.168.1.101", "port": 9100},
                 {"route_key": "food", "host": "192.168.1.102", "port": 9100},
@@ -205,6 +258,8 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
     assert put_res.status_code == 200, put_res.text
     updated = put_res.json()
     assert updated["backend"] == "escpos_network"
+    assert updated["render_mode"] == "image"
+    assert updated["paper_width_px"] == 384
     drinks = next(r for r in updated["routes"] if r["route_key"] == "drinks")
     food = next(r for r in updated["routes"] if r["route_key"] == "food")
     assert drinks["host"] == "192.168.1.101"
