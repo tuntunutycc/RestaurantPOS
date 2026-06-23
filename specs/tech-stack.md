@@ -121,6 +121,7 @@ This POS system is currently built with:
 - Supported render modes:
   - `text`: ESC/POS text payload (compatible fallback)
   - `image`: server-rendered raster image payload for Myanmar text compatibility
+- Image mode auto-loads bundled Myanmar Unicode fonts from `assets/fonts/`, with `KITCHEN_PRINT_FONT_PATH` available only as an override.
 - Admin printer settings live in the counter menu management screen and are exposed through `GET/PUT /api/admin/kitchen-printers`.
 - Print failures must not roll back order submit.
 

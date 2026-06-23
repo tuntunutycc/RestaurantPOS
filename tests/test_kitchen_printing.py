@@ -4,7 +4,7 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageFont
 
 from models import Category, MenuItem, Table, Zone
 from services.printing.ticket import build_escpos_raster_payload
@@ -225,6 +225,31 @@ def test_file_backend_image_mode_writes_png(
     with Image.open(output_path) as image:
         assert image.size[0] == 384
         assert image.size[1] > 0
+
+
+def test_image_renderer_discovers_bundled_myanmar_font(tmp_path, monkeypatch):
+    import services.printing.image_renderer as renderer
+
+    font_dir = tmp_path / "assets" / "fonts"
+    font_dir.mkdir(parents=True)
+    font_path = font_dir / "CustomMyanmar-Regular.ttf"
+    font_path.write_bytes(b"placeholder")
+
+    fallback_font = ImageFont.load_default()
+    loaded_paths = []
+
+    def _fake_truetype(path, size):
+        loaded_paths.append(path)
+        return fallback_font
+
+    monkeypatch.setattr(renderer, "BUNDLED_FONT_DIRS", (font_dir,))
+    monkeypatch.setattr(renderer, "SYSTEM_FONT_PATHS", ())
+    monkeypatch.setattr(renderer.ImageFont, "truetype", _fake_truetype)
+
+    font = renderer._load_font(None)
+
+    assert font is fallback_font
+    assert loaded_paths == [str(font_path)]
 
 
 def test_submit_succeeds_when_image_renderer_raises(

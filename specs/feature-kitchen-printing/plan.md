@@ -3,9 +3,10 @@
 ## Objective
 Implement category-routed kitchen ticket printing with:
 - admin category → printer route (`drinks` | `food`)
-- server env → LAN IP:port per route
+- admin-managed DB settings → LAN IP:port per route, with optional env fallback
 - file backend for dev/test
 - ESC/POS network backend for Xprinter production
+- bundled Myanmar font support for image-rendered tickets
 - non-blocking print failures on order submit
 
 ## Scope
@@ -14,6 +15,7 @@ Implement category-routed kitchen ticket printing with:
 - Frontend: admin category form in counter menu panel
 - Tests: routing, default fallback, submit non-blocking behavior
 - Docs: `.env.example`, README section, CHANGELOG, roadmap Step 9
+- Assets: bundled Myanmar-capable print font under `assets/fonts/`
 
 ## Out of Scope
 - Menu-item-level routing
@@ -88,7 +90,8 @@ Add `tests/test_kitchen_printing.py`:
 - Add image rendering module:
   - `services/printing/image_renderer.py`
 - Responsibilities:
-  - render ticket text with a Myanmar-capable configured font when available
+  - render ticket text with a Myanmar-capable configured or bundled font when available
+  - auto-discover bundled fonts from `assets/fonts/` / `static/fonts/`
   - output monochrome image bytes/PNG
   - use configured width
   - fall back gracefully when configured font is missing
@@ -122,8 +125,14 @@ Add `tests/test_kitchen_printing.py`:
   - default render mode is text
   - settings API accepts image mode + 384/576
   - file backend image mode creates PNG
+  - bundled Myanmar font auto-discovery
   - raster payload is non-empty
   - render failure does not fail submit
+
+### 15) Bundled font asset
+- Add `assets/fonts/NotoSansMyanmar-Regular.ttf`.
+- Include the upstream OFL license as `assets/fonts/OFL-NotoSansMyanmar.txt`.
+- Keep `.env` font path optional for deployments that want to override the bundled font.
 
 ## Delivery Criteria
 - Admin can configure category printer route from counter UI.
@@ -131,6 +140,7 @@ Add `tests/test_kitchen_printing.py`:
 - File backend enables dev without printer.
 - ESC/POS network backend ready for Xprinter LAN IP config.
 - Image render mode supports Myanmar-friendly ticket output through server-rendered raster images.
+- Bundled Noto Sans Myanmar font enables image mode without `.env` font configuration.
 - pytest green; validation checklist complete.
 
 ## Implementation Trace (Current Code)
@@ -187,7 +197,7 @@ Add `tests/test_kitchen_printing.py`:
   - ESC/POS raster payload builder (`GS v 0`)
 - `services/printing/image_renderer.py`
   - Pillow-based 1-bit image renderer
-  - configured font path fallback: `KITCHEN_PRINT_FONT_PATH`
+  - font lookup: `KITCHEN_PRINT_FONT_PATH`, bundled fonts, system fallback, Pillow default
 - `services/printing/backends/file.py`
   - text `.txt` output
   - image `.png` output
@@ -211,6 +221,7 @@ Add `tests/test_kitchen_printing.py`:
   - unknown route fallback
   - print failure does not fail submit
   - file backend image mode writes PNG
+  - bundled Myanmar font auto-discovery
   - ESC/POS raster payload is non-empty
   - settings API includes backend/render mode/paper width/route endpoints and admin RBAC
 
@@ -220,7 +231,8 @@ Add `tests/test_kitchen_printing.py`:
   - first-time seed defaults (`PRINTER_BACKEND`, `PRINTER_RENDER_MODE`, `PRINTER_PAPER_WIDTH_PX`)
   - route host fallback when DB host is empty (`PRINTER_DRINKS_HOST`, `PRINTER_FOOD_HOST`)
   - file backend output directory (`KITCHEN_PRINT_OUTPUT_DIR`)
-  - optional image renderer font path (`KITCHEN_PRINT_FONT_PATH`)
+  - optional image renderer font override (`KITCHEN_PRINT_FONT_PATH`)
+- Bundled `assets/fonts/NotoSansMyanmar-Regular.ttf` is used automatically when no font override is configured.
 
 ## Debugging Notes
 - If no file appears in file mode:
@@ -229,7 +241,10 @@ Add `tests/test_kitchen_printing.py`:
   - check `KITCHEN_PRINT_OUTPUT_DIR`; default is process working directory
 - If Myanmar text prints as Chinese/garbled in text mode:
   - use `render_mode=image`
-  - configure a Myanmar-capable font via `KITCHEN_PRINT_FONT_PATH`
+- If Myanmar image output shows square boxes:
+  - confirm `assets/fonts/NotoSansMyanmar-Regular.ttf` exists
+  - confirm server was restarted after adding/updating the font
+  - use `KITCHEN_PRINT_FONT_PATH` only if overriding the bundled font
 - If image mode prints too narrow/wide:
   - use `384` for 58mm printers
   - use `576` for 80mm printers

@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-06-23 - docs/kitchen-print-font-bundle
+
+### Summary
+Bundled Noto Sans Myanmar for kitchen ticket image rendering so deployments can print Myanmar text without requiring `.env` font path configuration.
+
+### Backend / Assets
+- Added `assets/fonts/NotoSansMyanmar-Regular.ttf`.
+- Added upstream OFL license at `assets/fonts/OFL-NotoSansMyanmar.txt`.
+- Extended image renderer font discovery to prefer bundled fonts in `assets/fonts/` and `static/fonts/`, then system fonts, then Pillow fallback.
+- Kept `KITCHEN_PRINT_FONT_PATH` as an optional deployment override.
+
+### Spec / Docs
+- Updated kitchen printing requirements, plan, validation, and implementation reference with bundled font behavior and troubleshooting notes.
+- Updated `specs/tech-stack.md` and `.env.example` to clarify that bundled font auto-discovery is the default path.
+
+### Test Coverage Added
+- Bundled Myanmar font auto-discovery regression coverage in `tests/test_kitchen_printing.py`.
+- Validation run: `PYTHONPATH=. pytest -q` → `41 passed`.
+
 ## 2026-06-23 - feat/kitchen-image-printing
 
 ### Summary

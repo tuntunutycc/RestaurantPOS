@@ -1,7 +1,7 @@
 # Validation Checklist: Kitchen LAN Printing (Phase 1 - Step 9)
 
 Validation evidence:
-- Latest automated run: `PYTHONPATH=. pytest -q` -> `40 passed`
+- Latest automated run: `PYTHONPATH=. pytest -q` -> `41 passed`
 - Primary test file: `tests/test_kitchen_printing.py`
 
 ## A. Category Route Configuration
@@ -78,6 +78,9 @@ Validation evidence:
 ## L. Failure Safety
 
 - [x] Missing configured font logs clear warning and falls back.
+- [x] Bundled Myanmar font discovery works without `.env` font path.
+- [x] Bundled `assets/fonts/NotoSansMyanmar-Regular.ttf` is loadable by Pillow.
+- [x] Bundled Noto Sans Myanmar OFL license is included.
 - [x] Image render failure does not fail order submit.
 - [x] Network print failure still does not fail order submit.
 - [x] Existing kitchen printing tests still pass.
@@ -86,6 +89,7 @@ Validation evidence:
 
 - [x] Test: settings API supports render mode + paper width.
 - [x] Test: image mode file backend writes PNG.
+- [x] Test: bundled Myanmar font auto-discovery.
 - [x] Test: raster payload builder returns non-empty bytes.
 - [x] Test: order submit succeeds when renderer raises.
 - [x] Full suite passes: `PYTHONPATH=. pytest -q`.

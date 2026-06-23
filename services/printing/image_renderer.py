@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-import os
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -13,29 +13,68 @@ DEFAULT_FONT_SIZE = 28
 LINE_GAP_PX = 8
 PADDING_X_PX = 18
 PADDING_Y_PX = 16
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BUNDLED_FONT_DIRS = (
+    PROJECT_ROOT / "assets" / "fonts",
+    PROJECT_ROOT / "static" / "fonts",
+)
+PREFERRED_MYANMAR_FONT_NAMES = (
+    "NotoSansMyanmar-Regular.ttf",
+    "NotoSansMyanmar.ttf",
+    "NotoSerifMyanmar-Regular.ttf",
+    "Pyidaungsu.ttf",
+    "Myanmar3.ttf",
+)
+SYSTEM_FONT_PATHS = (
+    "/usr/share/fonts/truetype/noto/NotoSansMyanmar-Regular.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansMyanmar-Regular.otf",
+    "/Library/Fonts/NotoSansMyanmar-Regular.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+)
+
+
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    unique_paths: list[Path] = []
+    for path in paths:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_paths.append(path)
+    return unique_paths
+
+
+def _candidate_font_paths(font_path: str | None) -> list[Path]:
+    candidates: list[Path] = []
+    if font_path:
+        candidates.append(Path(font_path))
+
+    for font_dir in BUNDLED_FONT_DIRS:
+        candidates.extend(font_dir / name for name in PREFERRED_MYANMAR_FONT_NAMES)
+
+    for font_dir in BUNDLED_FONT_DIRS:
+        if not font_dir.exists():
+            continue
+        candidates.extend(sorted(font_dir.glob("*Myanmar*.ttf")))
+        candidates.extend(sorted(font_dir.glob("*Myanmar*.otf")))
+        candidates.extend(sorted(font_dir.glob("*Pyidaungsu*.ttf")))
+        candidates.extend(sorted(font_dir.glob("*Pyidaungsu*.otf")))
+
+    candidates.extend(Path(path) for path in SYSTEM_FONT_PATHS)
+    return _dedupe_paths(candidates)
 
 
 def _load_font(font_path: str | None, size: int = DEFAULT_FONT_SIZE) -> ImageFont.ImageFont:
-    if font_path:
+    for path in _candidate_font_paths(font_path):
+        if not path.exists():
+            continue
         try:
-            return ImageFont.truetype(font_path, size=size)
+            font = ImageFont.truetype(str(path), size=size)
+            logger.info("Loaded kitchen print font: %s", path)
+            return font
         except OSError as exc:
-            logger.warning("Unable to load kitchen print font %s: %s", font_path, exc)
-
-    # Common fallback paths. A bundled font can be supplied later without changing code.
-    fallback_paths = [
-        "assets/fonts/NotoSansMyanmar-Regular.ttf",
-        "static/fonts/NotoSansMyanmar-Regular.ttf",
-        "/Library/Fonts/NotoSansMyanmar-Regular.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    ]
-    for path in fallback_paths:
-        if not os.path.exists(path):
-            continue
-        try:
-            return ImageFont.truetype(path, size=size)
-        except OSError:
-            continue
+            logger.warning("Unable to load kitchen print font %s: %s", path, exc)
 
     logger.warning("No Myanmar-capable kitchen print font found; using Pillow default font")
     return ImageFont.load_default()

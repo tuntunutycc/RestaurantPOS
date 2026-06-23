@@ -14,6 +14,9 @@ This document records how the kitchen printing feature is wired in code so futur
 - Render modes:
   - `text`
   - `image`
+- Bundled print font:
+  - `assets/fonts/NotoSansMyanmar-Regular.ttf`
+  - `assets/fonts/OFL-NotoSansMyanmar.txt`
 - Route settings:
   - Admin UI / DB is the source of truth
   - `.env` can seed defaults and provide fallback host values
@@ -171,6 +174,9 @@ Relevant env vars:
 - `KITCHEN_PRINT_OUTPUT_DIR`
 - `KITCHEN_PRINT_FONT_PATH`
 
+Note:
+- `KITCHEN_PRINT_FONT_PATH` is optional because the repository bundles `assets/fonts/NotoSansMyanmar-Regular.ttf`.
+
 ### `services/printing/routes.py`
 
 Contains:
@@ -207,13 +213,15 @@ Purpose:
 
 Font lookup:
 1. `KITCHEN_PRINT_FONT_PATH`
-2. `assets/fonts/NotoSansMyanmar-Regular.ttf`
-3. `static/fonts/NotoSansMyanmar-Regular.ttf`
-4. common system fallback paths
-5. Pillow default font
+2. preferred bundled filenames in `assets/fonts/`
+3. preferred bundled filenames in `static/fonts/`
+4. any bundled `*Myanmar*.ttf`, `*Myanmar*.otf`, `*Pyidaungsu*.ttf`, or `*Pyidaungsu*.otf`
+5. common system fallback paths
+6. Pillow default font
 
 Recommendation:
-- Bundle `NotoSansMyanmar-Regular.ttf` and set `KITCHEN_PRINT_FONT_PATH` for consistent Myanmar output.
+- Bundle `assets/fonts/NotoSansMyanmar-Regular.ttf` for consistent Myanmar output without `.env` font configuration.
+- `KITCHEN_PRINT_FONT_PATH` remains available when a deployment wants to use an external system font.
 
 ### `services/printing/backends/file.py`
 
@@ -271,6 +279,7 @@ Coverage:
 - text file backend output
 - image file backend PNG output
 - raster payload byte structure
+- bundled Myanmar font auto-discovery
 - print failure does not fail order submit
 - printer settings API and RBAC
 
@@ -281,7 +290,7 @@ PYTHONPATH=. pytest -q
 ```
 
 Latest known result:
-- `40 passed`
+- `41 passed`
 
 ## 8. Debugging Playbook
 
@@ -292,7 +301,20 @@ Likely cause:
 
 Fix:
 - Set render mode to `image`.
-- Use a Myanmar-capable font via `KITCHEN_PRINT_FONT_PATH`.
+- Confirm bundled `assets/fonts/NotoSansMyanmar-Regular.ttf` exists.
+- Restart the server after adding/updating bundled fonts.
+- Use `KITCHEN_PRINT_FONT_PATH` only when overriding the bundled font.
+
+### Problem: Myanmar image output shows square boxes
+
+Likely cause:
+- Image mode is active, but the renderer used a font without Myanmar glyphs.
+
+Fix:
+- Confirm `assets/fonts/NotoSansMyanmar-Regular.ttf` exists and is a valid TrueType font.
+- Restart the server so Pillow reloads the bundled font.
+- Check logs for `Loaded kitchen print font`.
+- If using a custom font, set `KITCHEN_PRINT_FONT_PATH` to its absolute path.
 
 ### Problem: PNG output not created in file mode
 
@@ -339,6 +361,7 @@ To add per-item overrides:
 4. Keep historical sale snapshots stable.
 
 To improve Myanmar rendering:
-1. Bundle a known font under `assets/fonts/`.
-2. Set `KITCHEN_PRINT_FONT_PATH`.
-3. If shaping is still wrong, consider a renderer with stronger complex-script support.
+1. Replace or add fonts under `assets/fonts/`.
+2. Prefer `NotoSansMyanmar-Regular.ttf` for default auto-discovery.
+3. Use `KITCHEN_PRINT_FONT_PATH` only for deployment-specific overrides.
+4. If shaping is still wrong, consider a renderer with stronger complex-script support.

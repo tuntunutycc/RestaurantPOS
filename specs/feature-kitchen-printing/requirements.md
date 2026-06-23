@@ -99,7 +99,10 @@ Each ticket must include:
 - Payload includes printer init, raster image command, feed, and cut command.
 
 ### FR-13: Font Handling
-- Image rendering should use a bundled Myanmar-capable font when configured/available.
+- Image rendering should use a configured or bundled Myanmar-capable font when available.
+- Bundled font discovery must support `assets/fonts/` and `static/fonts/` so deployments can work without `.env` font paths.
+- Preferred bundled filename: `NotoSansMyanmar-Regular.ttf`.
+- Repository includes `assets/fonts/NotoSansMyanmar-Regular.ttf` and its OFL license for default Myanmar image rendering.
 - If no configured font is available, renderer falls back to a system/default font so tests and ASCII tickets still work.
 - Missing or unusable font must be logged clearly.
 
@@ -149,6 +152,7 @@ Each ticket must include:
 - `PRINTER_DRINKS_HOST`, `PRINTER_DRINKS_PORT` (default port 9100)
 - `PRINTER_FOOD_HOST`, `PRINTER_FOOD_PORT` (default port 9100)
 - `KITCHEN_PRINT_OUTPUT_DIR` (optional; defaults to project cwd for file backend)
+- `KITCHEN_PRINT_FONT_PATH` is optional; bundled `assets/fonts/NotoSansMyanmar-Regular.ttf` is preferred when present.
 
 ### 6.2 Admin UI
 - Category create/edit form includes printer route selector:
@@ -193,3 +197,4 @@ Each ticket must include:
 - AC-11: File backend image mode writes route-specific PNG output.
 - AC-12: ESC/POS network image mode builds non-empty raster payload.
 - AC-13: Order submit succeeds even if image rendering fails.
+- AC-14: Image renderer auto-loads bundled Myanmar font without `.env` font configuration.
