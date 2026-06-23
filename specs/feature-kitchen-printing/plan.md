@@ -17,8 +17,9 @@ Implement category-routed kitchen ticket printing with:
 
 ## Out of Scope
 - Menu-item-level routing
-- Admin printer IP management UI
 - PostgreSQL/Alembic migration tooling (use existing runtime ALTER pattern)
+- Bluetooth/USB printer support
+- Print retry/dead-letter persistence
 
 ## Implementation Steps
 
@@ -131,3 +132,110 @@ Add `tests/test_kitchen_printing.py`:
 - ESC/POS network backend ready for Xprinter LAN IP config.
 - Image render mode supports Myanmar-friendly ticket output through server-rendered raster images.
 - pytest green; validation checklist complete.
+
+## Implementation Trace (Current Code)
+
+### Data Model / Runtime Migration
+- `models.py`
+  - `Category.printer_route`
+  - `KitchenPrinterSettings.backend`
+  - `KitchenPrinterSettings.render_mode`
+  - `KitchenPrinterSettings.paper_width_px`
+  - `PrinterRouteEndpoint.route_key`, `host`, `port`
+- `main.py`
+  - runtime SQLite migrations add `categories.printer_route`
+  - runtime SQLite migrations add printer settings columns
+  - startup seeds singleton kitchen printer settings and route endpoint rows
+
+### API Contracts
+- `schemas.py`
+  - `PrinterRouteLiteral = "drinks" | "food"`
+  - `PrinterBackendLiteral = "file" | "escpos_network"`
+  - `PrinterRenderModeLiteral = "text" | "image"`
+  - `KitchenPrinterSettingsResponse/Update`
+- `routers/kitchen_printers.py`
+  - `GET /api/admin/kitchen-printers`
+  - `PUT /api/admin/kitchen-printers`
+  - admin-only via `require_roles(["admin"])`
+- `routers/menu.py`
+  - category create/update returns and persists `printer_route`
+
+### Dispatch Flow
+1. Waiter/cashier/admin submits `POST /api/orders/submit`.
+2. `routers/orders.py` persists order/items and broadcasts `new_order_batch`.
+3. For each submitted item, category `printer_route` is normalized by `resolve_printer_route()`.
+4. `dispatch_kitchen_ticket()` loads printer settings from DB via `load_printer_config()`.
+5. `build_ticket_text()` creates one-item ticket text.
+6. Dispatch branches:
+   - `backend=file`, `render_mode=text` -> route `.txt` output
+   - `backend=file`, `render_mode=image` -> route `.png` preview
+   - `backend=escpos_network`, `render_mode=text` -> ESC/POS text bytes over TCP
+   - `backend=escpos_network`, `render_mode=image` -> ESC/POS raster bytes over TCP
+7. Print exceptions stay isolated by the `asyncio.gather(..., return_exceptions=True)` call in order submit.
+
+### Printing Modules
+- `services/printing/config.py`
+  - route constants and `PrinterConfig`
+- `services/printing/settings.py`
+  - DB-backed config loader
+  - env fallback for first seed and missing route hosts
+- `services/printing/routes.py`
+  - `None`, empty, unknown -> `food`
+- `services/printing/ticket.py`
+  - ticket text builder
+  - ESC/POS text payload builder
+  - ESC/POS raster payload builder (`GS v 0`)
+- `services/printing/image_renderer.py`
+  - Pillow-based 1-bit image renderer
+  - configured font path fallback: `KITCHEN_PRINT_FONT_PATH`
+- `services/printing/backends/file.py`
+  - text `.txt` output
+  - image `.png` output
+- `services/printing/backends/escpos_network.py`
+  - raw TCP send to configured LAN host/port
+
+### Frontend
+- `static/counter.html`
+  - Kitchen Printer Settings panel
+  - backend selector, render mode selector, paper width selector, route host/port inputs
+  - category printer route selector
+- `static/counter.js`
+  - loads/saves `GET/PUT /api/admin/kitchen-printers`
+  - loads/saves category route mappings
+
+### Automated Tests
+- `tests/test_kitchen_printing.py`
+  - route normalization
+  - category API contract and invalid route rejection
+  - file backend text routing
+  - unknown route fallback
+  - print failure does not fail submit
+  - file backend image mode writes PNG
+  - ESC/POS raster payload is non-empty
+  - settings API includes backend/render mode/paper width/route endpoints and admin RBAC
+
+## Configuration Precedence
+- Admin UI / DB settings are the normal production source of truth.
+- `.env` is used for:
+  - first-time seed defaults (`PRINTER_BACKEND`, `PRINTER_RENDER_MODE`, `PRINTER_PAPER_WIDTH_PX`)
+  - route host fallback when DB host is empty (`PRINTER_DRINKS_HOST`, `PRINTER_FOOD_HOST`)
+  - file backend output directory (`KITCHEN_PRINT_OUTPUT_DIR`)
+  - optional image renderer font path (`KITCHEN_PRINT_FONT_PATH`)
+
+## Debugging Notes
+- If no file appears in file mode:
+  - confirm `backend=file`
+  - confirm category route is set or defaults to `food`
+  - check `KITCHEN_PRINT_OUTPUT_DIR`; default is process working directory
+- If Myanmar text prints as Chinese/garbled in text mode:
+  - use `render_mode=image`
+  - configure a Myanmar-capable font via `KITCHEN_PRINT_FONT_PATH`
+- If image mode prints too narrow/wide:
+  - use `384` for 58mm printers
+  - use `576` for 80mm printers
+- If LAN printer does not print:
+  - confirm `backend=escpos_network`
+  - confirm route host/port in admin UI
+  - confirm printer is reachable from the POS server on TCP port 9100
+- If order submit succeeds but nothing prints:
+  - this is expected failure isolation; inspect server logs for printing errors

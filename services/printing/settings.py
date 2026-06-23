@@ -24,6 +24,11 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _paper_width_from_env() -> int:
+    paper_width_px = _env_int("PRINTER_PAPER_WIDTH_PX", 576)
+    return paper_width_px if paper_width_px in (384, 576) else 576
+
+
 def seed_kitchen_printer_settings(db: Session) -> None:
     """Ensure singleton settings row and default route endpoint rows exist."""
     settings = db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
@@ -31,9 +36,9 @@ def seed_kitchen_printer_settings(db: Session) -> None:
         db.add(
             KitchenPrinterSettings(
                 id=1,
-                backend="file",
-                render_mode="text",
-                paper_width_px=576,
+                backend=_backend_from_env(),
+                render_mode=_render_mode_from_env(),
+                paper_width_px=_paper_width_from_env(),
             )
         )
 

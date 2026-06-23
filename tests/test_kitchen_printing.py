@@ -227,6 +227,45 @@ def test_file_backend_image_mode_writes_png(
         assert image.size[1] > 0
 
 
+def test_submit_succeeds_when_image_renderer_raises(
+    client, db_session, auth_headers, tmp_path, monkeypatch
+):
+    from services.printing.config import PrinterConfig
+
+    def _fake_load_printer_config(db=None):
+        return PrinterConfig(
+            backend="file",
+            render_mode="image",
+            paper_width_px=384,
+            output_dir=str(tmp_path),
+            routes={},
+        )
+
+    monkeypatch.setattr(
+        "services.printing.service.load_printer_config",
+        _fake_load_printer_config,
+    )
+
+    def _raise_render_error(*args, **kwargs):
+        raise RuntimeError("font renderer failed")
+
+    monkeypatch.setattr(
+        "services.printing.service.render_ticket_image",
+        _raise_render_error,
+    )
+
+    table, drinks_item, _ = _seed_table_and_items(db_session, drinks_route="drinks")
+    res = _submit_items(
+        client,
+        auth_headers("waiter"),
+        table.id,
+        [{"menu_item_id": drinks_item.id, "quantity": 1, "selected_modifiers": []}],
+    )
+
+    assert res.status_code == 200, res.text
+    assert res.json()["total_amount"] > 0
+
+
 def test_escpos_raster_payload_non_empty():
     image = Image.new("1", (384, 32), 255)
     payload = build_escpos_raster_payload(image)

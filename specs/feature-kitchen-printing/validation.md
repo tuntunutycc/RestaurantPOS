@@ -1,87 +1,91 @@
 # Validation Checklist: Kitchen LAN Printing (Phase 1 - Step 9)
 
+Validation evidence:
+- Latest automated run: `PYTHONPATH=. pytest -q` -> `40 passed`
+- Primary test file: `tests/test_kitchen_printing.py`
+
 ## A. Category Route Configuration
-- [ ] `CategoryResponse` includes `printer_route`.
-- [ ] Admin can set `printer_route` to `drinks` via API/UI.
-- [ ] Admin can set `printer_route` to `food` via API/UI.
-- [ ] Empty/null `printer_route` is accepted and means default food.
-- [ ] Invalid `printer_route` literal returns `422`.
+- [x] `CategoryResponse` includes `printer_route`.
+- [x] Admin can set `printer_route` to `drinks` via API/UI.
+- [x] Admin can set `printer_route` to `food` via API/UI.
+- [x] Empty/null `printer_route` is accepted and means default food.
+- [x] Invalid `printer_route` literal returns `422`.
 
 ## B. Route Resolution
-- [ ] Drinks-category item resolves to `drinks` route.
-- [ ] Null/empty category route resolves to `food`.
-- [ ] Unknown route value falls back to `food` with warning log.
+- [x] Drinks-category item resolves to `drinks` route.
+- [x] Null/empty category route resolves to `food`.
+- [x] Unknown route value falls back to `food` with warning log.
 
 ## C. Ticket Dispatch
-- [ ] One submitted line item produces exactly one ticket.
-- [ ] Mixed batch sends to both drinks and food targets.
-- [ ] Ticket includes table OR takeaway header, order id, time, qty×name, note.
-- [ ] Myanmar item names appear in file backend output.
+- [x] One submitted line item produces exactly one ticket.
+- [x] Mixed batch sends to both drinks and food targets.
+- [x] Ticket includes table OR takeaway header, order id, time, qty×name, note.
+- [x] Myanmar item names appear in file backend output.
 
 ## D. Backends
-- [ ] `PRINTER_BACKEND=file` writes to `drinks_printer_output.txt` and `food_printer_output.txt`.
-- [ ] `PRINTER_BACKEND=escpos_network` uses configured host/port per route.
-- [ ] Missing host for route logs error; does not crash submit.
+- [x] `backend=file` writes to `drinks_printer_output.txt` and `food_printer_output.txt`.
+- [x] `backend=escpos_network` uses configured host/port per route.
+- [x] Missing host for route logs error; does not crash submit.
 
 ## E. Order Submit Integrity (Critical)
-- [ ] `POST /api/orders/submit` response unchanged (contract stable).
-- [ ] Simulated print exception still returns submit success.
-- [ ] Order/items persisted even when all prints fail.
-- [ ] WebSocket `new_order_batch` still emitted on submit.
+- [x] `POST /api/orders/submit` response unchanged (contract stable).
+- [x] Simulated print exception still returns submit success.
+- [x] Order/items persisted even when all prints fail.
+- [x] WebSocket `new_order_batch` still emitted on submit.
 
 ## F. Admin UI
-- [ ] Category form shows printer route selector.
-- [ ] Default (Food) saves null/food behavior correctly.
-- [ ] Non-admin cannot mutate categories (existing RBAC unchanged).
+- [x] Category form shows printer route selector.
+- [x] Default (Food) saves null/food behavior correctly.
+- [x] Non-admin cannot mutate categories (existing RBAC unchanged).
 
 ## G. Automated Tests (Required)
-- [ ] Test: drinks route dispatch
-- [ ] Test: default food route dispatch
-- [ ] Test: mixed batch dual dispatch
-- [ ] Test: invalid route fallback to food
-- [ ] Test: print failure non-blocking submit
-- [ ] Test: category API `printer_route` contract
+- [x] Test: drinks route dispatch
+- [x] Test: default food route dispatch
+- [x] Test: mixed batch dual dispatch
+- [x] Test: invalid route fallback to food
+- [x] Test: print failure non-blocking submit
+- [x] Test: category API `printer_route` contract
 
 ## H. Definition of Done
-- [ ] All required checks A–G pass.
-- [ ] Full pytest suite green.
-- [ ] `CHANGELOG.md` updated.
-- [ ] `specs/roadmap.md` Step 9 marked with evidence.
+- [x] All required checks A–G pass.
+- [x] Full pytest suite green.
+- [x] `CHANGELOG.md` updated.
+- [x] `specs/roadmap.md` Step 9 marked with evidence.
 
 ## I. Image Render Mode
 
-- [ ] Printer settings API returns `render_mode`.
-- [ ] Printer settings API returns `paper_width_px`.
-- [ ] Admin UI can save `text` mode.
-- [ ] Admin UI can save `image` mode.
-- [ ] Admin UI can save paper width `384`.
-- [ ] Admin UI can save paper width `576`.
+- [x] Printer settings API returns `render_mode`.
+- [x] Printer settings API returns `paper_width_px`.
+- [x] Admin UI can save `text` mode.
+- [x] Admin UI can save `image` mode.
+- [x] Admin UI can save paper width `384`.
+- [x] Admin UI can save paper width `576`.
 
 ## J. File Backend Image Preview
 
-- [ ] File backend + text mode writes `.txt`.
-- [ ] File backend + image mode writes `.png`.
-- [ ] PNG output is non-empty.
-- [ ] PNG output dimensions match configured paper width.
+- [x] File backend + text mode writes `.txt`.
+- [x] File backend + image mode writes `.png`.
+- [x] PNG output is non-empty.
+- [x] PNG output dimensions match configured paper width.
 
 ## K. ESC/POS Raster Payload
 
-- [ ] Text mode still builds ESC/POS text payload.
-- [ ] Image mode builds ESC/POS raster payload.
-- [ ] Raster payload includes init/feed/cut bytes.
-- [ ] Payload is non-empty for Myanmar item names.
+- [x] Text mode still builds ESC/POS text payload.
+- [x] Image mode builds ESC/POS raster payload.
+- [x] Raster payload includes init/feed/cut bytes.
+- [x] Payload is non-empty for Myanmar item names.
 
 ## L. Failure Safety
 
-- [ ] Missing configured font logs clear warning and falls back.
-- [ ] Image render failure does not fail order submit.
-- [ ] Network print failure still does not fail order submit.
-- [ ] Existing kitchen printing tests still pass.
+- [x] Missing configured font logs clear warning and falls back.
+- [x] Image render failure does not fail order submit.
+- [x] Network print failure still does not fail order submit.
+- [x] Existing kitchen printing tests still pass.
 
 ## M. Automated Tests
 
-- [ ] Test: settings API supports render mode + paper width.
-- [ ] Test: image mode file backend writes PNG.
-- [ ] Test: raster payload builder returns non-empty bytes.
-- [ ] Test: order submit succeeds when renderer raises.
-- [ ] Full suite passes: `PYTHONPATH=. pytest -q`.
+- [x] Test: settings API supports render mode + paper width.
+- [x] Test: image mode file backend writes PNG.
+- [x] Test: raster payload builder returns non-empty bytes.
+- [x] Test: order submit succeeds when renderer raises.
+- [x] Full suite passes: `PYTHONPATH=. pytest -q`.
