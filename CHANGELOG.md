@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-06-24 - feat/kitchen-print-font-fallback
+
+### Summary
+Improved image-rendered kitchen ticket output by adding Latin/digit/punctuation fallback font support for mixed Myanmar and English ticket text.
+
+### Backend / Assets
+- Added bundled Latin fallback font support using `assets/fonts/NotoSans-Regular.ttf`.
+- Added upstream OFL license at `assets/fonts/OFL-NotoSans.txt`.
+- Updated image renderer to choose Myanmar font for Myanmar Unicode ranges and Latin fallback font for English labels, numbers, and punctuation.
+
+### Spec / Docs
+- Updated kitchen printing requirements, plan, validation, implementation reference, tech stack, and font README for multi-font fallback behavior.
+
+### Test Coverage Added
+- Font fallback routing coverage for mixed Myanmar/English/digit/punctuation ticket text.
+- Bundled font loadability coverage for Myanmar and Latin font assets.
+- Validation run: `PYTHONPATH=. venv/bin/python -m pytest -q` → `44 passed`.
+
 ## 2026-06-23 - docs/kitchen-print-font-bundle
 
 ### Summary

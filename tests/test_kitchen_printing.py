@@ -243,13 +243,51 @@ def test_image_renderer_discovers_bundled_myanmar_font(tmp_path, monkeypatch):
         return fallback_font
 
     monkeypatch.setattr(renderer, "BUNDLED_FONT_DIRS", (font_dir,))
-    monkeypatch.setattr(renderer, "SYSTEM_FONT_PATHS", ())
+    monkeypatch.setattr(renderer, "SYSTEM_MYANMAR_FONT_PATHS", ())
     monkeypatch.setattr(renderer.ImageFont, "truetype", _fake_truetype)
 
     font = renderer._load_font(None)
 
     assert font is fallback_font
     assert loaded_paths == [str(font_path)]
+
+
+def test_image_renderer_routes_latin_text_to_fallback_font():
+    import services.printing.image_renderer as renderer
+
+    myanmar_font = object()
+    latin_font = object()
+
+    assert renderer._font_for_char("က", myanmar_font, latin_font) is myanmar_font
+    assert renderer._font_for_char("A", myanmar_font, latin_font) is latin_font
+    assert renderer._font_for_char("1", myanmar_font, latin_font) is latin_font
+    assert renderer._font_for_char("-", myanmar_font, latin_font) is latin_font
+
+
+def test_image_renderer_mixed_script_output_is_non_empty():
+    from services.printing.image_renderer import render_ticket_image
+
+    image = render_ticket_image(
+        "=== KITCHEN ITEM TICKET ===\n"
+        "Table: 2\n"
+        "2x လက်ဖက်ရည် - No sugar\n"
+        "*** Note: အချိုလျှော့ ***",
+        paper_width_px=384,
+    )
+
+    assert image.size[0] == 384
+    assert image.histogram()[0] > 0
+
+
+def test_bundled_print_fonts_are_loadable():
+    bundled_fonts = [
+        "assets/fonts/NotoSansMyanmar-Regular.ttf",
+        "assets/fonts/NotoSans-Regular.ttf",
+    ]
+
+    for font_path in bundled_fonts:
+        font = ImageFont.truetype(font_path, size=28)
+        assert font.getname()[0]
 
 
 def test_submit_succeeds_when_image_renderer_raises(

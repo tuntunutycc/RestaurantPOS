@@ -106,6 +106,14 @@ Each ticket must include:
 - If no configured font is available, renderer falls back to a system/default font so tests and ASCII tickets still work.
 - Missing or unusable font must be logged clearly.
 
+### FR-14: Font Fallback for Mixed Ticket Text
+- Image rendering should support a font chain for mixed Myanmar + Latin + digit + punctuation tickets.
+- Bundled Latin/symbol fallback font should be available without `.env` configuration.
+- Preferred bundled Latin fallback filename: `NotoSans-Regular.ttf`.
+- Myanmar Unicode ranges should prefer the Myanmar font.
+- Latin, numbers, and common punctuation should prefer the Latin fallback font.
+- Fallback rendering must preserve existing ticket content and image mode behavior.
+
 ## 4. Business Logic Rules
 
 ### BL-1: Default Route
@@ -198,3 +206,4 @@ Each ticket must include:
 - AC-12: ESC/POS network image mode builds non-empty raster payload.
 - AC-13: Order submit succeeds even if image rendering fails.
 - AC-14: Image renderer auto-loads bundled Myanmar font without `.env` font configuration.
+- AC-15: Image renderer uses bundled Latin/symbol fallback font for mixed ticket text.

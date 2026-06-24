@@ -7,6 +7,7 @@ Implement category-routed kitchen ticket printing with:
 - file backend for dev/test
 - ESC/POS network backend for Xprinter production
 - bundled Myanmar font support for image-rendered tickets
+- bundled Latin/symbol fallback support for mixed ticket text
 - non-blocking print failures on order submit
 
 ## Scope
@@ -16,6 +17,7 @@ Implement category-routed kitchen ticket printing with:
 - Tests: routing, default fallback, submit non-blocking behavior
 - Docs: `.env.example`, README section, CHANGELOG, roadmap Step 9
 - Assets: bundled Myanmar-capable print font under `assets/fonts/`
+- Assets: bundled Latin/symbol fallback font under `assets/fonts/`
 
 ## Out of Scope
 - Menu-item-level routing
@@ -134,6 +136,20 @@ Add `tests/test_kitchen_printing.py`:
 - Include the upstream OFL license as `assets/fonts/OFL-NotoSansMyanmar.txt`.
 - Keep `.env` font path optional for deployments that want to override the bundled font.
 
+### 16) Font fallback renderer
+- Add bundled Latin fallback:
+  - `assets/fonts/NotoSans-Regular.ttf`
+  - `assets/fonts/OFL-NotoSans.txt`
+- Update image renderer to load a font chain:
+  - configured override, if present
+  - Myanmar bundled/system fonts
+  - Latin/symbol bundled/system fonts
+  - Pillow default fallback
+- Route Myanmar Unicode characters to Myanmar font.
+- Route Latin, digits, and punctuation to Latin fallback font.
+- Keep image mode output as a single monochrome raster image.
+- Add tests that prove mixed Myanmar/English/numbers/symbols render through fallback fonts.
+
 ## Delivery Criteria
 - Admin can configure category printer route from counter UI.
 - Submit prints one ticket per item to correct route.
@@ -141,6 +157,7 @@ Add `tests/test_kitchen_printing.py`:
 - ESC/POS network backend ready for Xprinter LAN IP config.
 - Image render mode supports Myanmar-friendly ticket output through server-rendered raster images.
 - Bundled Noto Sans Myanmar font enables image mode without `.env` font configuration.
+- Bundled Noto Sans fallback font reduces square boxes for English labels, digits, and punctuation.
 - pytest green; validation checklist complete.
 
 ## Implementation Trace (Current Code)
@@ -197,7 +214,8 @@ Add `tests/test_kitchen_printing.py`:
   - ESC/POS raster payload builder (`GS v 0`)
 - `services/printing/image_renderer.py`
   - Pillow-based 1-bit image renderer
-  - font lookup: `KITCHEN_PRINT_FONT_PATH`, bundled fonts, system fallback, Pillow default
+  - font lookup: `KITCHEN_PRINT_FONT_PATH`, bundled Myanmar fonts, bundled Latin fallback fonts, system fallback, Pillow default
+  - mixed-script font selection for Myanmar vs Latin/digit/punctuation text
 - `services/printing/backends/file.py`
   - text `.txt` output
   - image `.png` output
@@ -222,6 +240,7 @@ Add `tests/test_kitchen_printing.py`:
   - print failure does not fail submit
   - file backend image mode writes PNG
   - bundled Myanmar font auto-discovery
+  - bundled Latin fallback font routing
   - ESC/POS raster payload is non-empty
   - settings API includes backend/render mode/paper width/route endpoints and admin RBAC
 
@@ -233,6 +252,7 @@ Add `tests/test_kitchen_printing.py`:
   - file backend output directory (`KITCHEN_PRINT_OUTPUT_DIR`)
   - optional image renderer font override (`KITCHEN_PRINT_FONT_PATH`)
 - Bundled `assets/fonts/NotoSansMyanmar-Regular.ttf` is used automatically when no font override is configured.
+- Bundled `assets/fonts/NotoSans-Regular.ttf` is used automatically for Latin, digits, and punctuation when available.
 
 ## Debugging Notes
 - If no file appears in file mode:
@@ -243,6 +263,7 @@ Add `tests/test_kitchen_printing.py`:
   - use `render_mode=image`
 - If Myanmar image output shows square boxes:
   - confirm `assets/fonts/NotoSansMyanmar-Regular.ttf` exists
+  - confirm `assets/fonts/NotoSans-Regular.ttf` exists for English/number/symbol fallback
   - confirm server was restarted after adding/updating the font
   - use `KITCHEN_PRINT_FONT_PATH` only if overriding the bundled font
 - If image mode prints too narrow/wide:
