@@ -4,12 +4,13 @@ from datetime import date, datetime, time, timedelta
 import calendar
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from auth import require_roles
 from database import get_db
 from models import Category, MenuItem, Order, OrderItem, User
+from routers.menu import ARCHIVED_CATEGORY_NAME
 from rbac import (
     ACCOUNT_MAX_REPORT_DAYS,
     ROLE_ACCOUNT,
@@ -35,6 +36,25 @@ from services.report_access import assert_report_date_range, dt_range_for_dates
 router = APIRouter(prefix="/api")
 DELETED_ITEM_LABEL = "[Deleted Item]"
 DELETED_CATEGORY_LABEL = "[Deleted Category]"
+
+
+def _historical_item_name_expr():
+    """Prefer sale-time snapshot; live MenuItem name is fallback for legacy rows."""
+    return func.coalesce(
+        OrderItem.menu_item_name_at_sale,
+        MenuItem.name,
+        DELETED_ITEM_LABEL,
+    )
+
+
+def _historical_category_name_expr():
+    """Prefer sale-time snapshot; ignore system archive bucket as live category name."""
+    return func.coalesce(
+        OrderItem.category_name_at_sale,
+        case((Category.name == ARCHIVED_CATEGORY_NAME, None), else_=Category.name),
+        DELETED_CATEGORY_LABEL,
+    )
+
 
 _DASHBOARD_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT]
 _SUMMARY_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT, ROLE_CASHIER]
@@ -90,11 +110,7 @@ def get_top_selling_items_today(
     rows = (
         db.query(
             OrderItem.menu_item_id,
-            func.coalesce(
-                MenuItem.name,
-                OrderItem.menu_item_name_at_sale,
-                DELETED_ITEM_LABEL,
-            ).label("menu_item_name"),
+            _historical_item_name_expr().label("menu_item_name"),
             func.coalesce(func.sum(OrderItem.quantity), 0).label("quantity_sold"),
         )
         .join(Order, Order.id == OrderItem.order_id)
@@ -105,7 +121,7 @@ def get_top_selling_items_today(
             Order.status.in_(("paid", "completed")),
             OrderItem.item_status != "cancelled",
         )
-        .group_by(OrderItem.menu_item_id, MenuItem.name)
+        .group_by(OrderItem.menu_item_id, _historical_item_name_expr())
         .order_by(func.sum(OrderItem.quantity).desc())
         .limit(5)
         .all()
@@ -259,13 +275,10 @@ def get_category_sales_breakdown(
     else:
         end_dt = datetime(now.year, now.month + 1, 1)
 
+    category_name = _historical_category_name_expr()
     rows = (
         db.query(
-            func.coalesce(
-                Category.name,
-                OrderItem.category_name_at_sale,
-                DELETED_CATEGORY_LABEL,
-            ).label("category_name"),
+            category_name.label("category_name"),
             func.coalesce(func.sum(OrderItem.subtotal), 0.0).label("total_sales"),
         )
         .join(Order, Order.id == OrderItem.order_id)
@@ -277,13 +290,7 @@ def get_category_sales_breakdown(
             Order.status.in_(("paid", "completed")),
             OrderItem.item_status != "cancelled",
         )
-        .group_by(
-            func.coalesce(
-                Category.name,
-                OrderItem.category_name_at_sale,
-                DELETED_CATEGORY_LABEL,
-            )
-        )
+        .group_by(category_name)
         .order_by(func.sum(OrderItem.subtotal).desc())
         .all()
     )
@@ -317,24 +324,15 @@ def get_cancellations_summary(
         .one()
     )
 
+    item_name = _historical_item_name_expr()
     top_rows = (
         db.query(
-            func.coalesce(
-                MenuItem.name,
-                OrderItem.menu_item_name_at_sale,
-                DELETED_ITEM_LABEL,
-            ).label("item_name"),
+            item_name.label("item_name"),
             func.coalesce(func.sum(OrderItem.quantity), 0).label("cancel_count"),
         )
         .join(MenuItem, MenuItem.id == OrderItem.menu_item_id, isouter=True)
         .filter(OrderItem.item_status == "cancelled")
-        .group_by(
-            func.coalesce(
-                MenuItem.name,
-                OrderItem.menu_item_name_at_sale,
-                DELETED_ITEM_LABEL,
-            )
-        )
+        .group_by(item_name)
         .order_by(func.sum(OrderItem.quantity).desc())
         .limit(5)
         .all()

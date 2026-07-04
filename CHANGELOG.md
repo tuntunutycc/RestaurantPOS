@@ -1,5 +1,43 @@
 # Changelog
 
+## [UI/UX Updates] — WIP (`feat/ui-updates`)
+
+### 2026-07-04 — Menu soft delete + category delete integration (SDD sync)
+
+**Menu item soft delete**
+- `DELETE /api/menu-items/{id}` sets `is_deleted=true` (no hard delete); blocks when item is on an active unpaid order (`400`).
+- Waiter/counter lists use `GET /api/menu-items/` (`is_deleted=false` only).
+- Order history and reports unchanged (`OrderItem` snapshots).
+- Tests: `tests/test_menu_item_soft_delete.py` (3 scenarios + paid-order allow).
+
+**Category delete fix (soft-deleted items ignored in block count)**
+- Category delete counts only **active** menu items (`is_deleted=false`).
+- Category with **only** soft-deleted items can be deleted.
+- Soft-deleted items with order history → moved to `__system_archived__`; others purged.
+- Tests: `test_delete_category_after_soft_deleted_items_only`, `test_delete_category_allowed_when_only_soft_deleted_items_with_order_history`.
+
+**Docs:** `specs/feature-menu-items/`, `specs/feature-category-crud/` (requirements, implementation, validation updated).
+
+### 2026-07-04 — Menu item soft delete (active-order guard)
+
+- **Backend:** `DELETE /api/menu-items/{id}` soft delete; blocks when item on unpaid/non-cancelled order (`400`).
+- **Frontend:** Counter delete uses alert on failure; waiter list via filtered API.
+- **Docs:** `specs/feature-menu-items/`
+- **Tests:** `tests/test_menu_item_soft_delete.py`
+
+### 2026-07-04 — Category edit & delete (Menu Management)
+
+- **Backend:** `DELETE /api/categories/{id}` — blocks when active menu items exist (`400`); `PUT` for rename (existing).
+- **Frontend:** Edit/Delete buttons on category rows in `counter.js`.
+- **Docs:** `specs/feature-category-crud/` (requirements, plan, implementation).
+- **Tests:** `tests/test_category_crud.py`
+
+### 2026-07-04 — Counter main navigation active tab state
+
+- **`static/counter.html`:** `.tab-btn.active` styles; normalized tab button base classes.
+- **`static/counter.js`:** `setActiveMainTab()` — single `.active` class for selected tab; default highlight on initial `showPanel`.
+- **Docs:** `specs/feature-counter-ui/implementation.md`
+
 ## 2026-07-04 - feat(rbac): complete feature delivery (Phases 1–4b)
 
 ### Summary

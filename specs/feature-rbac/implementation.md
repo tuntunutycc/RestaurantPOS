@@ -146,6 +146,8 @@ PYTHONPATH=. python scripts/seed_root.py --username root
 | **Audit Logs** | ✓ | — | — |
 | Table Management | ✓ | ✓ | — |
 
+**Main nav active state:** selected tab uses `.tab-btn.active` (see `specs/feature-counter-ui/implementation.md`).
+
 ### Account reports (`/account`) — Phase 4 complete
 
 - **Tabs:** Today's Overview | Sales History.
