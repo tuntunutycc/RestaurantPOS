@@ -5,16 +5,14 @@ This roadmap is structured for Spec-Driven Development (SDD): every step is tied
 ## Phase 0: Completed Features (Baseline)
 This baseline captures features that are currently implemented and functional in the existing codebase, grouped by module and role.
 
-### Authentication & Role Access (admin / waiter / cashier)
-- JWT-based authentication is implemented with both username/password and PIN login flows:
-  - `POST /api/auth/login`
-  - `POST /api/auth/login-pin`
-- Token validation and role-aware frontend guards are implemented for protected screens.
-- Backend RBAC is enforced via role guards on protected endpoints (orders, reports, tables/zones, users).
-- Roles are operationally enforced for core flows:
-  - waiter can submit/update orders but cannot checkout,
-  - cashier/admin can checkout,
-  - unauthorized role access returns `403`.
+### Authentication & Role Access (five-role RBAC)
+- Roles: `root`, `admin`, `account`, `cashier`, `waiter` (legacy `kitchen` login removed).
+- JWT + session `jti` with single-device policy for `account`, `cashier`, `waiter`.
+- Login: `POST /api/auth/login` (password roles), `POST /api/auth/login-pin` (PIN roles).
+- One-time root setup: `POST /api/setup/root`.
+- Root admin CRUD: `/api/root/admins`; staff CRUD: `/api/admin/users`.
+- Role guards on orders, reports, tables, menu, kitchen printers.
+- See `specs/feature-rbac/` for full contract.
 
 ### Admin: Staff User Management
 - Admin users can list/create/update/delete staff users via `/api/admin/users`.
@@ -171,13 +169,13 @@ All planned remediation steps are now implemented and test-backed:
     - show `Tax (5%)` in checkout modal, receipt view, and printable receipt
   - Test impact:
     - add invariant tests for rounding determinism and negative-safe tax/grand-total clamping
-- Step 7: Table management enhancements (in progress)
+- Step 7: Table management enhancements (mostly complete — validation gaps remain)
   - Add admin table edit UX (rename + zone reassignment).
-  - Keep admin-only table update/delete endpoints enforced by backend RBAC.
+  - Table mutations enforced for `ADMIN_PANEL_ROLES` (`root`, `admin`).
   - Harden delete safety: block deleting tables with non-finalized orders and return a clear `400` reason.
   - Preserve sales history safely by detaching finalized historical orders (`table_id = NULL`) when table deletion succeeds.
-  - Add test coverage for successful delete, blocked delete with active order, and non-admin RBAC denial.
-- Step 8: System integrity audit for deletion safety (planned)
+  - Automated tests: delete success/block/RBAC (waiter); PUT validation tests still open.
+- Step 8: System integrity audit for deletion safety (partially complete)
   - Audit all FK relationships in `models.py` and remove destructive delete behavior for critical history.
   - Harden user deletion so historical transactional rows survive (null-safe references + fallback labels).
   - Harden menu item deletion with soft-delete-first policy for items with order history.
@@ -190,10 +188,16 @@ All planned remediation steps are now implemented and test-backed:
   - Image-rendered ticket mode for Myanmar Unicode output
   - Non-blocking print failures on order submit
   - Automated tests for routing + submit integrity (`tests/test_kitchen_printing.py`)
+- Step 10: RBAC hierarchy expansion (mostly complete — UI gaps remain)
+  - Five roles: `root`, `admin`, `account`, `cashier`, `waiter`
+  - Session/device policy, one-time root setup, audit logs API, role-scoped reports
+  - Per-cashier (`checked_out_by_id`) and per-waiter (`created_by_id`) report endpoints
+  - Frontend: `/setup`, `/account`, Admin Accounts tab, Change Password modal
+  - Open: audit log UI, account monthly UI, cashier→waiter nav link, some automated tests
+  - Spec: `specs/feature-rbac/`; tests: `tests/test_rbac.py`
 
 Validation evidence:
-- Automated backend suite is green with invariant/contract/RBAC/cancellation tests.
-- Current result after Step 6: `20 passed` in `pytest`.
+- Automated backend suite: **52 passed** (`pytest -q`, 2026-07-04).
 
 ## Phase 1 (0–30 days): Fully Functional POS MVP
 ### Goal

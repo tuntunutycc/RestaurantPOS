@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from auth import get_current_user, require_roles
 from database import get_db
 from models import Category, MenuItem, OrderItem, User
+from rbac import ADMIN_PANEL_ROLES
 from schemas import (
     CategoryCreate,
     CategoryResponse,
@@ -28,7 +29,7 @@ ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 def create_category(
     category: CategoryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """Create a new category. Admin only."""
     db_category = Category(name=category.name, printer_route=category.printer_route)
@@ -43,7 +44,7 @@ def update_category(
     category_id: int,
     body: CategoryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """Update category name and/or kitchen printer route. Admin only."""
     db_category = db.query(Category).filter(Category.id == category_id).first()
@@ -82,7 +83,7 @@ async def create_menu_item(
     request: Request,
     item: MenuItemCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """Create a new menu item (JSON). Admin only. Broadcasts menu_item_added via WebSocket."""
     db_item = MenuItem(
@@ -93,6 +94,7 @@ async def create_menu_item(
         description=item.description,
         image_url=item.image_url,
         is_available=item.is_available,
+        is_promoted=item.is_promoted,
         modifiers_config=[m.model_dump(mode="json") for m in item.modifiers_config],
     )
     db.add(db_item)
@@ -114,7 +116,7 @@ async def create_menu_item_upload(
     description: str | None = Form(None),
     image: UploadFile | None = File(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """
     Create a menu item from form data (name, price, description, category_id, image file).
@@ -177,7 +179,7 @@ async def update_menu_item(
     item_id: int,
     item_update: MenuItemUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """
     Update an existing menu item. Admin only.
@@ -212,12 +214,42 @@ async def update_menu_item(
     return item_response
 
 
+@router.put("/menu-items/{item_id}/toggle-promoted", response_model=MenuItemResponse)
+async def toggle_menu_item_promoted(
+    request: Request,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
+):
+    """Toggle a menu item's promoted flag. Admin panel only."""
+    db_item = (
+        db.query(MenuItem)
+        .filter(MenuItem.id == item_id, MenuItem.is_deleted.is_(False))
+        .first()
+    )
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+
+    db_item.is_promoted = not bool(getattr(db_item, "is_promoted", False))
+    db.commit()
+    db.refresh(db_item)
+
+    item_response = MenuItemResponse.model_validate(db_item)
+    manager = getattr(request.app.state, "ws_manager", None)
+    if manager:
+        await manager.broadcast(
+            "menu_item_updated",
+            item_response.model_dump(mode="json"),
+        )
+    return item_response
+
+
 @router.put("/menu-items/{item_id}/toggle-availability", response_model=MenuItemResponse)
 async def toggle_menu_item_availability(
     request: Request,
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """Toggle a menu item's availability. Admin only."""
     db_item = (
@@ -247,7 +279,7 @@ async def delete_menu_item(
     request: Request,
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """Soft-delete a menu item. Historical order rows remain intact."""
     db_item = (

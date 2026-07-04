@@ -1,8 +1,8 @@
 # Validation Checklist: Kitchen LAN Printing (Phase 1 - Step 9)
 
 Validation evidence:
-- Latest automated run: `PYTHONPATH=. venv/bin/python -m pytest -q` -> `44 passed`
-- Primary test file: `tests/test_kitchen_printing.py`
+- Latest automated run: `PYTHONPATH=. venv/bin/python -m pytest -q` -> **52 passed** (2026-07-04)
+- Kitchen printing tests: `tests/test_kitchen_printing.py` (14 tests within full suite)
 
 ## A. Category Route Configuration
 - [x] `CategoryResponse` includes `printer_route`.
@@ -19,24 +19,24 @@ Validation evidence:
 ## C. Ticket Dispatch
 - [x] One submitted line item produces exactly one ticket.
 - [x] Mixed batch sends to both drinks and food targets.
-- [x] Ticket includes table OR takeaway header, order id, time, qty×name, note.
+- [x] Ticket includes table header for dine-in (tested); takeaway header implemented in `ticket.py` — **takeaway path not automated**
 - [x] Myanmar item names appear in file backend output.
 
 ## D. Backends
-- [x] `backend=file` writes to `drinks_printer_output.txt` and `food_printer_output.txt`.
-- [x] `backend=escpos_network` uses configured host/port per route.
-- [x] Missing host for route logs error; does not crash submit.
+- [x] `backend=file` writes route-specific `.txt` / `.png` outputs.
+- [x] `backend=escpos_network` settings API and raster payload builder tested.
+- [ ] Missing host for `escpos_network` logs error without crashing submit — **code path exists; no socket mock test**
 
 ## E. Order Submit Integrity (Critical)
 - [x] `POST /api/orders/submit` response unchanged (contract stable).
 - [x] Simulated print exception still returns submit success.
 - [x] Order/items persisted even when all prints fail.
-- [x] WebSocket `new_order_batch` still emitted on submit.
+- [ ] WebSocket `new_order_batch` still emitted on submit — **not asserted in kitchen printing tests**
 
 ## F. Admin UI
-- [x] Category form shows printer route selector.
+- [x] Category form shows printer route selector (manual UI; API contract tested).
 - [x] Default (Food) saves null/food behavior correctly.
-- [x] Non-admin cannot mutate categories (existing RBAC unchanged).
+- [x] Non-panel roles cannot mutate categories — waiter `403` tested; access is `ADMIN_PANEL_ROLES` (`root`, `admin`).
 
 ## G. Automated Tests (Required)
 - [x] Test: drinks route dispatch
@@ -56,10 +56,8 @@ Validation evidence:
 
 - [x] Printer settings API returns `render_mode`.
 - [x] Printer settings API returns `paper_width_px`.
-- [x] Admin UI can save `text` mode.
-- [x] Admin UI can save `image` mode.
-- [x] Admin UI can save paper width `384`.
-- [x] Admin UI can save paper width `576`.
+- [x] Admin UI can save render mode and paper width via **API** (`test_admin_kitchen_printer_settings_api`).
+- [ ] Admin UI manual save of render mode / paper width — **manual verification**
 
 ## J. File Backend Image Preview
 
@@ -80,9 +78,8 @@ Validation evidence:
 - [x] Missing configured font logs clear warning and falls back.
 - [x] Bundled Myanmar font discovery works without `.env` font path.
 - [x] Bundled `assets/fonts/NotoSansMyanmar-Regular.ttf` is loadable by Pillow.
-- [x] Bundled Noto Sans Myanmar OFL license is included.
-- [x] Bundled `assets/fonts/NotoSans-Regular.ttf` is loadable by Pillow.
-- [x] Bundled Noto Sans OFL license is included.
+- [x] Bundled Myanmar/Latin fonts loadable by Pillow (automated).
+- [x] OFL license files present at `assets/fonts/OFL-NotoSansMyanmar.txt` and `OFL-NotoSans.txt` — **file check manual; not automated**
 - [x] Mixed Myanmar/English/digits/punctuation renders with fallback fonts.
 - [x] Image render failure does not fail order submit.
 - [x] Network print failure still does not fail order submit.
@@ -97,4 +94,4 @@ Validation evidence:
 - [x] Test: mixed-script image render remains non-empty.
 - [x] Test: raster payload builder returns non-empty bytes.
 - [x] Test: order submit succeeds when renderer raises.
-- [x] Full suite passes: `PYTHONPATH=. venv/bin/python -m pytest -q`.
+- [x] Full suite passes: **52 passed** (2026-07-04).

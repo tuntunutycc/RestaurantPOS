@@ -3,20 +3,34 @@
   const submitBtn = document.getElementById("login-submit");
   const errorEl = document.getElementById("login-error");
   const unauthorizedEl = document.getElementById("login-unauthorized");
+  const PASSWORD_ROLES = ["root", "admin", "account"];
 
-  // If already logged in, redirect to default page by role
+  function deviceId() {
+    return window.posDevice && window.posDevice.getDeviceId ? window.posDevice.getDeviceId() : "unknown";
+  }
+
+  function redirectForRole(role) {
+    const page = window.auth.ROLE_DEFAULT_PAGE[role] || "/login";
+    window.location.href = page;
+  }
+
+  fetch("/api/setup/status")
+    .then((r) => r.json())
+    .then((data) => {
+      if (data.needs_setup) window.location.href = "/setup";
+    })
+    .catch(() => {});
+
   if (window.auth && window.auth.getToken() && window.auth.getUser()) {
     const user = window.auth.getUser();
-    if (!["admin", "waiter", "cashier"].includes(user.role)) {
+    if (!PASSWORD_ROLES.includes(user.role)) {
       window.auth.clearAuth();
       return;
     }
-    const page = window.auth.ROLE_DEFAULT_PAGE[user.role] || "/counter";
-    window.location.href = page;
+    redirectForRole(user.role);
     return;
   }
 
-  // Show "unauthorized" message if redirected from a forbidden page
   const params = new URLSearchParams(window.location.search);
   if (params.get("unauthorized") === "1" && unauthorizedEl) {
     unauthorizedEl.classList.remove("hidden");
@@ -36,23 +50,17 @@
     submitBtn.textContent = "Signing in…";
 
     try {
-      const url = (typeof window !== "undefined" && window.location.origin)
-        ? window.location.origin + "/api/auth/login"
-        : "/api/auth/login";
-      const res = await fetch(url, {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, device_id: deviceId() }),
       });
-      const data = await res.json().catch(function () {
-        return {};
-      });
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const msg = (data.detail && (typeof data.detail === "string" ? data.detail : data.detail[0]?.msg || data.detail))
-          || "Login failed.";
+        const msg = data.detail || "Login failed.";
         if (errorEl) {
-          errorEl.textContent = msg;
+          errorEl.textContent = typeof msg === "string" ? msg : "Login failed.";
           errorEl.classList.remove("hidden");
         }
         return;
@@ -60,22 +68,15 @@
 
       if (data.access_token && data.user) {
         window.auth.setAuth(data.access_token, data.user);
-        if (!["admin", "waiter", "cashier"].includes(data.user.role)) {
+        if (!PASSWORD_ROLES.includes(data.user.role)) {
           window.auth.clearAuth();
           return;
         }
-        const page = window.auth.ROLE_DEFAULT_PAGE[data.user.role] || "/counter";
-        window.location.href = page;
-      } else {
-        if (errorEl) {
-          errorEl.textContent = "Invalid response from server.";
-          errorEl.classList.remove("hidden");
-        }
+        redirectForRole(data.user.role);
       }
     } catch (err) {
       if (errorEl) {
-        const msg = err && err.message ? err.message : "Network error. Please try again.";
-        errorEl.textContent = msg.indexOf("fetch") !== -1 ? "Cannot reach server. Check the URL and that the app is running." : msg;
+        errorEl.textContent = "Network error. Please try again.";
         errorEl.classList.remove("hidden");
       }
     } finally {

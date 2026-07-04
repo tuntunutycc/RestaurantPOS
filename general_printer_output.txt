@@ -1,0 +1,520 @@
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-29T06:25:19.575941
+Order ID: 4
+Table: 1
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-29T06:27:34.869551
+Order ID: 5
+Table: 1
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+Note: မုန့်ဟင်းခါးထဲ အီကြာကွေးထည့်ပေး
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-29T06:44:19.617461
+Order ID: 6
+Table: 1
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-29T07:06:45.223003
+Order ID: 7
+Table: 1
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T06:39:52.985588
+Order ID: 8
+Table: 1
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+Note: အချိုမှုန့်ရှောင်
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T06:42:43.196031
+Order ID: 9
+Table: 7
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T06:48:05.255794
+Order ID: 10
+Table: 1
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T07:25:37.956331
+Order ID: 12
+Table: 1
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T07:30:46.935921
+Order ID: 13
+Table: 1
+Item: မုန့်ဟင်းခါး အစုံ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T08:11:18.412968
+Order ID: 1
+Table: 5
+Item: ပလာတာ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T08:19:03.527904
+Order ID: 2
+Table: 5
+Item: မုန့်ဟင်းခါးအလွတ်
+Qty: 1
+Note: အချိုမှုန့်မထည့်၊ အိုးဘဲဥထည့်ပေး
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T08:22:00.514533
+Order ID: 3
+Table: 5
+Item: မုန့်ဟင်းခါးအစုံ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T08:26:02.593106
+Order ID: 4
+Table: 5
+Item: ပလာတာ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T08:36:49.944415
+Order ID: 5
+Table: 1
+Item: မုန့်ဟင်းခါးအလွတ်
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Date: 2026-03-30T08:36:49.944415
+Order ID: 5
+Table: 1
+Item: မုန့်ဟင်းခါးအလွတ်
+Qty: 1
+Note: အီကြာကွေးညှပ်ထည့်ပေးပါ
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: ef
+=================================
+Order: #6
+Time: 2026-04-04T09:51:06.242769
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: ုသ
+=================================
+Order: #8
+Time: 2026-04-04T10:02:43.689104
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Walk-in
+=================================
+Order: #10
+Time: 2026-04-04T11:05:37.729509
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Walk-in
+=================================
+Order: #14
+Time: 2026-04-04T11:44:39.444285
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #17
+Time: 2026-04-09T07:47:23.495120
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #19
+Time: 2026-04-09T07:52:26.373829
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #19
+Time: 2026-04-09T07:52:26.373829
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: ကိုကို
+=================================
+Order: #20
+Time: 2026-04-09T07:53:47.324507
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: မောင်
+=================================
+Order: #21
+Time: 2026-04-09T07:54:11.957441
+---------------------------------
+1x မုန့်ဟင်းခါးအလွတ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: မမ
+=================================
+Order: #22
+Time: 2026-04-09T07:59:12.523794
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: မမ
+=================================
+Order: #22
+Time: 2026-04-09T07:59:12.523794
+---------------------------------
+1x မုန့်ဟင်းခါးအလွတ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: မမ
+=================================
+Order: #23
+Time: 2026-04-09T08:05:16.287917
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: kk
+=================================
+Order: #24
+Time: 2026-04-09T08:09:04.390315
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: kk
+=================================
+Order: #24
+Time: 2026-04-09T08:09:04.390315
+---------------------------------
+1x မုန့်ဟင်းခါးအလွတ်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: kk
+=================================
+Order: #25
+Time: 2026-04-09T08:09:44.964734
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: kk
+=================================
+Order: #26
+Time: 2026-04-09T08:10:07.533909
+---------------------------------
+4x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #30
+Time: 2026-04-09T08:24:43.762674
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #31
+Time: 2026-04-09T08:24:59.660241
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #32
+Time: 2026-04-10T04:26:56.353264
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #35
+Time: 2026-04-13T07:57:20.290866
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #35
+Time: 2026-04-13T07:57:20.290866
+---------------------------------
+1x မုန့်ဟင်းခါးအစုံ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #36
+Time: 2026-04-13T08:17:19.763962
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: ဧည့်သည်
+=================================
+Order: #37
+Time: 2026-04-13T08:19:07.735223
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: ဧည့်သည်
+=================================
+Order: #1
+Time: 2026-04-13T14:11:49.272455
+---------------------------------
+1x ထမင်းကြော်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #2
+Time: 2026-04-13T14:27:52.148993
+---------------------------------
+1x ထမင်းကြော်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #1
+Time: 2026-04-13T14:29:35.291342
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #2
+Time: 2026-04-13T14:30:17.357874
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #3
+Time: 2026-04-13T14:45:28.833888
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #4
+Time: 2026-04-16T15:07:55.623758
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #5
+Time: 2026-04-16T15:11:31.197099
+---------------------------------
+2x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #6
+Time: 2026-04-16T15:14:18.780461
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #7
+Time: 2026-04-17T06:58:08.970173
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #8
+Time: 2026-04-17T06:59:22.435143
+---------------------------------
+1x လက်ဖက်ရည်ပုံမှန်
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #8
+Time: 2026-04-17T06:59:22.435143
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 1
+Order: #1
+Time: 2026-04-17T08:45:40.042274
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 3
+Order: #2
+Time: 2026-04-20T13:14:34.881713
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: general_printer
+Table: 4
+Order: #3
+Time: 2026-06-02T10:17:39.639939
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]

@@ -4,9 +4,13 @@
 Build a fully functional, Myanmar-restaurant POS system that is reliable in daily use and designed so new features can be added safely over time.
 
 ## Target Audience
-- `admin`: manages staff accounts, menu, categories, zones, tables, and monitors operational reports
-- `waiter`: takes dine-in and takeaway orders, sends items to kitchen, updates item status as served/cooked/cancelled
-- `cashier`: checks out orders with payment and discounts, and views tables and sales reports
+- `root`: top-level operator; manages admins, full reports, admin-panel POS configuration
+- `admin`: manages staff accounts, menu, categories, zones, tables, kitchen printers, operational reports
+- `account`: read-only financial reports (up to 3 months)
+- `cashier`: counter checkout, may use waiter screen for ordering, own daily sales
+- `waiter`: tablet order taking; no checkout
+
+> Legacy three-role docs (`FULL_DOCUMENTATION_*.md`) predate RBAC expansion. Prefer `specs/feature-rbac/` and `CHANGELOG.md`.
 
 ## Core Functional Requirements
 ### Authentication & Roles

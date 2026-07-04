@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
+from rbac import ALL_ROLES
+from services.sessions import get_active_session
 
 load_dotenv()
 
@@ -39,9 +41,9 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: int, role: str) -> str:
+def create_access_token(user_id: int, role: str, jti: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": str(user_id), "role": role, "exp": expire}
+    payload = {"sub": str(user_id), "role": role, "jti": jti, "exp": expire}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -63,7 +65,7 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     payload = decode_token(credentials.credentials)
-    if not payload or "sub" not in payload:
+    if not payload or "sub" not in payload or "jti" not in payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -75,6 +77,18 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if user.role not in ALL_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Role '{user.role}' is not allowed",
+        )
+    session = get_active_session(db, str(payload["jti"]))
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired or revoked",
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user

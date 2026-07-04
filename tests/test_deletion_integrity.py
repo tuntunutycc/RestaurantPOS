@@ -83,7 +83,7 @@ def test_soft_delete_user_preserves_history_and_reports(client, db_session, auth
     details = details_res.json()
     assert details["items"][0]["waiter_name"] == "[Deleted User]"
 
-    summary_res = client.get("/api/reports/summary/today", headers=auth_headers("cashier"))
+    summary_res = client.get("/api/reports/summary/today", headers=auth_headers("admin"))
     assert summary_res.status_code == 200, summary_res.text
     summary = summary_res.json()
     assert float(summary["total_sales"]) >= 12.6
@@ -102,12 +102,12 @@ def test_soft_delete_menu_item_preserves_history_and_reports(client, db_session,
     assert persisted_item.unit_price_at_sale is not None
     assert persisted_item.category_name_at_sale
 
-    summary_res = client.get("/api/reports/summary/today", headers=auth_headers("cashier"))
+    summary_res = client.get("/api/reports/summary/today", headers=auth_headers("admin"))
     assert summary_res.status_code == 200, summary_res.text
     summary = summary_res.json()
     assert float(summary["total_sales"]) >= 12.6
 
-    top_res = client.get("/api/reports/top-items", headers=auth_headers("cashier"))
+    top_res = client.get("/api/reports/top-items", headers=auth_headers("admin"))
     assert top_res.status_code == 200, top_res.text
     top_rows = top_res.json()
     assert any(row["item_name"] == persisted_item.menu_item_name_at_sale for row in top_rows)

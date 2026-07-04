@@ -1,0 +1,18 @@
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_21da828b_printer
+Table: 4
+Order: #4
+Time: 2026-04-17T08:10:18.753943
+---------------------------------
+3x M-Item-21da828b
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_21da828b_printer
+Table: 4
+Order: #4
+Time: 2026-04-17T08:10:18.753943
+---------------------------------
+1x M-Item-21da828b
+---------------------------------
+[ --- CUT TICKET --- ]

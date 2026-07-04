@@ -1,0 +1,9 @@
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_7cf4acc9_printer
+Table: 6
+Order: #6
+Time: 2026-04-17T08:39:07.893742
+---------------------------------
+3x M-Item-7cf4acc9
+---------------------------------
+[ --- CUT TICKET --- ]

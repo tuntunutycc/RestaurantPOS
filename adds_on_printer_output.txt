@@ -1,0 +1,88 @@
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+Date: 2026-03-29T06:27:34.869551
+Order ID: 5
+Table: 1
+Item: အီကြာကွေး
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+Date: 2026-03-30T06:39:52.985588
+Order ID: 8
+Table: 1
+Item: အီကြာကွေး
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+Date: 2026-03-30T06:42:43.196031
+Order ID: 9
+Table: 7
+Item: အီကြာကွေး
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+Date: 2026-03-30T06:48:05.255794
+Order ID: 10
+Table: 1
+Item: အီကြာကွေး
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+Date: 2026-03-30T07:25:37.956331
+Order ID: 12
+Table: 1
+Item: အီကြာကွေး
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+Date: 2026-03-30T07:30:46.935921
+Order ID: 13
+Table: 1
+Item: အီကြာကွေး
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+Date: 2026-03-30T08:19:03.527904
+Order ID: 2
+Table: 5
+Item: အိုးဘဲဥ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+Date: 2026-03-30T08:36:49.944415
+Order ID: 5
+Table: 1
+Item: အိုးဘဲဥ
+Qty: 1
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Walk-in
+=================================
+Order: #11
+Time: 2026-04-04T11:05:56.894774
+---------------------------------
+1x အိုးဘဲဥ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: adds_on_printer
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: မောင်
+=================================
+Order: #21
+Time: 2026-04-09T07:54:11.957441
+---------------------------------
+1x အိုးဘဲဥ
+---------------------------------
+[ --- CUT TICKET --- ]

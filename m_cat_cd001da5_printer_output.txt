@@ -1,0 +1,18 @@
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_cd001da5_printer
+Table: 4
+Order: #4
+Time: 2026-04-16T15:05:04.472824
+---------------------------------
+3x M-Item-cd001da5
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_cd001da5_printer
+Table: 4
+Order: #4
+Time: 2026-04-16T15:05:04.472824
+---------------------------------
+1x M-Item-cd001da5
+---------------------------------
+[ --- CUT TICKET --- ]

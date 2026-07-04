@@ -97,7 +97,7 @@ Endpoints:
 - `PUT /api/admin/kitchen-printers`
 
 RBAC:
-- admin only
+- `ADMIN_PANEL_ROLES` (`root`, `admin`) — see `rbac.py`, `routers/kitchen_printers.py`
 
 Payload shape:
 
@@ -133,6 +133,13 @@ Flow:
 Important invariant:
 - Print happens after DB commit and is isolated with `asyncio.gather(..., return_exceptions=True)`.
 - If printing fails, the order remains successfully submitted.
+
+Takeaway tickets:
+- `dispatch_kitchen_ticket()` receives `order_type` and `customer_name` from `orders.py`.
+- `ticket.py` `build_ticket_text()` renders a takeaway header block when `order_type=takeaway`.
+
+Per-item notes:
+- `note` and `special_instructions` on `OrderItem` are merged before ticket dispatch.
 
 ## 5. Printing Module Map
 
@@ -294,8 +301,8 @@ Validation command:
 PYTHONPATH=. venv/bin/python -m pytest -q
 ```
 
-Latest known result:
-- `44 passed`
+Latest known result (2026-07-04):
+- **52 passed** (full suite; includes 14 kitchen-printing tests)
 
 ## 8. Debugging Playbook
 

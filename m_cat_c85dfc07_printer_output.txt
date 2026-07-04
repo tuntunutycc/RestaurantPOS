@@ -1,0 +1,18 @@
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_c85dfc07_printer
+Table: 2
+Order: #2
+Time: 2026-04-17T08:10:17.056587
+---------------------------------
+3x M-Item-c85dfc07
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_c85dfc07_printer
+Table: 2
+Order: #2
+Time: 2026-04-17T08:10:17.056587
+---------------------------------
+1x M-Item-c85dfc07
+---------------------------------
+[ --- CUT TICKET --- ]

@@ -1,0 +1,18 @@
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_99e8a33e_printer
+Table: 4
+Order: #4
+Time: 2026-04-17T08:10:50.913310
+---------------------------------
+3x M-Item-99e8a33e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_99e8a33e_printer
+Table: 4
+Order: #4
+Time: 2026-04-17T08:10:50.913310
+---------------------------------
+1x M-Item-99e8a33e
+---------------------------------
+[ --- CUT TICKET --- ]

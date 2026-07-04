@@ -1,0 +1,1380 @@
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 8
+Order: #9
+Time: 2026-06-13T06:43:54.277599
+---------------------------------
+3x M-Item-c5b9ec1e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 9
+Order: #10
+Time: 2026-06-13T06:43:54.330414
+---------------------------------
+3x M-Item-9fe55e3b
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 9
+Order: #10
+Time: 2026-06-13T06:43:54.330414
+---------------------------------
+1x M-Item-9fe55e3b
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-06-13T06:43:54.392112
+---------------------------------
+3x M-Item-05f3dcb5
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-13T06:43:54.456729
+---------------------------------
+3x M-Item-c47a7fb9
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-06-13T06:43:54.539586
+---------------------------------
+3x M-Item-f02df60f
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-06-13T06:43:54.605432
+---------------------------------
+3x M-Item-07058043
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-06-13T06:43:55.039331
+---------------------------------
+1x RBAC-Item-421de4c6
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+=================================
+  [ *** TAKEAWAY / ပါဆယ် *** ]
+  Customer: Guest
+=================================
+Order: #4
+Time: 2026-06-13T06:52:07.356080
+---------------------------------
+1x ပလာတာ
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-06-23T09:28:53.555891
+---------------------------------
+3x M-Item-4d63cb6d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-23T09:28:53.713722
+---------------------------------
+3x M-Item-d645166e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-23T09:28:53.713722
+---------------------------------
+1x M-Item-d645166e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-06-23T09:28:53.790164
+---------------------------------
+3x M-Item-9449002f
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-06-23T09:28:53.858535
+---------------------------------
+3x M-Item-c6267dda
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-06-23T09:28:54.106500
+---------------------------------
+3x M-Item-4619ae6a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-06-23T09:28:54.173794
+---------------------------------
+3x M-Item-6fa3fa8f
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 22
+Order: #23
+Time: 2026-06-23T09:28:54.619171
+---------------------------------
+1x RBAC-Item-6274ac7a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-06-23T09:37:54.769174
+---------------------------------
+3x M-Item-28e3d67a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-23T09:37:54.843565
+---------------------------------
+3x M-Item-2ecb24e8
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-23T09:37:54.843565
+---------------------------------
+1x M-Item-2ecb24e8
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-06-23T09:37:54.906088
+---------------------------------
+3x M-Item-7bc5cc63
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-06-23T09:37:54.972709
+---------------------------------
+3x M-Item-5b8c1910
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-06-23T09:37:55.037581
+---------------------------------
+3x M-Item-4b4c785b
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-06-23T09:37:55.102489
+---------------------------------
+3x M-Item-aa24af1c
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 22
+Order: #23
+Time: 2026-06-23T09:37:55.535048
+---------------------------------
+1x RBAC-Item-1e55aeb1
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-06-24T05:34:14.405009
+---------------------------------
+3x M-Item-7dd1b586
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-24T05:34:14.476172
+---------------------------------
+3x M-Item-9eccb55d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-24T05:34:14.476172
+---------------------------------
+1x M-Item-9eccb55d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-06-24T05:34:14.541869
+---------------------------------
+3x M-Item-51b127bc
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-06-24T05:34:14.604161
+---------------------------------
+3x M-Item-bc98cc9d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-06-24T05:34:14.673077
+---------------------------------
+3x M-Item-3c3809e1
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-06-24T05:34:14.742997
+---------------------------------
+3x M-Item-71375303
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 22
+Order: #23
+Time: 2026-06-24T05:34:15.177658
+---------------------------------
+1x RBAC-Item-6ac5912a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-06-24T05:36:13.721771
+---------------------------------
+3x M-Item-67c3236d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-24T05:36:13.783101
+---------------------------------
+3x M-Item-af87223c
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-06-24T05:36:13.783101
+---------------------------------
+1x M-Item-af87223c
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-06-24T05:36:13.845315
+---------------------------------
+3x M-Item-f5cefaa5
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-06-24T05:36:13.911479
+---------------------------------
+3x M-Item-a41fdaef
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-06-24T05:36:13.978130
+---------------------------------
+3x M-Item-d98196ea
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-06-24T05:36:14.044321
+---------------------------------
+3x M-Item-980bf457
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 22
+Order: #23
+Time: 2026-06-24T05:36:14.477516
+---------------------------------
+1x RBAC-Item-f4f651df
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-03T09:50:35.360286
+---------------------------------
+3x M-Item-797c56b2
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T09:50:35.439720
+---------------------------------
+3x M-Item-8486c567
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T09:50:35.439720
+---------------------------------
+1x M-Item-8486c567
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-03T09:50:35.529147
+---------------------------------
+3x M-Item-2cb02f68
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-03T09:50:35.609749
+---------------------------------
+3x M-Item-7b046b93
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-03T09:50:35.689031
+---------------------------------
+3x M-Item-775503a2
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-03T09:50:35.782315
+---------------------------------
+3x M-Item-43d7fa86
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-03T09:50:36.232084
+---------------------------------
+1x RBAC-Item-da237019
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-03T09:52:01.127521
+---------------------------------
+3x M-Item-38de1b6c
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T09:52:01.197750
+---------------------------------
+3x M-Item-8b10cca5
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T09:52:01.197750
+---------------------------------
+1x M-Item-8b10cca5
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-03T09:52:01.278524
+---------------------------------
+3x M-Item-4bcf7c8b
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-03T09:52:01.360223
+---------------------------------
+3x M-Item-c9c8937e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-03T09:52:01.448005
+---------------------------------
+3x M-Item-e2c814fd
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-03T09:52:01.546306
+---------------------------------
+3x M-Item-45858ab4
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-03T09:52:01.971462
+---------------------------------
+1x RBAC-Item-bb17881a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-03T09:53:20.513811
+---------------------------------
+3x M-Item-9eda6866
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T09:53:20.637519
+---------------------------------
+3x M-Item-76c61d2e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T09:53:20.637519
+---------------------------------
+1x M-Item-76c61d2e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-03T09:53:20.747465
+---------------------------------
+3x M-Item-99a6129e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-03T09:53:20.894278
+---------------------------------
+3x M-Item-94930291
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-03T09:53:20.995690
+---------------------------------
+3x M-Item-d9da9988
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-03T09:53:21.093579
+---------------------------------
+3x M-Item-962ba14f
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-03T09:53:21.559304
+---------------------------------
+1x RBAC-Item-a3e327bf
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-03T09:54:00.755272
+---------------------------------
+3x M-Item-ef439867
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T09:54:00.837270
+---------------------------------
+3x M-Item-04cd89c0
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T09:54:00.837270
+---------------------------------
+1x M-Item-04cd89c0
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-03T09:54:00.921412
+---------------------------------
+3x M-Item-ea9835e6
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-03T09:54:01.007785
+---------------------------------
+3x M-Item-ac97e0d0
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-03T09:54:01.091684
+---------------------------------
+3x M-Item-db7c8986
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-03T09:54:01.171474
+---------------------------------
+3x M-Item-de5c53fa
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-03T09:54:01.764271
+---------------------------------
+1x RBAC-Item-e37174ab
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-03T10:28:11.476940
+---------------------------------
+3x M-Item-c67d2812
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T10:28:11.549087
+---------------------------------
+3x M-Item-9647f356
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-03T10:28:11.549087
+---------------------------------
+1x M-Item-9647f356
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-03T10:28:11.622717
+---------------------------------
+3x M-Item-18eb0d26
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-03T10:28:11.700532
+---------------------------------
+3x M-Item-8fe0d9c6
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-03T10:28:11.778911
+---------------------------------
+3x M-Item-1e0ec855
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-03T10:28:11.858695
+---------------------------------
+3x M-Item-a5a92f11
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-03T10:28:12.352928
+---------------------------------
+1x RBAC-Item-3fd3411a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T04:37:01.211280
+---------------------------------
+3x M-Item-aae82cab
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T04:37:01.288557
+---------------------------------
+3x M-Item-5eb19b58
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T04:37:01.288557
+---------------------------------
+1x M-Item-5eb19b58
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T04:37:01.373690
+---------------------------------
+3x M-Item-450dbb4c
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T04:37:01.449740
+---------------------------------
+3x M-Item-a14d039f
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T04:37:01.529688
+---------------------------------
+3x M-Item-d87cd331
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T04:37:01.609363
+---------------------------------
+3x M-Item-bf2d4997
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T04:37:02.033164
+---------------------------------
+1x RBAC-Item-fa12b928
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T04:57:29.366223
+---------------------------------
+3x M-Item-0261ec49
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T04:57:29.439616
+---------------------------------
+3x M-Item-b6df0b95
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T04:57:29.439616
+---------------------------------
+1x M-Item-b6df0b95
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T04:57:29.513850
+---------------------------------
+3x M-Item-c8cbcb52
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T04:57:29.592330
+---------------------------------
+3x M-Item-531b644d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T04:57:29.670450
+---------------------------------
+3x M-Item-6e05268f
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T04:57:29.750815
+---------------------------------
+3x M-Item-d1e0b4f9
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T04:57:30.179673
+---------------------------------
+1x RBAC-Item-82caf040
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T04:59:57.289796
+---------------------------------
+3x M-Item-7294c943
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T04:59:57.361124
+---------------------------------
+3x M-Item-2e6b0c29
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T04:59:57.361124
+---------------------------------
+1x M-Item-2e6b0c29
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T04:59:57.440019
+---------------------------------
+3x M-Item-e6297663
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T04:59:57.518536
+---------------------------------
+3x M-Item-85c120e0
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T04:59:57.599889
+---------------------------------
+3x M-Item-fcb25f5e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T04:59:57.678681
+---------------------------------
+3x M-Item-308a09f0
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T04:59:58.114378
+---------------------------------
+1x RBAC-Item-dbff430a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T05:08:23.441905
+---------------------------------
+3x M-Item-78697f3d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:08:23.524409
+---------------------------------
+3x M-Item-fc71eaf2
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:08:23.524409
+---------------------------------
+1x M-Item-fc71eaf2
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T05:08:23.629685
+---------------------------------
+3x M-Item-fa7d9dfa
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T05:08:23.724043
+---------------------------------
+3x M-Item-45df194f
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T05:08:23.810099
+---------------------------------
+3x M-Item-063f5611
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T05:08:23.900873
+---------------------------------
+3x M-Item-76d2c298
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T05:08:24.352520
+---------------------------------
+1x RBAC-Item-7b08f2d4
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T05:08:44.602906
+---------------------------------
+3x M-Item-c60c0d07
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:08:44.678965
+---------------------------------
+3x M-Item-5232744d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:08:44.678965
+---------------------------------
+1x M-Item-5232744d
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T05:08:44.766127
+---------------------------------
+3x M-Item-8f21830e
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T05:08:44.849520
+---------------------------------
+3x M-Item-186c63b4
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T05:08:44.942220
+---------------------------------
+3x M-Item-a951c2ce
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T05:08:45.031542
+---------------------------------
+3x M-Item-43ff02ad
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T05:08:45.478827
+---------------------------------
+1x RBAC-Item-00e641a8
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T05:11:48.441914
+---------------------------------
+3x M-Item-0fbcb117
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:11:48.515086
+---------------------------------
+3x M-Item-9d80ea00
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:11:48.515086
+---------------------------------
+1x M-Item-9d80ea00
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T05:11:48.596299
+---------------------------------
+3x M-Item-311738da
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T05:11:48.672998
+---------------------------------
+3x M-Item-02b50c84
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T05:11:48.756481
+---------------------------------
+3x M-Item-ea3393eb
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T05:11:48.837566
+---------------------------------
+3x M-Item-02e3377a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T05:11:49.313749
+---------------------------------
+1x RBAC-Item-7d3ef336
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T05:15:07.353076
+---------------------------------
+3x M-Item-4cba1e6c
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:15:07.427266
+---------------------------------
+3x M-Item-41438638
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:15:07.427266
+---------------------------------
+1x M-Item-41438638
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T05:15:07.503488
+---------------------------------
+3x M-Item-3a3d3130
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T05:15:07.586330
+---------------------------------
+3x M-Item-dde7e3d0
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T05:15:07.694933
+---------------------------------
+3x M-Item-f66986ae
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T05:15:07.782881
+---------------------------------
+3x M-Item-e8211203
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T05:15:08.320998
+---------------------------------
+1x RBAC-Item-36a50748
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T05:22:53.513478
+---------------------------------
+3x M-Item-92289a62
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:22:53.607738
+---------------------------------
+3x M-Item-2a9bcdc2
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T05:22:53.607738
+---------------------------------
+1x M-Item-2a9bcdc2
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T05:22:53.713535
+---------------------------------
+3x M-Item-4b8a7649
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T05:22:53.795046
+---------------------------------
+3x M-Item-ccf92095
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T05:22:53.883450
+---------------------------------
+3x M-Item-fa3d7086
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T05:22:53.971623
+---------------------------------
+3x M-Item-380bab99
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T05:22:54.433121
+---------------------------------
+1x RBAC-Item-25f0191f
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 10
+Order: #11
+Time: 2026-07-04T07:02:12.705115
+---------------------------------
+3x M-Item-2fb3bc05
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T07:02:12.775875
+---------------------------------
+3x M-Item-41eef7f3
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 11
+Order: #12
+Time: 2026-07-04T07:02:12.775875
+---------------------------------
+1x M-Item-41eef7f3
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 12
+Order: #13
+Time: 2026-07-04T07:02:12.853950
+---------------------------------
+3x M-Item-23777e98
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 13
+Order: #14
+Time: 2026-07-04T07:02:12.929110
+---------------------------------
+3x M-Item-f8f1d32a
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 14
+Order: #15
+Time: 2026-07-04T07:02:13.010077
+---------------------------------
+3x M-Item-0edae6e7
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 15
+Order: #16
+Time: 2026-07-04T07:02:13.089621
+---------------------------------
+3x M-Item-85fba6dc
+---------------------------------
+[ --- CUT TICKET --- ]
+=== KITCHEN ITEM TICKET ===
+Route: food
+Table: 20
+Order: #21
+Time: 2026-07-04T07:02:13.519890
+---------------------------------
+1x RBAC-Item-7aeb4940
+---------------------------------
+[ --- CUT TICKET --- ]

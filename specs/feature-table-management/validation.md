@@ -1,57 +1,69 @@
 # Validation Checklist: Table Management Enhancements (Phase 1 - Step 7)
 
-Use this checklist to verify feature completeness before marking Step 7 as done.
+Validation evidence (2026-07-04):
+- `PYTHONPATH=. venv/bin/python -m pytest -q` → **52 passed**
+- Primary test file: `tests/test_tables_management.py`
+- Related: `tests/test_integrity.py` (report stability after table delete)
+
+**RBAC note:** Backend and UI use `ADMIN_PANEL_ROLES` (`root`, `admin`), not admin-only. Account/cashier/waiter cannot mutate tables.
+
+**Finalized order definition (implementation):** `paid` and `cancelled` are finalized; `open`, `dining`, `completed`, and other statuses block table delete.
 
 ## A. API + RBAC Validation
 
-- [ ] `PUT /api/tables/{table_id}` requires admin role.
-- [ ] `DELETE /api/tables/{table_id}` requires admin role.
-- [ ] Non-admin mutation attempts (waiter/cashier/other) return `403`.
-- [ ] Update returns `404` when table does not exist.
-- [ ] Update returns `404` when target zone does not exist.
-- [ ] Update returns `400` for invalid/blank table name.
-- [ ] Update returns `400` for duplicate table name.
+- [x] `PUT /api/tables/{table_id}` requires admin panel role (`root` or `admin`) — implemented, **not dedicated RBAC test**
+- [x] `DELETE /api/tables/{table_id}` requires admin panel role — `test_admin_can_delete_empty_table` uses admin
+- [x] Non-admin delete returns `403` — `test_non_admin_cannot_delete_table` (waiter only)
+- [ ] Non-admin PUT returns `403` — **not tested** (waiter/cashier/account matrix incomplete)
+- [ ] Update returns `404` when table does not exist — implemented, **untested**
+- [ ] Update returns `404` when target zone does not exist — implemented, **untested**
+- [ ] Update returns `400` for invalid/blank table name — implemented, **untested**
+- [ ] Update returns `400` for duplicate table name — implemented, **untested**
 
 ## B. Delete Safety Constraints
 
-- [ ] Delete is blocked (`400`) when table has at least one non-finalized order.
-- [ ] Blocked delete response contains clear, user-readable reason.
-- [ ] Delete succeeds when linked orders are finalized.
-- [ ] On successful delete, linked finalized orders are preserved (not deleted).
-- [ ] On successful delete, preserved finalized orders have `table_id = NULL`.
+- [x] Delete blocked (`400`) when table has non-finalized order — `test_table_with_active_order_cannot_be_deleted`
+- [x] `completed` status also blocks delete — `test_table_with_completed_order_is_blocked_as_non_finalized`
+- [x] Blocked delete response contains clear reason — asserted in tests
+- [x] Delete succeeds when linked orders are finalized (`paid`) — `test_delete_detaches_finalized_orders_history`
+- [x] Delete succeeds when linked orders are `cancelled` — `test_cancelled_order_allows_table_delete_and_detach`
+- [x] Finalized orders preserved (not deleted) — asserted
+- [x] Preserved orders have `table_id = NULL` — asserted
 
 ## C. Historical Integrity & Reporting
 
-- [ ] Historical finalized orders remain retrievable after table deletion.
-- [ ] Sales/report endpoints remain queryable after table deletion event.
-- [ ] No loss of historical financial facts due to table deletion.
+- [x] Historical orders retrievable after delete — order row preserved; UI shows `[Deleted Table]` label
+- [x] Sales/report endpoints queryable after delete — `test_integrity.py::test_table_delete_preserves_order_history_and_sales_summary`
+- [x] No loss of financial facts — same test asserts totals
 
-## D. Admin UI / UX Validation
+## D. Admin UI / UX Validation (manual)
 
-- [ ] Table management UI has explicit edit action (rename + zone reassignment).
-- [ ] Table management UI has explicit delete action with confirmation.
-- [ ] Successful update shows clear success feedback.
-- [ ] Successful delete shows clear success feedback.
-- [ ] Blocked delete shows informative error feedback.
-- [ ] Unauthorized mutation handling shows appropriate permission-denied feedback.
-- [ ] Non-admin users do not see table-mutation controls in admin surface.
+- [x] Edit action (rename + zone) — implemented in `counter.js` (code review)
+- [x] Delete with confirmation — `dialogConfirm` before DELETE
+- [x] Success toasts on update/delete — `window.toast.success`
+- [x] Blocked delete error feedback — API `detail` surfaced
+- [ ] Unauthorized mutation feedback — **manual only**
+- [x] Non-panel roles do not see Table Management tab — `applyAdminOnlyTabVisibility`
 
 ## E. Realtime / Refresh Behavior
 
-- [ ] After successful table update, table views reflect latest data without stale state.
-- [ ] After successful table delete, table grid/views refresh correctly.
-- [ ] No broken UI state when deleted table previously appeared in visible lists.
+- [x] Local refresh after update/delete — `loadTableManagementData()` called
+- [ ] `table_grid_updated` WebSocket handled in `counter.js` — **gap**: handler listens for `table_status_changed` only; remote multi-device sync may be stale
+- [ ] No broken UI after delete — **manual verification**
 
-## F. Automated Test Checklist (Required)
+## F. Automated Test Checklist
 
-- [ ] Test: delete success for table with finalized linked orders.
-- [ ] Test: delete blocked for table with active/non-finalized linked orders.
-- [ ] Test: non-admin delete attempt denied (`403`).
-- [ ] (Recommended) Test: update table rename + zone reassignment success.
-- [ ] (Recommended) Test: update validation failures (duplicate name, missing zone).
+- [x] Delete success with finalized linked orders
+- [x] Delete blocked with active/non-finalized orders
+- [x] Non-admin delete denied (`403`) — waiter only
+- [ ] Update rename + zone reassignment success — **recommended, not implemented**
+- [ ] Update validation failures — **recommended, not implemented**
+- [ ] Root smoke test for PUT/DELETE — **optional**
 
 ## G. Definition of Done
 
-- [ ] All required checks in sections A-F pass.
-- [ ] Test suite is green.
-- [ ] Roadmap Step 7 status can be safely moved to completed with evidence.
+- [x] Delete safety + core RBAC + reporting integrity (automated)
+- [ ] Full Section A PUT validation tests
+- [ ] Manual UI sign-off (Section D)
+- [ ] Realtime `table_grid_updated` in counter (Section E)
+- [ ] Roadmap Step 7 → **completed** only after above gaps closed or accepted as debt

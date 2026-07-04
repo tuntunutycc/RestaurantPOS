@@ -11,6 +11,7 @@ from schemas import (
     KitchenPrinterSettingsUpdate,
     PrinterRouteEndpointResponse,
 )
+from rbac import ADMIN_PANEL_ROLES
 from services.printing.config import KNOWN_PRINTER_ROUTES
 from services.printing.settings import seed_kitchen_printer_settings
 
@@ -54,7 +55,7 @@ def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
 @router.get("/kitchen-printers", response_model=KitchenPrinterSettingsResponse)
 def get_kitchen_printer_settings(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """Return kitchen printer backend mode and route LAN endpoints. Admin only."""
     return _build_settings_response(db)
@@ -64,7 +65,7 @@ def get_kitchen_printer_settings(
 def update_kitchen_printer_settings(
     body: KitchenPrinterSettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """Update kitchen printer backend mode and route LAN endpoints. Admin only."""
     seed_kitchen_printer_settings(db)

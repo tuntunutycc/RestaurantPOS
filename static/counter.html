@@ -25,7 +25,13 @@
         <span data-i18n="menu_management">Menu Management</span>
       </button>
       <button type="button" id="tab-users" data-target-panel="panel-users" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap hidden">
-        <span data-i18n="user_management">User Management</span>
+        <span data-i18n="user_management">Staff Management</span>
+      </button>
+      <button type="button" id="tab-admins" data-target-panel="panel-admins" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap hidden">
+        Admin Accounts
+      </button>
+      <button type="button" id="tab-audit-logs" data-target-panel="panel-audit-logs" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap hidden">
+        Audit Logs
       </button>
       <button type="button" id="tab-tables" data-target-panel="panel-tables" class="tab-btn px-4 py-2 font-medium text-slate-600 border-b-2 border-transparent hover:text-slate-800 whitespace-nowrap">
         <span data-i18n="table_management">Table Management</span>
@@ -40,10 +46,16 @@
           <button type="button" data-dashboard-tab-btn="overview" class="dashboard-subtab px-4 py-2 text-sm font-semibold border-b-2 border-blue-600 text-blue-700">
             Today's Overview
           </button>
-          <button type="button" data-dashboard-tab-btn="history" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">
+          <button type="button" data-dashboard-tab-btn="history" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700" data-role-section="history">
             Sales History
           </button>
-          <button type="button" data-dashboard-tab-btn="insights" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">
+          <button type="button" data-dashboard-tab-btn="staff" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 hidden" data-role-section="staff">
+            Staff Performance
+          </button>
+          <button type="button" data-dashboard-tab-btn="incentives" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 hidden" data-role-section="incentives">
+            Waiter Incentives
+          </button>
+          <button type="button" data-dashboard-tab-btn="insights" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700" data-role-section="insights">
             Insights &amp; Operations
           </button>
         </div>
@@ -65,7 +77,7 @@
           </section>
         </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-          <section class="bg-white rounded-lg shadow p-5">
+          <section class="bg-white rounded-lg shadow p-5" id="dashboard-hourly-section" data-role-widget="admin-charts">
             <h3 class="text-base font-semibold text-slate-800 mb-4">Hourly Sales Trend</h3>
             <div class="relative h-72 max-h-[300px]">
               <canvas id="hourlyTrendChart" class="w-full h-full"></canvas>
@@ -74,7 +86,7 @@
               </p>
             </div>
           </section>
-          <section class="bg-white rounded-lg shadow p-5">
+          <section class="bg-white rounded-lg shadow p-5" id="dashboard-topitems-section" data-role-widget="admin-charts">
             <h3 class="text-base font-semibold text-slate-800 mb-4">Top 5 Selling Items</h3>
             <div class="relative h-72 max-h-[300px]">
               <canvas id="topItemsChart" class="w-full h-full"></canvas>
@@ -129,6 +141,72 @@
             <div class="relative h-80 max-h-[360px]">
               <canvas id="monthlySalesChart" class="w-full h-full"></canvas>
             </div>
+          </section>
+        </div>
+      </div>
+
+      <div id="dashboard-tab-staff" data-dashboard-tab-content="staff" class="hidden">
+        <section class="bg-white rounded-lg shadow p-5 border border-slate-100 mb-6">
+          <div class="flex flex-col md:flex-row md:items-end gap-3 md:gap-4">
+            <div class="flex-1">
+              <label for="staff-filter-date" class="block text-sm font-medium text-slate-700 mb-1">Report Date</label>
+              <input id="staff-filter-date" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+            <div class="md:pb-0.5">
+              <button type="button" id="btn-staff-filter" class="w-full md:w-auto px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">
+                Load Staff Reports
+              </button>
+            </div>
+          </div>
+        </section>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <section class="bg-white rounded-lg shadow p-5" id="staff-cashier-section" data-role-widget="cashier-breakdown">
+            <h3 class="text-base font-semibold text-slate-800 mb-4">Sales by Cashier</h3>
+            <div class="relative h-80 max-h-[360px]">
+              <canvas id="staffCashierChart"></canvas>
+              <p id="staffCashierChartEmpty" class="hidden absolute inset-0 flex items-center justify-center text-sm text-slate-500">No cashier data for this date.</p>
+            </div>
+          </section>
+          <section class="bg-white rounded-lg shadow p-5" id="staff-waiter-section" data-role-widget="waiter-breakdown">
+            <h3 class="text-base font-semibold text-slate-800 mb-4">Sales by Waiter / Order Staff</h3>
+            <div class="relative h-80 max-h-[360px]">
+              <canvas id="staffWaiterChart"></canvas>
+              <p id="staffWaiterChartEmpty" class="hidden absolute inset-0 flex items-center justify-center text-sm text-slate-500">No order-staff data for this date.</p>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <div id="dashboard-tab-incentives" data-dashboard-tab-content="incentives" class="hidden">
+        <section class="bg-white rounded-lg shadow p-5 border border-slate-100 mb-6">
+          <h2 class="text-lg font-semibold text-slate-800 mb-2">Promoted Items — Waiter Incentives</h2>
+          <p class="text-sm text-slate-500 mb-4">Sales of menu items marked as promoted, attributed to order-taking staff.</p>
+          <div class="flex flex-col md:flex-row md:items-end gap-3 md:gap-4">
+            <div class="flex-1">
+              <label for="incentives-start-date" class="block text-sm font-medium text-slate-700 mb-1">From</label>
+              <input id="incentives-start-date" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-md" />
+            </div>
+            <div class="flex-1">
+              <label for="incentives-end-date" class="block text-sm font-medium text-slate-700 mb-1">To</label>
+              <input id="incentives-end-date" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-md" />
+            </div>
+            <div class="md:pb-0.5">
+              <button type="button" id="btn-incentives-filter" class="w-full md:w-auto px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">
+                Load Report
+              </button>
+            </div>
+          </div>
+        </section>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <section class="bg-white rounded-lg shadow p-5">
+            <h3 class="text-base font-semibold text-slate-800 mb-4">Promoted Sales by Staff</h3>
+            <div class="relative h-80 max-h-[360px]">
+              <canvas id="promotedIncentivesChart"></canvas>
+            </div>
+          </section>
+          <section class="bg-white rounded-lg shadow p-5">
+            <h3 class="text-base font-semibold text-slate-800 mb-4">Detail</h3>
+            <div id="promoted-incentives-table" class="text-sm text-slate-600 max-h-80 overflow-auto">Select a date range and load the report.</div>
           </section>
         </div>
       </div>
@@ -347,6 +425,10 @@
                 </label>
               </div>
             </div>
+            <label class="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" id="item-is-promoted" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500" />
+              Mark as promoted item (waiter incentive)
+            </label>
             <div class="flex gap-2">
               <button type="submit" id="btn-submit-menu-item" class="flex-1 py-2 bg-emerald-600 text-white font-medium rounded-md hover:bg-emerald-700">Add Menu Item</button>
               <button type="button" id="btn-cancel-menu-edit" class="hidden px-4 py-2 bg-slate-200 text-slate-800 font-medium rounded-md hover:bg-slate-300">Cancel</button>
@@ -370,12 +452,12 @@
       </div>
     </div>
 
-    <!-- Tab 3: User Management (admin only) -->
+    <!-- Tab 3: Staff Management (admin + root) -->
     <div id="panel-users" class="tab-panel hidden">
       <div class="grid md:grid-cols-2 gap-8 mb-10">
         <section class="bg-white rounded-lg shadow p-6">
-          <h2 class="text-lg font-semibold text-slate-700 mb-4">Manage Users</h2>
-          <p class="text-sm text-slate-500 mb-4">Create, edit, or delete staff PIN users.</p>
+          <h2 class="text-lg font-semibold text-slate-700 mb-4">Manage Staff</h2>
+          <p class="text-sm text-slate-500 mb-4">Create, edit, or delete cashier, waiter, and account users.</p>
           <div class="overflow-auto">
             <table class="w-full text-sm text-slate-700">
               <thead>
@@ -394,7 +476,7 @@
         </section>
 
         <section class="bg-white rounded-lg shadow p-6">
-          <h2 class="text-lg font-semibold text-slate-700 mb-4" id="user-form-title">Create User</h2>
+          <h2 class="text-lg font-semibold text-slate-700 mb-4" id="user-form-title">Create Staff</h2>
           <form id="user-form" class="space-y-3">
             <input type="hidden" id="user-id" />
 
@@ -407,12 +489,19 @@
               <label class="block text-sm font-medium text-slate-700 mb-1">Role</label>
               <select id="user-role" required
                 class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                <option value="admin">admin</option>
                 <option value="waiter">waiter</option>
                 <option value="cashier">cashier</option>
+                <option value="account">account</option>
               </select>
             </div>
-            <div>
+            <div id="user-account-password-wrap" class="hidden">
+              <label class="block text-sm font-medium text-slate-700 mb-1">Account Password</label>
+              <input type="password" id="user-account-password" minlength="6" autocomplete="new-password"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Min 6 characters" />
+              <p class="mt-1 text-xs text-slate-500">Required for account role (reports login)</p>
+            </div>
+            <div id="user-pin-wrap">
               <label class="block text-sm font-medium text-slate-700 mb-1">PIN (4 digits)</label>
               <input type="text" id="user-pin" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" required title="Enter exactly 4 digits"
                 class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -436,6 +525,140 @@
           </form>
         </section>
       </div>
+    </div>
+
+    <!-- Tab: Admin Accounts (root only) -->
+    <div id="panel-admins" class="tab-panel hidden">
+      <div class="grid md:grid-cols-2 gap-8 mb-10">
+        <section class="bg-white rounded-lg shadow p-6">
+          <h2 class="text-lg font-semibold text-slate-700 mb-4">Admin Accounts</h2>
+          <p class="text-sm text-slate-500 mb-4">Root can create and manage admin login accounts.</p>
+          <div class="overflow-auto">
+            <table class="w-full text-sm text-slate-700">
+              <thead>
+                <tr class="border-b border-slate-200">
+                  <th class="text-left py-2">Username</th>
+                  <th class="text-left py-2">PIN</th>
+                  <th class="text-right py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="admins-table-body">
+                <tr><td colspan="3" class="py-3 text-slate-500">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="bg-white rounded-lg shadow p-6">
+          <h2 class="text-lg font-semibold text-slate-700 mb-4" id="admin-form-title">Create Admin</h2>
+          <form id="admin-form" class="space-y-3">
+            <input type="hidden" id="admin-id" />
+
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+              <input type="text" id="admin-username" required
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <input type="password" id="admin-password" minlength="6" autocomplete="new-password"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              <p id="admin-password-hint" class="mt-1 text-xs text-slate-500">Min 6 characters. Leave blank when editing to keep current password.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1">PIN (optional, 4 digits)</label>
+              <input type="text" id="admin-pin" maxlength="4" inputmode="numeric" pattern="[0-9]{4}"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="e.g. 1234" />
+            </div>
+
+            <button type="submit" id="btn-save-admin"
+              class="w-full py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">
+              Save Admin
+            </button>
+            <button type="button" id="btn-delete-admin"
+              class="w-full py-2 bg-rose-600 text-white font-medium rounded-md hover:bg-rose-700 hidden">
+              Delete Admin
+            </button>
+            <button type="button" id="btn-reset-admin-password"
+              class="w-full py-2 bg-amber-600 text-white font-medium rounded-md hover:bg-amber-700 hidden">
+              Reset Password
+            </button>
+            <button type="button" id="btn-reset-admin-form"
+              class="w-full py-2 bg-slate-200 text-slate-800 font-medium rounded-md hover:bg-slate-300">
+              Clear Form
+            </button>
+          </form>
+        </section>
+      </div>
+    </div>
+
+    <!-- Tab: Audit Logs (root only) -->
+    <div id="panel-audit-logs" class="tab-panel hidden">
+      <section class="bg-white rounded-lg shadow p-6">
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-700">System Audit Logs</h2>
+            <p class="text-sm text-slate-500 mt-1">Track which admin performed staff and admin account changes.</p>
+          </div>
+          <button type="button" id="btn-refresh-audit-logs"
+            class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 self-start md:self-auto">
+            Refresh
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+          <div>
+            <label for="audit-filter-action" class="block text-xs font-medium text-slate-600 mb-1">Action</label>
+            <select id="audit-filter-action"
+              class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+              <option value="">All actions</option>
+              <option value="admin_create_staff">Admin created staff</option>
+              <option value="admin_update_staff">Admin updated staff</option>
+              <option value="admin_delete_staff">Admin deleted staff</option>
+              <option value="root_create_admin">Root created admin</option>
+              <option value="root_update_admin">Root updated admin</option>
+              <option value="root_delete_admin">Root deleted admin</option>
+              <option value="root_reset_admin_password">Root reset admin password</option>
+            </select>
+          </div>
+          <div>
+            <label for="audit-filter-start" class="block text-xs font-medium text-slate-600 mb-1">From date</label>
+            <input type="date" id="audit-filter-start"
+              class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label for="audit-filter-end" class="block text-xs font-medium text-slate-600 mb-1">To date</label>
+            <input type="date" id="audit-filter-end"
+              class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="flex items-end">
+            <button type="button" id="btn-apply-audit-filters"
+              class="w-full px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-md hover:bg-slate-900">
+              Apply Filters
+            </button>
+          </div>
+        </div>
+
+        <p id="audit-logs-status" class="text-sm text-slate-500 mb-3">Loading audit logs…</p>
+
+        <div class="overflow-auto border border-slate-200 rounded-lg">
+          <table class="w-full text-sm text-slate-700">
+            <thead class="bg-slate-50">
+              <tr class="border-b border-slate-200">
+                <th class="text-left py-3 px-3 font-semibold">Time</th>
+                <th class="text-left py-3 px-3 font-semibold">Actor</th>
+                <th class="text-left py-3 px-3 font-semibold">Action</th>
+                <th class="text-left py-3 px-3 font-semibold">Target</th>
+                <th class="text-left py-3 px-3 font-semibold">Details</th>
+              </tr>
+            </thead>
+            <tbody id="audit-logs-table-body">
+              <tr><td colspan="5" class="py-4 px-3 text-slate-500">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <!-- Tab 4: Table Management (admin only) -->

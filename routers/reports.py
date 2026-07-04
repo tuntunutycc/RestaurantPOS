@@ -10,6 +10,14 @@ from sqlalchemy.orm import Session
 from auth import require_roles
 from database import get_db
 from models import Category, MenuItem, Order, OrderItem, User
+from rbac import (
+    ACCOUNT_MAX_REPORT_DAYS,
+    ROLE_ACCOUNT,
+    ROLE_CASHIER,
+    ROLE_ROOT,
+    ROLE_ADMIN,
+    ROLE_WAITER,
+)
 from schemas import (
     CancelledItemCountResponse,
     CancellationsSummaryResponse,
@@ -17,19 +25,25 @@ from schemas import (
     DailySalesPointResponse,
     HourlySalesTrendResponse,
     MonthlySalesPointResponse,
+    PromotedStaffSalesResponse,
+    StaffSalesPointResponse,
     TopSellingItemResponse,
     TodaySalesSummaryResponse,
 )
+from services.report_access import assert_report_date_range, dt_range_for_dates
 
 router = APIRouter(prefix="/api")
 DELETED_ITEM_LABEL = "[Deleted Item]"
 DELETED_CATEGORY_LABEL = "[Deleted Category]"
 
+_DASHBOARD_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT]
+_SUMMARY_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT, ROLE_CASHIER]
+
 
 @router.get("/reports/summary/today", response_model=TodaySalesSummaryResponse)
 def get_today_sales_summary(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier"])),
+    current_user: User = Depends(require_roles(_SUMMARY_ROLES)),
 ):
     """
     Return today's sales summary:
@@ -40,18 +54,18 @@ def get_today_sales_summary(
     start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     end_of_day = start_of_day + timedelta(days=1)
 
-    total_sales, total_orders = (
-        db.query(
-            func.coalesce(func.sum(Order.total_amount), 0.0),
-            func.count(Order.id),
-        )
-        .filter(
-            Order.created_at >= start_of_day,
-            Order.created_at < end_of_day,
-            Order.status.in_(("paid", "completed")),
-        )
-        .one()
+    q = db.query(
+        func.coalesce(func.sum(Order.total_amount), 0.0),
+        func.count(Order.id),
+    ).filter(
+        Order.created_at >= start_of_day,
+        Order.created_at < end_of_day,
+        Order.status.in_(("paid", "completed")),
     )
+    if current_user.role == ROLE_CASHIER:
+        q = q.filter(Order.checked_out_by_id == current_user.id)
+
+    total_sales, total_orders = q.one()
 
     total_sales = float(total_sales or 0.0)
     total_orders = int(total_orders or 0)
@@ -67,7 +81,7 @@ def get_today_sales_summary(
 @router.get("/reports/top-items", response_model=list[TopSellingItemResponse])
 def get_top_selling_items_today(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier"])),
+    current_user: User = Depends(require_roles(_DASHBOARD_ROLES)),
 ):
     """Return today's top 5 selling items by quantity (paid/completed orders only)."""
     start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -109,7 +123,7 @@ def get_top_selling_items_today(
 @router.get("/reports/hourly-trend", response_model=list[HourlySalesTrendResponse])
 def get_hourly_sales_trend_today(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier"])),
+    current_user: User = Depends(require_roles(_DASHBOARD_ROLES)),
 ):
     """Return today's hourly sales totals from paid/completed orders."""
     start_of_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -144,7 +158,7 @@ def get_daily_sales_history(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier"])),
+    current_user: User = Depends(require_roles(_DASHBOARD_ROLES)),
 ):
     """
     Return daily sales totals for a date range.
@@ -153,11 +167,9 @@ def get_daily_sales_history(
     today = datetime.utcnow().date()
     effective_end = end_date or today
     effective_start = start_date or (effective_end - timedelta(days=29))
-    if effective_start > effective_end:
-        raise HTTPException(status_code=400, detail="start_date cannot be after end_date")
+    assert_report_date_range(current_user, effective_start, effective_end)
 
-    start_dt = datetime.combine(effective_start, time.min)
-    end_dt = datetime.combine(effective_end + timedelta(days=1), time.min)
+    start_dt, end_dt = dt_range_for_dates(effective_start, effective_end)
 
     rows = (
         db.query(
@@ -187,7 +199,7 @@ def get_daily_sales_history(
 def get_monthly_sales_history(
     year: int | None = Query(default=None, ge=2000, le=2100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier"])),
+    current_user: User = Depends(require_roles(_DASHBOARD_ROLES)),
 ):
     """
     Return monthly sales totals for a given year.
@@ -196,6 +208,16 @@ def get_monthly_sales_history(
     target_year = year or datetime.utcnow().year
     start_dt = datetime(target_year, 1, 1)
     end_dt = datetime(target_year + 1, 1, 1)
+    if current_user.role == ROLE_ACCOUNT:
+        oldest = datetime.utcnow().date() - timedelta(days=ACCOUNT_MAX_REPORT_DAYS - 1)
+        if date(target_year, 12, 31) < oldest:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Account role cannot view data older than {ACCOUNT_MAX_REPORT_DAYS} days",
+            )
+        oldest_dt = datetime.combine(oldest, time.min)
+        if start_dt < oldest_dt:
+            start_dt = oldest_dt
 
     rows = (
         db.query(
@@ -224,7 +246,7 @@ def get_monthly_sales_history(
 @router.get("/reports/category-sales", response_model=list[CategorySalesPointResponse])
 def get_category_sales_breakdown(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier"])),
+    current_user: User = Depends(require_roles(_DASHBOARD_ROLES)),
 ):
     """
     Return category-level sales totals for the current month (UTC).
@@ -278,7 +300,7 @@ def get_category_sales_breakdown(
 @router.get("/reports/cancellations", response_model=CancellationsSummaryResponse)
 def get_cancellations_summary(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier"])),
+    current_user: User = Depends(require_roles(_DASHBOARD_ROLES)),
 ):
     """
     Return cancellation analytics:
@@ -329,3 +351,164 @@ def get_cancellations_summary(
             for row in top_rows
         ],
     )
+
+
+_STAFF_REPORT_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT, ROLE_CASHIER]
+_ORDER_STAFF_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER, ROLE_WAITER]
+
+
+@router.get("/reports/sales/by-cashier", response_model=list[StaffSalesPointResponse])
+def get_sales_by_cashier(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(_STAFF_REPORT_ROLES)),
+):
+    """Per-cashier checkout totals (uses Order.checked_out_by_id)."""
+    today = datetime.utcnow().date()
+    effective_end = end_date or today
+    effective_start = start_date or effective_end
+    assert_report_date_range(current_user, effective_start, effective_end)
+    start_dt, end_dt = dt_range_for_dates(effective_start, effective_end)
+
+    q = (
+        db.query(
+            User.id.label("user_id"),
+            User.username.label("username"),
+            User.role.label("role"),
+            func.coalesce(func.sum(Order.total_amount), 0.0).label("total_sales"),
+            func.count(Order.id).label("order_count"),
+        )
+        .join(Order, Order.checked_out_by_id == User.id)
+        .filter(
+            Order.created_at >= start_dt,
+            Order.created_at < end_dt,
+            Order.status.in_(("paid", "completed")),
+            User.is_deleted.is_(False),
+        )
+        .group_by(User.id, User.username, User.role)
+        .order_by(func.sum(Order.total_amount).desc())
+    )
+    if current_user.role == ROLE_CASHIER:
+        q = q.filter(User.id == current_user.id)
+
+    rows = q.all()
+    return [
+        StaffSalesPointResponse(
+            user_id=int(row.user_id),
+            username=str(row.username),
+            role=str(row.role),
+            total_sales=float(row.total_sales or 0.0),
+            order_count=int(row.order_count or 0),
+        )
+        for row in rows
+    ]
+
+
+@router.get("/reports/sales/by-order-staff", response_model=list[StaffSalesPointResponse])
+def get_sales_by_order_staff(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(_ORDER_STAFF_ROLES)),
+):
+    """Per-staff order item sales (uses OrderItem.created_by_id)."""
+    today = datetime.utcnow().date()
+    effective_end = end_date or today
+    effective_start = start_date or effective_end
+    if current_user.role == ROLE_ACCOUNT:
+        raise HTTPException(status_code=403, detail="Account role cannot view staff order breakdown")
+    assert_report_date_range(current_user, effective_start, effective_end)
+    start_dt, end_dt = dt_range_for_dates(effective_start, effective_end)
+
+    q = (
+        db.query(
+            User.id.label("user_id"),
+            User.username.label("username"),
+            User.role.label("role"),
+            func.coalesce(func.sum(OrderItem.subtotal), 0.0).label("total_sales"),
+            func.count(OrderItem.id).label("order_count"),
+        )
+        .join(OrderItem, OrderItem.created_by_id == User.id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(
+            Order.created_at >= start_dt,
+            Order.created_at < end_dt,
+            Order.status.in_(("paid", "completed")),
+            OrderItem.item_status != "cancelled",
+            User.is_deleted.is_(False),
+        )
+        .group_by(User.id, User.username, User.role)
+        .order_by(func.sum(OrderItem.subtotal).desc())
+    )
+    if current_user.role == ROLE_WAITER:
+        q = q.filter(User.id == current_user.id)
+
+    rows = q.all()
+    return [
+        StaffSalesPointResponse(
+            user_id=int(row.user_id),
+            username=str(row.username),
+            role=str(row.role),
+            total_sales=float(row.total_sales or 0.0),
+            order_count=int(row.order_count or 0),
+        )
+        for row in rows
+    ]
+
+
+_PROMOTED_REPORT_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_WAITER]
+
+
+@router.get("/reports/sales/promoted-by-waiter", response_model=list[PromotedStaffSalesResponse])
+def get_promoted_sales_by_waiter(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(_PROMOTED_REPORT_ROLES)),
+):
+    """Per-staff promoted menu item sales (OrderItem lines for MenuItem.is_promoted)."""
+    today = datetime.utcnow().date()
+    effective_end = end_date or today
+    effective_start = start_date or effective_end
+    assert_report_date_range(current_user, effective_start, effective_end)
+    start_dt, end_dt = dt_range_for_dates(effective_start, effective_end)
+
+    q = (
+        db.query(
+            User.id.label("user_id"),
+            User.username.label("username"),
+            User.role.label("role"),
+            func.coalesce(func.sum(OrderItem.subtotal), 0.0).label("total_sales"),
+            func.coalesce(func.sum(OrderItem.quantity), 0).label("quantity"),
+            func.count(OrderItem.id).label("line_count"),
+        )
+        .join(OrderItem, OrderItem.created_by_id == User.id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .join(MenuItem, MenuItem.id == OrderItem.menu_item_id)
+        .filter(
+            MenuItem.is_promoted.is_(True),
+            Order.created_at >= start_dt,
+            Order.created_at < end_dt,
+            Order.status.in_(("paid", "completed")),
+            OrderItem.item_status != "cancelled",
+            User.is_deleted.is_(False),
+        )
+        .group_by(User.id, User.username, User.role)
+        .order_by(func.sum(OrderItem.subtotal).desc())
+    )
+    if current_user.role == ROLE_WAITER:
+        q = q.filter(User.id == current_user.id)
+
+    rows = q.all()
+    return [
+        PromotedStaffSalesResponse(
+            user_id=int(row.user_id),
+            username=str(row.username),
+            role=str(row.role),
+            total_sales=float(row.total_sales or 0.0),
+            quantity=int(row.quantity or 0),
+            line_count=int(row.line_count or 0),
+        )
+        for row in rows
+    ]

@@ -48,7 +48,10 @@
     fetch("/api/auth/login-pin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin_code: pin }),
+      body: JSON.stringify({
+        pin_code: pin,
+        device_id: window.posDevice && window.posDevice.getDeviceId ? window.posDevice.getDeviceId() : "unknown",
+      }),
     })
       .then((res) => {
         if (res.status === 401) {
@@ -64,19 +67,15 @@
         if (!data || !data.access_token || !data.user) return;
         if (window.auth) window.auth.setAuth(data.access_token, data.user);
         const role = data.user.role;
-        if (!["admin", "waiter", "cashier"].includes(role)) {
+        const PIN_ROLES = ["waiter", "cashier"];
+        if (!PIN_ROLES.includes(role)) {
           if (window.toast && window.toast.error) {
             window.toast.error("This account role is not allowed to log in here.");
           }
           if (window.auth) window.auth.clearAuth();
           return;
         }
-        const page =
-          role === "waiter"
-            ? "/waiter"
-            : role === "cashier"
-                ? "/counter"
-                : "/counter";
+        const page = role === "waiter" ? "/waiter" : "/counter";
         window.location.href = page;
       })
       .catch(() => {
@@ -104,17 +103,11 @@
   // Already logged in → redirect by role
   if (window.auth && window.auth.getToken() && window.auth.getUser()) {
     const user = window.auth.getUser();
-    if (!["admin", "waiter", "cashier"].includes(user.role)) {
+    if (!["waiter", "cashier"].includes(user.role)) {
       window.auth.clearAuth();
       return;
     }
-    const page =
-      user.role === "waiter"
-        ? "/waiter"
-        : user.role === "cashier"
-            ? "/counter"
-            : "/counter";
-    window.location.href = page;
+    window.location.href = user.role === "waiter" ? "/waiter" : "/counter";
     return;
   }
 

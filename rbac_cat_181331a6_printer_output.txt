@@ -1,0 +1,9 @@
+=== KITCHEN ITEM TICKET ===
+Printer: rbac_cat_181331a6_printer
+Table: 14
+Order: #14
+Time: 2026-04-17T08:10:51.455454
+---------------------------------
+1x RBAC-Item-181331a6
+---------------------------------
+[ --- CUT TICKET --- ]

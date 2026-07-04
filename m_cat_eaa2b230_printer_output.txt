@@ -1,0 +1,9 @@
+=== KITCHEN ITEM TICKET ===
+Printer: m_cat_eaa2b230_printer
+Table: 5
+Order: #5
+Time: 2026-04-17T08:22:18.354237
+---------------------------------
+3x M-Item-eaa2b230
+---------------------------------
+[ --- CUT TICKET --- ]

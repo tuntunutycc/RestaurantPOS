@@ -11,7 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from auth import hash_password, require_roles
 from database import SessionLocal, engine
 from models import Base, Order, Table, User, Zone
-from routers import auth, kitchen_printers, menu, orders, reports, tables, users
+from rbac import ROLE_ROOT
+from routers import auth, kitchen_printers, menu, orders, reports, root_users, setup, tables, users
 from websocket_manager import ConnectionManager
 
 
@@ -126,6 +127,12 @@ async def lifespan(app: FastAPI):
     try:
         from sqlalchemy import text
         with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN checked_out_by_id INTEGER"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
             conn.execute(text("ALTER TABLE menu_items ADD COLUMN image_url VARCHAR(512)"))
     except Exception:
         pass
@@ -142,6 +149,17 @@ async def lifespan(app: FastAPI):
                 text(
                     "ALTER TABLE menu_items "
                     "ADD COLUMN is_available BOOLEAN NOT NULL DEFAULT TRUE"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE menu_items "
+                    "ADD COLUMN is_promoted BOOLEAN NOT NULL DEFAULT 0"
                 )
             )
     except Exception:
@@ -522,20 +540,11 @@ async def lifespan(app: FastAPI):
     # Ensure default admin exists (even if staff were added first via scripts)
     db = SessionLocal()
     try:
-        admin = db.query(User).filter(User.username == "admin").first()
-        if not admin:
-            admin = User(
-                username="admin",
-                password_hash=hash_password("admin123"),
-                role="admin",
-                pin_code="1234",
-            )
-            db.add(admin)
-            db.commit()
-        else:
-            # Backfill: PIN if missing (do not reset password on every boot)
-            if getattr(admin, "pin_code", None) is None:
-                admin.pin_code = "1234"
+        root = db.query(User).filter(User.role == ROLE_ROOT, User.is_deleted.is_(False)).first()
+        if not root:
+            legacy_admin = db.query(User).filter(User.username == "admin", User.is_deleted.is_(False)).first()
+            if legacy_admin:
+                legacy_admin.role = ROLE_ROOT
                 db.commit()
     finally:
         db.close()
@@ -544,6 +553,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Restaurant POS API", lifespan=lifespan)
+app.include_router(setup.router)
+app.include_router(root_users.router)
 app.include_router(auth.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
@@ -591,7 +602,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/api/upload")
 async def upload_image(
     file: UploadFile,
-    current_user: User = Depends(require_roles(["admin"])),
+    current_user: User = Depends(require_roles(["root", "admin"])),
 ):
     """Upload an image for menu items. Admin only. Saves to static/images/ and returns the URL path."""
     suffix = Path(file.filename or "").suffix.lower()
@@ -643,6 +654,18 @@ def counter_page():
 def table_dashboard_page():
     """Serve the shared Table Dashboard (Admin + Waiter)."""
     return FileResponse(static_dir / "table-dashboard.html")
+
+
+@app.get("/setup")
+def setup_page():
+    """One-time root account setup."""
+    return FileResponse(static_dir / "setup.html")
+
+
+@app.get("/account")
+def account_page():
+    """Read-only reports for account role."""
+    return FileResponse(static_dir / "account.html")
 
 
 @app.get("/login")

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from auth import get_current_user, require_roles
 from database import get_db
 from models import Order, Table, User, Zone
+from rbac import ADMIN_PANEL_ROLES
 from schemas import (
     TableCreate,
     TableGridItemResponse,
@@ -37,7 +38,7 @@ def _status_value(value) -> str:
 @router.get("/zones", response_model=list[ZoneResponse])
 def list_zones(
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(["admin"])),
+    _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     return db.query(Zone).order_by(Zone.id.asc()).all()
 
@@ -46,7 +47,7 @@ def list_zones(
 def create_zone(
     body: ZoneCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(["admin"])),
+    _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     name = body.name.strip()
     if not name:
@@ -65,7 +66,7 @@ def update_zone(
     zone_id: int,
     body: ZoneUpdate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(["admin"])),
+    _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     zone = db.query(Zone).filter(Zone.id == zone_id).first()
     if not zone:
@@ -86,7 +87,7 @@ async def delete_zone(
     request: Request,
     zone_id: int,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(["admin"])),
+    _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     zone = db.query(Zone).filter(Zone.id == zone_id).first()
     if not zone:
@@ -125,7 +126,7 @@ async def delete_zone(
 @router.get("/tables", response_model=list[TableResponse])
 def list_tables(
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(["admin"])),
+    _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     return db.query(Table).order_by(Table.id.asc()).all()
 
@@ -135,7 +136,7 @@ async def create_table(
     request: Request,
     body: TableCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(["admin"])),
+    _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     if not db.query(Zone).filter(Zone.id == body.zone_id).first():
         raise HTTPException(status_code=404, detail="Zone not found")
@@ -169,7 +170,7 @@ async def update_table(
     table_id: int,
     body: TableUpdate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(["admin"])),
+    _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     table = db.query(Table).filter(Table.id == table_id).first()
     if not table:
@@ -212,7 +213,7 @@ async def delete_table(
     request: Request,
     table_id: int,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(["admin"])),
+    _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     table = db.query(Table).filter(Table.id == table_id).first()
     if not table:

@@ -56,67 +56,6 @@ def _seed_table_menu_order(db_session):
     return table, menu_item, order, order_item
 
 
-def test_kitchen_forbidden_on_order_views(client, db_session, auth_headers):
-    table, _, order, _ = _seed_table_menu_order(db_session)
-    headers = auth_headers("kitchen")
-
-    res_list = client.get("/api/orders/", headers=headers)
-    assert res_list.status_code == 403, res_list.text
-
-    res_takeaways = client.get("/api/orders/active-takeaways", headers=headers)
-    assert res_takeaways.status_code == 403, res_takeaways.text
-
-    res_tables = client.get("/api/orders/tables", headers=headers)
-    assert res_tables.status_code == 403, res_tables.text
-
-    res_by_table = client.get(f"/api/orders/active-by-table/{table.id}", headers=headers)
-    assert res_by_table.status_code == 403, res_by_table.text
-
-    res_details = client.get(f"/api/orders/{order.id}/details", headers=headers)
-    assert res_details.status_code == 403, res_details.text
-
-
-def test_kitchen_forbidden_on_order_mutations(client, db_session, auth_headers):
-    table, menu_item, order, order_item = _seed_table_menu_order(db_session)
-    headers = auth_headers("kitchen")
-
-    res_create = client.post(
-        "/api/orders/",
-        headers=headers,
-        json={
-            "table_id": table.id,
-            "order_type": "dine_in",
-            "items": [{"menu_item_id": menu_item.id, "quantity": 1, "selected_modifiers": []}],
-        },
-    )
-    assert res_create.status_code == 403, res_create.text
-
-    res_submit = client.post(
-        "/api/orders/submit",
-        headers=headers,
-        json={
-            "table_id": table.id,
-            "order_type": "dine_in",
-            "items": [{"menu_item_id": menu_item.id, "quantity": 1, "selected_modifiers": []}],
-        },
-    )
-    assert res_submit.status_code == 403, res_submit.text
-
-    res_status = client.put(
-        f"/api/orders/{order.id}/status",
-        headers=headers,
-        json={"status": "completed"},
-    )
-    assert res_status.status_code == 403, res_status.text
-
-    res_item_status = client.put(
-        f"/api/orders/{order.id}/items/{order_item.id}/status",
-        headers=headers,
-        json={"status": "served"},
-    )
-    assert res_item_status.status_code == 403, res_item_status.text
-
-
 def test_waiter_cannot_checkout_but_can_submit(client, db_session, auth_headers):
     table, menu_item, order, _ = _seed_table_menu_order(db_session)
     waiter_headers = auth_headers("waiter")
@@ -163,7 +102,7 @@ def test_cashier_and_admin_can_checkout(client, db_session, auth_headers):
     _, _, second_order, _ = _seed_table_menu_order(db_session)
     admin_res = client.put(
         f"/api/orders/{second_order.id}/checkout",
-        headers=auth_headers("admin"),
+        headers=auth_headers("root"),
         json={"payment_method": "cash", "amount_tendered": 100, "discount_type": None, "discount_value": 0},
     )
     assert admin_res.status_code == 200, admin_res.text

@@ -3,7 +3,7 @@ const API_BASE = '';
 (function guard() {
   if (!window.auth) return;
   if (!window.auth.requireAuth()) return;
-  if (!window.auth.requireRole(['cashier', 'admin'])) return;
+  if (!window.auth.requireRole(['cashier', 'admin', 'root'])) return;
   window.auth.renderNav('pos-nav');
   window.auth.consumeUnauthorizedFlag();
 })();
@@ -13,11 +13,15 @@ const tabDashboard = document.getElementById('tab-dashboard');
 const tabCashier = document.getElementById('tab-cashier');
 const tabMenu = document.getElementById('tab-menu');
 const tabUsers = document.getElementById('tab-users');
+const tabAdmins = document.getElementById('tab-admins');
+const tabAuditLogs = document.getElementById('tab-audit-logs');
 const tabTables = document.getElementById('tab-tables');
 const panelDashboard = document.getElementById('panel-dashboard');
 const panelCashier = document.getElementById('panel-cashier');
 const panelMenu = document.getElementById('panel-menu');
 const panelUsers = document.getElementById('panel-users');
+const panelAdmins = document.getElementById('panel-admins');
+const panelAuditLogs = document.getElementById('panel-audit-logs');
 const panelTables = document.getElementById('panel-tables');
 let hasInitializedDefaultPanel = false;
 let activeDashboardTab = 'overview';
@@ -28,6 +32,8 @@ function showPanel(panel) {
   panelCashier.classList.add('hidden');
   panelMenu.classList.add('hidden');
   if (panelUsers) panelUsers.classList.add('hidden');
+  if (panelAdmins) panelAdmins.classList.add('hidden');
+  if (panelAuditLogs) panelAuditLogs.classList.add('hidden');
   if (panelTables) panelTables.classList.add('hidden');
 
   if (tabDashboard) {
@@ -42,6 +48,14 @@ function showPanel(panel) {
   if (tabUsers) {
     tabUsers.classList.remove('border-blue-600', 'text-blue-600');
     tabUsers.classList.add('border-transparent', 'text-slate-600');
+  }
+  if (tabAdmins) {
+    tabAdmins.classList.remove('border-blue-600', 'text-blue-600');
+    tabAdmins.classList.add('border-transparent', 'text-slate-600');
+  }
+  if (tabAuditLogs) {
+    tabAuditLogs.classList.remove('border-blue-600', 'text-blue-600');
+    tabAuditLogs.classList.add('border-transparent', 'text-slate-600');
   }
   if (tabTables) {
     tabTables.classList.remove('border-blue-600', 'text-blue-600');
@@ -62,6 +76,12 @@ function showPanel(panel) {
   } else if (panelUsers && panel === panelUsers) {
     if (tabUsers) tabUsers.classList.add('border-blue-600', 'text-blue-600');
     loadUsers();
+  } else if (panelAdmins && panel === panelAdmins) {
+    if (tabAdmins) tabAdmins.classList.add('border-blue-600', 'text-blue-600');
+    loadRootAdmins();
+  } else if (panelAuditLogs && panel === panelAuditLogs) {
+    if (tabAuditLogs) tabAuditLogs.classList.add('border-blue-600', 'text-blue-600');
+    loadAuditLogs();
   } else if (panelTables && panel === panelTables) {
     if (tabTables) tabTables.classList.add('border-blue-600', 'text-blue-600');
     loadTableManagementData();
@@ -106,6 +126,24 @@ function applyDashboardTabState(nextTab) {
     });
     hasLoadedInsightsTab = true;
   }
+  if (nextTab === 'staff' && !hasLoadedStaffTab) {
+    setStaffFilterDefaultDate();
+    Promise.allSettled([loadStaffBreakdownCharts()]).then((results) => {
+      if (results.some((r) => r.status === 'rejected')) {
+        console.error('Staff breakdown loading failed:', results);
+      }
+    });
+    hasLoadedStaffTab = true;
+  }
+  if (nextTab === 'incentives' && !hasLoadedIncentivesTab) {
+    setIncentivesDefaultDates();
+    Promise.allSettled([loadPromotedIncentivesReport()]).then((results) => {
+      if (results.some((r) => r.status === 'rejected')) {
+        console.error('Promoted incentives loading failed:', results);
+      }
+    });
+    hasLoadedIncentivesTab = true;
+  }
 }
 
 function bindDashboardSubTabs() {
@@ -127,7 +165,10 @@ if (tabUsers && panelUsers) tabUsers.addEventListener('click', () => showPanel(p
 if (tabTables && panelTables) tabTables.addEventListener('click', () => showPanel(panelTables));
 window.addEventListener('DOMContentLoaded', () => {
   setSalesHistoryDefaultDates();
+  setStaffFilterDefaultDate();
   bindSalesHistoryFilters();
+  bindStaffBreakdownFilters();
+  bindIncentivesFilters();
   bindDashboardSubTabs();
 });
 
@@ -145,19 +186,31 @@ document.addEventListener('click', (e) => {
 
 function applyAdminOnlyTabVisibility(role) {
   const normalizedRole = String(role || '').toLowerCase();
-  const isAdmin = normalizedRole === 'admin';
-  if (tabDashboard) tabDashboard.classList.toggle('hidden', !isAdmin);
-  if (tabUsers) tabUsers.classList.toggle('hidden', !isAdmin);
-  if (tabTables) tabTables.classList.toggle('hidden', !isAdmin);
-  // If current panel is admin-only but user is not admin, fallback to cashier.
-  if (!isAdmin && panelDashboard && !panelDashboard.classList.contains('hidden')) {
+  const isAdminPanel = normalizedRole === 'admin' || normalizedRole === 'root';
+  const isRoot = normalizedRole === 'root';
+  const isCashier = normalizedRole === 'cashier';
+  const showDashboard = isAdminPanel || isCashier;
+  if (tabDashboard) tabDashboard.classList.toggle('hidden', !showDashboard);
+  applyDashboardRoleVisibility(normalizedRole);
+  if (tabUsers) tabUsers.classList.toggle('hidden', !isAdminPanel);
+  if (tabAdmins) tabAdmins.classList.toggle('hidden', !isRoot);
+  if (tabAuditLogs) tabAuditLogs.classList.toggle('hidden', !isRoot);
+  if (tabTables) tabTables.classList.toggle('hidden', !isAdminPanel);
+  if (tabMenu) tabMenu.classList.toggle('hidden', normalizedRole === 'cashier');
+  if (!isAdminPanel && panelDashboard && !panelDashboard.classList.contains('hidden')) {
     showPanel(panelCashier);
   }
-  if (!isAdmin && panelTables && !panelTables.classList.contains('hidden')) {
+  if (!isAdminPanel && panelTables && !panelTables.classList.contains('hidden')) {
     showPanel(panelCashier);
+  }
+  if (!isRoot && panelAdmins && !panelAdmins.classList.contains('hidden')) {
+    showPanel(isAdminPanel && panelDashboard ? panelDashboard : panelCashier);
+  }
+  if (!isRoot && panelAuditLogs && !panelAuditLogs.classList.contains('hidden')) {
+    showPanel(isAdminPanel && panelDashboard ? panelDashboard : panelCashier);
   }
   if (!hasInitializedDefaultPanel) {
-    showPanel(isAdmin && panelDashboard ? panelDashboard : panelCashier);
+    showPanel(showDashboard && panelDashboard ? panelDashboard : panelCashier);
     hasInitializedDefaultPanel = true;
   }
 }
@@ -209,6 +262,52 @@ let hasLoadedSalesHistoryTab = false;
 let categoryChart = null;
 let cancelledItemsChart = null;
 let hasLoadedInsightsTab = false;
+let staffCashierChart = null;
+let staffWaiterChart = null;
+let hasLoadedStaffTab = false;
+let promotedIncentivesChart = null;
+let hasLoadedIncentivesTab = false;
+
+function getCounterUserRole() {
+  return String(window.auth?.getUser?.()?.role || '').toLowerCase();
+}
+
+function applyDashboardRoleVisibility(role) {
+  const normalized = String(role || '').toLowerCase();
+  const isRoot = normalized === 'root';
+  const isAdmin = normalized === 'admin';
+  const isCashier = normalized === 'cashier';
+  const isAdminPanel = isRoot || isAdmin;
+
+  document.querySelectorAll('[data-role-section]').forEach((el) => {
+    const section = el.getAttribute('data-role-section');
+    let visible = false;
+    if (section === 'staff') visible = isRoot || isAdmin || isCashier;
+    else if (section === 'incentives') visible = isRoot || isAdmin;
+    else if (section === 'history' || section === 'insights') visible = isAdminPanel;
+    else visible = true;
+    el.classList.toggle('hidden', !visible);
+  });
+
+  document.querySelectorAll('[data-role-widget]').forEach((el) => {
+    const widget = el.getAttribute('data-role-widget');
+    let visible = true;
+    if (widget === 'admin-charts') visible = isAdminPanel;
+    if (widget === 'cashier-breakdown') visible = isRoot || isAdmin;
+    if (widget === 'waiter-breakdown') visible = isRoot || isAdmin || isCashier;
+    el.classList.toggle('hidden', !visible);
+  });
+
+  const salesLabel = document.querySelector('#dashboard-tab-overview .border-emerald-500 p.text-sm');
+  if (salesLabel) {
+    salesLabel.textContent = isCashier ? 'My Checkout Sales (Today)' : "Today's Sales";
+  }
+
+  const staffCashierTitle = document.querySelector('#staff-cashier-section h3');
+  if (staffCashierTitle && isCashier) {
+    staffCashierTitle.textContent = 'My Checkout Sales';
+  }
+}
 
 function t(key, fallback) {
   return window.i18n?.t?.(key) || fallback || key;
@@ -491,6 +590,219 @@ function bindSalesHistoryFilters() {
   });
 }
 
+function setStaffFilterDefaultDate() {
+  const input = document.getElementById('staff-filter-date');
+  if (!input) return;
+  input.value = formatDateInputValue(new Date());
+}
+
+async function fetchStaffSales(endpoint, dateStr) {
+  const params = new URLSearchParams();
+  if (dateStr) {
+    params.set('start_date', dateStr);
+    params.set('end_date', dateStr);
+  }
+  const res = await fetch(`${API_BASE}/api/reports/sales/${endpoint}?${params.toString()}`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === 'string' ? data.detail : `Failed to load ${endpoint}`);
+  }
+  return Array.isArray(data) ? data : [];
+}
+
+function renderStaffBarChart(canvasId, emptyId, rows, label) {
+  const canvas = document.getElementById(canvasId);
+  const emptyEl = document.getElementById(emptyId);
+  if (!canvas || typeof Chart === 'undefined') return null;
+  const labels = (rows || []).map((r) => `${r.username || 'User'} (${r.role || ''})`);
+  const values = (rows || []).map((r) => Number(r.total_sales || 0));
+  const hasData = values.some((v) => v > 0);
+  if (emptyEl) emptyEl.classList.toggle('hidden', hasData);
+  canvas.classList.toggle('hidden', !hasData);
+  if (!hasData) return null;
+
+  if (canvasId === 'staffCashierChart' && staffCashierChart) staffCashierChart.destroy();
+  if (canvasId === 'staffWaiterChart' && staffWaiterChart) staffWaiterChart.destroy();
+
+  const chart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label,
+          data: values,
+          backgroundColor: '#3b82f6',
+          borderColor: '#2563eb',
+          borderWidth: 1,
+          borderRadius: 6,
+        },
+      ],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: { callback: chartMoneyTickValue },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: chartTooltipLabelMoney } },
+      },
+    },
+  });
+  return chart;
+}
+
+async function loadStaffBreakdownCharts() {
+  const dateInput = document.getElementById('staff-filter-date');
+  const dateStr = dateInput?.value || formatDateInputValue(new Date());
+  const role = getCounterUserRole();
+  const showCashier = role === 'root' || role === 'admin';
+  const showWaiter = role === 'root' || role === 'admin' || role === 'cashier';
+
+  if (showCashier) {
+    const cashierRows = await fetchStaffSales('by-cashier', dateStr);
+    if (cashierRows) {
+      staffCashierChart = renderStaffBarChart(
+        'staffCashierChart',
+        'staffCashierChartEmpty',
+        cashierRows,
+        t('total', 'Total')
+      );
+    }
+  }
+
+  if (showWaiter) {
+    const waiterRows = await fetchStaffSales('by-order-staff', dateStr);
+    if (waiterRows) {
+      staffWaiterChart = renderStaffBarChart(
+        'staffWaiterChart',
+        'staffWaiterChartEmpty',
+        waiterRows,
+        t('total', 'Total')
+      );
+    }
+  }
+}
+
+function bindStaffBreakdownFilters() {
+  const btn = document.getElementById('btn-staff-filter');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    try {
+      await loadStaffBreakdownCharts();
+    } catch (err) {
+      console.error(err);
+      if (window.toast?.error) window.toast.error(err.message || 'Failed to load staff reports');
+    }
+  });
+}
+
+function setIncentivesDefaultDates() {
+  const today = formatDateInputValue(new Date());
+  const start = document.getElementById('incentives-start-date');
+  const end = document.getElementById('incentives-end-date');
+  if (end) end.value = today;
+  if (start) start.value = today;
+}
+
+function renderPromotedIncentivesTable(rows) {
+  const el = document.getElementById('promoted-incentives-table');
+  if (!el) return;
+  if (!rows.length) {
+    el.textContent = 'No promoted-item sales for this period.';
+    return;
+  }
+  el.innerHTML = `
+    <table class="w-full text-left">
+      <thead>
+        <tr class="border-b border-slate-200 text-slate-500">
+          <th class="py-2 pr-2">Staff</th>
+          <th class="py-2 pr-2">Role</th>
+          <th class="py-2 pr-2">Qty</th>
+          <th class="py-2">Revenue</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((r) => `
+          <tr class="border-b border-slate-100">
+            <td class="py-2 pr-2 font-medium">${escapeHtml(r.username)}</td>
+            <td class="py-2 pr-2">${escapeHtml(r.role)}</td>
+            <td class="py-2 pr-2">${Number(r.quantity || 0)}</td>
+            <td class="py-2">${formatMoney(Number(r.total_sales || 0))}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function loadPromotedIncentivesReport() {
+  const start = document.getElementById('incentives-start-date')?.value || '';
+  const end = document.getElementById('incentives-end-date')?.value || '';
+  const params = new URLSearchParams();
+  if (start) params.set('start_date', start);
+  if (end) params.set('end_date', end);
+  const res = await fetch(`${API_BASE}/api/reports/sales/promoted-by-waiter?${params.toString()}`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.detail === 'string' ? data.detail : 'Failed to load promoted incentives');
+  }
+  const rows = Array.isArray(data) ? data : [];
+  renderPromotedIncentivesTable(rows);
+
+  const canvas = document.getElementById('promotedIncentivesChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+  const labels = rows.map((r) => `${r.username} (${r.role})`);
+  const values = rows.map((r) => Number(r.total_sales || 0));
+  if (promotedIncentivesChart) promotedIncentivesChart.destroy();
+  promotedIncentivesChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Promoted sales',
+        data: values,
+        backgroundColor: '#f59e0b',
+        borderColor: '#d97706',
+        borderWidth: 1,
+        borderRadius: 6,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: { x: { beginAtZero: true, ticks: { callback: chartMoneyTickValue } } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: chartTooltipLabelMoney } } },
+    },
+  });
+}
+
+function bindIncentivesFilters() {
+  const btn = document.getElementById('btn-incentives-filter');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    try {
+      await loadPromotedIncentivesReport();
+    } catch (err) {
+      console.error(err);
+      if (window.toast?.error) window.toast.error(err.message || 'Failed to load incentives');
+    }
+  });
+}
+
 async function loadTopItemsChart() {
   const canvas = document.getElementById('topItemsChart');
   if (!canvas || typeof Chart === 'undefined') return;
@@ -690,12 +1002,15 @@ async function loadDashboardSummary() {
     if (window.toast) window.toast.error('Failed to load dashboard summary');
   }
   if (activeDashboardTab === 'overview') {
-    Promise.allSettled([loadTopItemsChart(), loadHourlyTrendChart()]).then((results) => {
-      const hasFailure = results.some((r) => r.status === 'rejected');
-      if (hasFailure) {
-        console.error('Dashboard chart loading failed:', results);
-      }
-    });
+    const role = getCounterUserRole();
+    if (role === 'root' || role === 'admin') {
+      Promise.allSettled([loadTopItemsChart(), loadHourlyTrendChart()]).then((results) => {
+        const hasFailure = results.some((r) => r.status === 'rejected');
+        if (hasFailure) {
+          console.error('Dashboard chart loading failed:', results);
+        }
+      });
+    }
   }
 }
 
@@ -1196,8 +1511,9 @@ function renderUsers(users) {
         document.getElementById('user-username').value = user.username || '';
         document.getElementById('user-role').value = user.role || 'waiter';
         document.getElementById('user-pin').value = user.pin_code || '';
-        document.getElementById('user-form-title').textContent = 'Edit User';
+        document.getElementById('user-form-title').textContent = 'Edit Staff';
         document.getElementById('btn-delete-user').classList.remove('hidden');
+        syncStaffRoleFields();
         renderUserPinValidationState();
       }
     });
@@ -1209,7 +1525,7 @@ function resetUserForm() {
   const userIdEl = document.getElementById('user-id');
   if (userIdEl) userIdEl.value = '';
   const titleEl = document.getElementById('user-form-title');
-  if (titleEl) titleEl.textContent = 'Create User';
+  if (titleEl) titleEl.textContent = 'Create Staff';
   const deleteBtn = document.getElementById('btn-delete-user');
   if (deleteBtn) deleteBtn.classList.add('hidden');
   const usernameEl = document.getElementById('user-username');
@@ -1219,6 +1535,9 @@ function resetUserForm() {
   if (usernameEl) usernameEl.value = '';
   if (roleEl) roleEl.value = 'waiter';
   if (pinEl) pinEl.value = '';
+  const accountPassEl = document.getElementById('user-account-password');
+  if (accountPassEl) accountPassEl.value = '';
+  syncStaffRoleFields();
   if (pinWarningEl) pinWarningEl.classList.add('hidden');
   if (pinEl) {
     pinEl.classList.remove('border-rose-500', 'focus:ring-rose-500', 'focus:border-rose-500');
@@ -1248,6 +1567,265 @@ function renderUserPinValidationState() {
   return isValid;
 }
 
+// —— Root Admin Account Management ——
+let rootAdminsState = [];
+let selectedAdminId = null;
+
+async function fetchRootAdmins() {
+  const res = await fetch(`${API_BASE}/api/root/admins`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return [];
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || 'Failed to fetch admin accounts');
+  }
+  return res.json();
+}
+
+function renderRootAdmins(admins) {
+  rootAdminsState = admins || [];
+  const tbody = document.getElementById('admins-table-body');
+  if (!tbody) return;
+  if (!rootAdminsState.length) {
+    tbody.innerHTML = '<tr><td colspan="3" class="py-3 text-slate-500">No admin accounts</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rootAdminsState
+    .map((u) => {
+      const pin = u.pin_code || '—';
+      return `
+        <tr class="border-b border-slate-100">
+          <td class="py-2">${escapeHtml(u.username)}</td>
+          <td class="py-2 font-medium">${escapeHtml(pin)}</td>
+          <td class="py-2 text-right">
+            <button type="button" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-sm" data-edit-admin-id="${u.id}">
+              Edit
+            </button>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  tbody.querySelectorAll('[data-edit-admin-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.editAdminId, 10);
+      const admin = rootAdminsState.find((x) => x.id === id);
+      if (!admin) return;
+      selectedAdminId = admin.id;
+      document.getElementById('admin-id').value = admin.id;
+      document.getElementById('admin-username').value = admin.username || '';
+      document.getElementById('admin-password').value = '';
+      document.getElementById('admin-pin').value = admin.pin_code || '';
+      document.getElementById('admin-form-title').textContent = 'Edit Admin';
+      document.getElementById('btn-delete-admin').classList.remove('hidden');
+      document.getElementById('btn-reset-admin-password').classList.remove('hidden');
+      syncAdminFormMode(true);
+    });
+  });
+}
+
+function syncAdminFormMode(isEdit) {
+  const passwordEl = document.getElementById('admin-password');
+  const hintEl = document.getElementById('admin-password-hint');
+  if (!passwordEl) return;
+  passwordEl.required = !isEdit;
+  if (hintEl) {
+    hintEl.textContent = isEdit
+      ? 'Leave blank to keep current password.'
+      : 'Min 6 characters (required for new admin).';
+  }
+}
+
+function resetAdminForm() {
+  selectedAdminId = null;
+  const idEl = document.getElementById('admin-id');
+  if (idEl) idEl.value = '';
+  document.getElementById('admin-form-title').textContent = 'Create Admin';
+  document.getElementById('admin-username').value = '';
+  document.getElementById('admin-password').value = '';
+  document.getElementById('admin-pin').value = '';
+  document.getElementById('btn-delete-admin').classList.add('hidden');
+  document.getElementById('btn-reset-admin-password').classList.add('hidden');
+  syncAdminFormMode(false);
+}
+
+async function loadRootAdmins() {
+  try {
+    const admins = await fetchRootAdmins();
+    renderRootAdmins(admins);
+  } catch (e) {
+    console.error(e);
+    const tbody = document.getElementById('admins-table-body');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="py-3 text-red-600">Error loading admins.</td></tr>';
+  }
+}
+
+const AUDIT_ACTION_LABELS = {
+  admin_create_staff: 'Admin created staff',
+  admin_update_staff: 'Admin updated staff',
+  admin_delete_staff: 'Admin deleted staff',
+  root_create_admin: 'Root created admin',
+  root_update_admin: 'Root updated admin',
+  root_delete_admin: 'Root deleted admin',
+  root_reset_admin_password: 'Root reset admin password',
+};
+
+function formatAuditAction(action) {
+  return AUDIT_ACTION_LABELS[action] || action || '—';
+}
+
+function formatAuditTimestamp(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString();
+}
+
+function summarizeAuditUser(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return '';
+  const parts = [];
+  if (snapshot.username) parts.push(`@${snapshot.username}`);
+  if (snapshot.role) parts.push(`role: ${snapshot.role}`);
+  if (snapshot.is_deleted) parts.push('deleted');
+  return parts.join(', ');
+}
+
+function formatAuditDetails(detail) {
+  if (!detail || typeof detail !== 'object') return '—';
+  const bits = [];
+  if (detail.pin_set) bits.push('PIN assigned');
+  if (detail.pin_changed) bits.push('PIN changed');
+  const before = summarizeAuditUser(detail.before);
+  const after = summarizeAuditUser(detail.after);
+  if (before && after && before !== after) {
+    bits.push(`${before} → ${after}`);
+  } else if (after) {
+    bits.push(after);
+  } else if (before) {
+    bits.push(before);
+  }
+  return bits.length ? bits.join(' · ') : '—';
+}
+
+function getAuditLogFilters() {
+  const action = document.getElementById('audit-filter-action')?.value?.trim() || '';
+  const start = document.getElementById('audit-filter-start')?.value || '';
+  const end = document.getElementById('audit-filter-end')?.value || '';
+  const params = new URLSearchParams();
+  params.set('limit', '200');
+  if (action) params.set('action', action);
+  if (start) params.set('start_date', start);
+  if (end) params.set('end_date', end);
+  return params;
+}
+
+async function fetchAuditLogs() {
+  const params = getAuditLogFilters();
+  const res = await fetch(`${API_BASE}/api/root/audit-logs?${params.toString()}`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) {
+    throw new Error('unauthorized');
+  }
+  if (res.status === 403) {
+    throw new Error('forbidden');
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = typeof data.detail === 'string' ? data.detail : 'Failed to load audit logs';
+    throw new Error(detail);
+  }
+  return Array.isArray(data) ? data : [];
+}
+
+function renderAuditLogs(rows) {
+  const tbody = document.getElementById('audit-logs-table-body');
+  const status = document.getElementById('audit-logs-status');
+  if (!tbody) return;
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="py-4 px-3 text-slate-500">No audit entries match the current filters.</td></tr>';
+    if (status) status.textContent = '0 entries';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map((row) => {
+      const actor = row.actor_username ? `${escapeHtml(row.actor_username)} (#${row.actor_user_id})` : `#${row.actor_user_id}`;
+      const target = row.target_username
+        ? `${escapeHtml(row.target_username)}${row.target_user_id ? ` (#${row.target_user_id})` : ''}`
+        : row.target_user_id
+          ? `#${row.target_user_id}`
+          : '—';
+      return `
+        <tr class="border-b border-slate-100 align-top">
+          <td class="py-3 px-3 whitespace-nowrap text-slate-600">${escapeHtml(formatAuditTimestamp(row.created_at))}</td>
+          <td class="py-3 px-3">${actor}</td>
+          <td class="py-3 px-3">
+            <span class="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-xs font-medium">${escapeHtml(formatAuditAction(row.action))}</span>
+          </td>
+          <td class="py-3 px-3">${target}</td>
+          <td class="py-3 px-3 text-slate-600">${escapeHtml(formatAuditDetails(row.detail_json))}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  if (status) {
+    status.textContent = `${rows.length} entr${rows.length === 1 ? 'y' : 'ies'} loaded`;
+  }
+}
+
+async function loadAuditLogs() {
+  const tbody = document.getElementById('audit-logs-table-body');
+  const status = document.getElementById('audit-logs-status');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="5" class="py-4 px-3 text-slate-500">Loading…</td></tr>';
+  }
+  if (status) status.textContent = 'Loading audit logs…';
+
+  try {
+    const rows = await fetchAuditLogs();
+    renderAuditLogs(rows);
+  } catch (e) {
+    console.error(e);
+    const msg = e.message === 'forbidden'
+      ? 'Access denied. Audit logs are root-only.'
+      : (e.message || 'Error loading audit logs.');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="5" class="py-4 px-3 text-red-600">${escapeHtml(msg)}</td></tr>`;
+    }
+    if (status) status.textContent = 'Failed to load';
+    if (e.message === 'forbidden' && window.toast) {
+      window.toast.error('Audit logs are only available to the root account.');
+    }
+  }
+}
+
+const btnRefreshAuditLogs = document.getElementById('btn-refresh-audit-logs');
+if (btnRefreshAuditLogs) {
+  btnRefreshAuditLogs.addEventListener('click', () => loadAuditLogs());
+}
+
+const btnApplyAuditFilters = document.getElementById('btn-apply-audit-filters');
+if (btnApplyAuditFilters) {
+  btnApplyAuditFilters.addEventListener('click', () => loadAuditLogs());
+}
+
+function syncStaffRoleFields() {
+  const roleEl = document.getElementById('user-role');
+  const pinWrap = document.getElementById('user-pin-wrap');
+  const accountWrap = document.getElementById('user-account-password-wrap');
+  const pinEl = document.getElementById('user-pin');
+  if (!roleEl) return;
+  const isAccount = roleEl.value === 'account';
+  if (pinWrap) pinWrap.classList.toggle('hidden', isAccount);
+  if (accountWrap) accountWrap.classList.toggle('hidden', !isAccount);
+  if (pinEl) pinEl.required = !isAccount;
+}
+
 async function loadUsers() {
   try {
     const users = await fetchUsers();
@@ -1262,6 +1840,11 @@ async function loadUsers() {
 // Bind User Management UI
 const userForm = document.getElementById('user-form');
 if (userForm) {
+  const roleEl = document.getElementById('user-role');
+  if (roleEl) {
+    roleEl.addEventListener('change', syncStaffRoleFields);
+    syncStaffRoleFields();
+  }
   const pinEl = document.getElementById('user-pin');
   if (pinEl) {
     pinEl.addEventListener('input', () => {
@@ -1280,12 +1863,18 @@ if (userForm) {
     const username = document.getElementById('user-username').value.trim().toLowerCase();
     const role = document.getElementById('user-role').value;
     const pin = document.getElementById('user-pin').value.trim();
+    const accountPassword = document.getElementById('user-account-password')?.value || '';
 
     if (!username) {
       if (window.toast) window.toast.error('Username is required.');
       return;
     }
-    if (!renderUserPinValidationState() || !pin) {
+    if (role === 'account') {
+      if (!userId && accountPassword.length < 6) {
+        if (window.toast) window.toast.error('Account password must be at least 6 characters.');
+        return;
+      }
+    } else if (!renderUserPinValidationState() || !pin) {
       if (window.toast) window.toast.error('PIN must be exactly 4 digits.');
       return;
     }
@@ -1295,7 +1884,13 @@ if (userForm) {
       ? `${API_BASE}/api/admin/users/${encodeURIComponent(userId)}`
       : `${API_BASE}/api/admin/users`;
 
-    const payload = { username, role, pin_code: pin };
+    const payload = { username, role };
+    if (role === 'account') {
+      payload.pin_code = null;
+      if (accountPassword) payload.password = accountPassword;
+    } else {
+      payload.pin_code = pin;
+    }
 
     try {
       const res = await fetch(url, {
@@ -1351,6 +1946,133 @@ const btnResetUser = document.getElementById('btn-reset-user');
 if (btnResetUser) {
   btnResetUser.addEventListener('click', () => resetUserForm());
 }
+
+// Bind Root Admin Management UI
+const adminForm = document.getElementById('admin-form');
+if (adminForm) {
+  const adminPinEl = document.getElementById('admin-pin');
+  if (adminPinEl) {
+    adminPinEl.addEventListener('input', () => {
+      adminPinEl.value = (adminPinEl.value || '').replace(/\D/g, '').slice(0, 4);
+    });
+  }
+
+  adminForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const adminId = document.getElementById('admin-id').value;
+    const username = document.getElementById('admin-username').value.trim().toLowerCase();
+    const password = document.getElementById('admin-password').value;
+    const pinRaw = document.getElementById('admin-pin').value.trim();
+    const pin = pinRaw || null;
+
+    if (!username) {
+      if (window.toast) window.toast.error('Username is required.');
+      return;
+    }
+    if (!adminId && (!password || password.length < 6)) {
+      if (window.toast) window.toast.error('Password must be at least 6 characters.');
+      return;
+    }
+    if (pinRaw && !/^\d{4}$/.test(pinRaw)) {
+      if (window.toast) window.toast.error('PIN must be exactly 4 digits or empty.');
+      return;
+    }
+
+    const method = adminId ? 'PUT' : 'POST';
+    const url = adminId
+      ? `${API_BASE}/api/root/admins/${encodeURIComponent(adminId)}`
+      : `${API_BASE}/api/root/admins`;
+    const payload = { username, password: password || '', pin_code: pin };
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+        body: JSON.stringify(payload),
+      });
+      if (window.auth && window.auth.checkUnauthorized(res)) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = data.detail;
+        const msg = typeof detail === 'string' ? detail : 'Failed to save admin';
+        await dialogAlert(msg, 'error', 'Save Admin');
+        return;
+      }
+      if (window.toast) window.toast.success('Admin saved successfully.');
+      resetAdminForm();
+      await loadRootAdmins();
+    } catch (err) {
+      console.error(err);
+      await dialogAlert('Failed to save admin', 'error', 'Save Admin');
+    }
+  });
+}
+
+const btnDeleteAdmin = document.getElementById('btn-delete-admin');
+if (btnDeleteAdmin) {
+  btnDeleteAdmin.addEventListener('click', async () => {
+    const adminId = document.getElementById('admin-id').value;
+    if (!adminId) return;
+    const ok = await dialogConfirm('Delete this admin account?', 'Delete Admin');
+    if (!ok) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/root/admins/${encodeURIComponent(adminId)}`, {
+        method: 'DELETE',
+        headers: { ...window.auth.getAuthHeaders() },
+      });
+      if (window.auth && window.auth.checkUnauthorized(res)) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        await dialogAlert(data.detail || 'Delete failed', 'error', 'Delete Admin');
+        return;
+      }
+      if (window.toast) window.toast.success('Admin deleted.');
+      resetAdminForm();
+      await loadRootAdmins();
+    } catch (e) {
+      console.error(e);
+      await dialogAlert('Delete failed', 'error', 'Delete Admin');
+    }
+  });
+}
+
+const btnResetAdminPassword = document.getElementById('btn-reset-admin-password');
+if (btnResetAdminPassword) {
+  btnResetAdminPassword.addEventListener('click', async () => {
+    const adminId = document.getElementById('admin-id').value;
+    if (!adminId) return;
+    const newPassword = window.prompt('Enter new password for this admin (min 6 characters):');
+    if (!newPassword) return;
+    if (newPassword.length < 6) {
+      if (window.toast) window.toast.error('Password must be at least 6 characters.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/root/admins/${encodeURIComponent(adminId)}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+        body: JSON.stringify({ new_password: newPassword }),
+      });
+      if (window.auth && window.auth.checkUnauthorized(res)) return;
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        await dialogAlert(data.detail || 'Reset failed', 'error', 'Reset Password');
+        return;
+      }
+      if (window.toast) window.toast.success('Admin password reset.');
+    } catch (e) {
+      console.error(e);
+      await dialogAlert('Reset failed', 'error', 'Reset Password');
+    }
+  });
+}
+
+const btnResetAdminForm = document.getElementById('btn-reset-admin-form');
+if (btnResetAdminForm) {
+  btnResetAdminForm.addEventListener('click', () => resetAdminForm());
+}
+
+syncAdminFormMode(false);
 
 // —— Admin Table Management (Zones + Tables) ——
 let zonesState = [];
@@ -1541,7 +2263,6 @@ if (kanbanBoard) {
         'Delete Zone'
       );
       if (!zoneConfirm) return;
-      console.log('Attempting to delete zone:', zoneId);
       try {
         const res = await fetch(`${API_BASE}/api/zones/${encodeURIComponent(zoneId)}`, {
           method: 'DELETE',
@@ -1574,7 +2295,6 @@ if (kanbanBoard) {
         'Delete Table'
       );
       if (!tableConfirm) return;
-      console.log('Attempting to delete table:', tableId);
       try {
         const result = await deleteTableById(tableId);
         if (result && result.unauthorized) return;
@@ -1742,6 +2462,20 @@ async function fetchMenuItems() {
   return res.json();
 }
 
+async function toggleMenuItemPromoted(itemId) {
+  const res = await fetch(`${API_BASE}/api/menu-items/${itemId}/toggle-promoted`, {
+    method: 'PUT',
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || 'Failed to toggle promoted flag');
+  if (window.toast) {
+    window.toast.success(data.is_promoted ? 'Item marked as promoted.' : 'Item unmarked as promoted.');
+  }
+  return data;
+}
+
 async function toggleMenuItemAvailability(itemId) {
   const res = await fetch(`${API_BASE}/api/menu-items/${itemId}/toggle-availability`, {
     method: 'PUT',
@@ -1804,7 +2538,9 @@ function resetMenuItemFormMode() {
   cancelBtn.classList.add('hidden');
   editId.value = '';
   const discountInput = document.getElementById('item-discount-price');
+  const promotedInput = document.getElementById('item-is-promoted');
   if (discountInput) discountInput.value = '';
+  if (promotedInput) promotedInput.checked = false;
 }
 
 function startMenuItemEdit(itemId) {
@@ -1832,6 +2568,8 @@ function startMenuItemEdit(itemId) {
   document.getElementById('item-category').value = String(item.category_id || '');
   document.getElementById('item-image-url').value = item.image_url || '';
   document.getElementById('item-image-file').value = '';
+  const promotedInput = document.getElementById('item-is-promoted');
+  if (promotedInput) promotedInput.checked = !!item.is_promoted;
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -1920,6 +2658,12 @@ function renderMenuItems(items) {
       const badge = available
         ? '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Available</span>'
         : '<span class="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700">Sold Out</span>';
+      const promoted = m.is_promoted === true;
+      const promotedBadge = promoted
+        ? '<span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold">★ Promoted</span>'
+        : '';
+      const promoBtnLabel = promoted ? 'Unpromote' : 'Promote';
+      const promoBtnClass = promoted ? 'bg-amber-700 hover:bg-amber-800' : 'bg-amber-500 hover:bg-amber-600';
       const btnLabel = available ? 'Disable' : 'Enable';
       const btnClass = available
         ? 'bg-red-600 hover:bg-red-700'
@@ -1930,8 +2674,16 @@ function renderMenuItems(items) {
             ${img}
             ${priceLabel}
             ${badge}
+            ${promotedBadge}
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap justify-end">
+            <button
+              type="button"
+              data-toggle-promoted-id="${m.id}"
+              class="text-xs text-white px-3 py-1 rounded ${promoBtnClass}"
+            >
+              ${promoBtnLabel}
+            </button>
             <button
               type="button"
               data-edit-menu-item-id="${m.id}"
@@ -1958,6 +2710,22 @@ function renderMenuItems(items) {
       `;
     })
     .join('');
+
+  el.querySelectorAll('[data-toggle-promoted-id]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const itemId = Number(btn.getAttribute('data-toggle-promoted-id'));
+      if (!itemId) return;
+      btn.disabled = true;
+      try {
+        await toggleMenuItemPromoted(itemId);
+        await loadMenuData();
+      } catch (err) {
+        console.error(err);
+        await dialogAlert(err.message || 'Failed to update promoted flag', 'error', 'Promoted Item');
+        btn.disabled = false;
+      }
+    });
+  });
 
   el.querySelectorAll('[data-toggle-availability-id]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -2175,6 +2943,7 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
   const categoryId = document.getElementById('item-category').value;
   const imageUrl = document.getElementById('item-image-url').value.trim() || null;
   const imageFile = document.getElementById('item-image-file').files?.[0];
+  const isPromoted = !!document.getElementById('item-is-promoted')?.checked;
   const editItemId = Number(document.getElementById('menu-edit-item-id').value || 0);
   const isEditMode = form?.getAttribute('data-mode') === 'edit' && !!editItemId;
   if (!name || isNaN(price) || price < 0 || !categoryId) return;
@@ -2194,6 +2963,7 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
         category_id: parseInt(categoryId, 10),
         description,
         image_url: imageUrl,
+        is_promoted: isPromoted,
       });
     } else {
       const res = await fetch(`${API_BASE}/api/menu-items/`, {
@@ -2206,6 +2976,7 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
           category_id: parseInt(categoryId, 10),
           description,
           image_url: imageUrl,
+          is_promoted: isPromoted,
         }),
       });
       if (window.auth && window.auth.checkUnauthorized(res)) return;
@@ -2303,7 +3074,7 @@ function connectCounterWebSocket() {
 if (
   window.auth &&
   window.auth.getToken() &&
-  ['cashier', 'admin'].includes(String(window.auth.getUser?.()?.role || '').toLowerCase())
+  ['cashier', 'admin', 'root'].includes(String(window.auth.getUser?.()?.role || '').toLowerCase())
 ) {
   loadUnpaidOrders();
   loadMenuData();

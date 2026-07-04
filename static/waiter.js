@@ -3,7 +3,7 @@ const API_BASE = '';
 (function guard() {
   if (!window.auth) return;
   if (!window.auth.requireAuth()) return;
-  if (!window.auth.requireRole(['waiter', 'admin'])) return;
+  if (!window.auth.requireRole(['waiter', 'admin', 'root', 'cashier'])) return;
   window.auth.renderNav('pos-nav');
   window.auth.consumeUnauthorizedFlag();
 })();
@@ -301,13 +301,6 @@ async function updateOrderItemStatus(orderId, itemId, status) {
     throw new Error(`Invalid order/item id. orderId=${orderId}, itemId=${itemId}`);
   }
   const url = `${API_BASE}/api/orders/${safeOrderId}/items/${safeItemId}/status`;
-  console.log('[Waiter][updateOrderItemStatus] request', {
-    url,
-    method: 'PUT',
-    orderId: safeOrderId,
-    itemId: safeItemId,
-    status: normalizedStatus,
-  });
   try {
     return await fetchJson(url, {
       method: 'PUT',
@@ -380,11 +373,16 @@ function renderMenu() {
     const soldOutBadge = available
       ? ''
       : '<span class="absolute top-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded bg-red-600 text-white">Sold Out</span>';
+    const promotedBadge = m.is_promoted === true
+      ? '<span class="absolute top-2 left-2 text-[11px] font-bold px-2 py-0.5 rounded bg-amber-500 text-white shadow">★ Promo</span>'
+      : '';
     const cardStateClass = available ? 'hover:bg-blue-50' : 'opacity-50 grayscale pointer-events-none';
+    const promoBorder = m.is_promoted === true ? 'border-amber-400 ring-1 ring-amber-200' : 'border-slate-200';
     return `
-      <div data-menu-card-id="${m.id}" class="menu-item-card cursor-pointer text-left p-0 bg-white rounded-lg shadow border border-slate-200 overflow-hidden ${cardStateClass}">
+      <div data-menu-card-id="${m.id}" class="menu-item-card cursor-pointer text-left p-0 bg-white rounded-lg shadow border overflow-hidden ${cardStateClass} ${promoBorder}">
         <div class="relative">
           ${imgHtml}
+          ${promotedBadge}
           ${soldOutBadge}
         </div>
         <div class="px-2 pt-1 pb-2">
@@ -1212,7 +1210,6 @@ function renderTableDetailsItems(orderDetails) {
       }
       statusBtn.disabled = true;
       try {
-        console.log('[Waiter][status-toggle] click', { orderId: orderIdForUpdate, itemId, nextStatus });
         const updatedOrder = await updateOrderItemStatus(orderIdForUpdate, itemId, nextStatus);
         renderTableDetailsItems(updatedOrder || orderDetails);
         if (nextStatus === 'served') showSuccess(`${t('item', 'Item')} ${t('served', 'Served')}.`);
@@ -1244,7 +1241,6 @@ function renderTableDetailsItems(orderDetails) {
       if (!isConfirmed) return;
       cancelBtn.disabled = true;
       try {
-        console.log('[Waiter][cancel-item] click', { orderId: orderIdForUpdate, itemId, status: 'cancelled' });
         const updatedOrder = await updateOrderItemStatus(orderIdForUpdate, itemId, 'cancelled');
         renderTableDetailsItems(updatedOrder || orderDetails);
         showSuccess(t('cancelled', 'Cancelled'));
@@ -1417,6 +1413,7 @@ function connectWebSocket() {
             description: item.description ?? null,
             image_url: item.image_url ?? null,
             is_available: item.is_available !== false,
+            is_promoted: item.is_promoted === true,
             modifiers_config: Array.isArray(item.modifiers_config) ? item.modifiers_config : [],
           });
           renderCategoryTabs();

@@ -6,13 +6,14 @@ This feature enables admin-controlled table edit/delete operations with strict d
 
 ## 2. Actors and Permissions
 
-### 2.1 Admin
+### 2.1 Admin / Root (admin panel roles)
 - Can update table metadata:
   - rename table (`name_or_number`)
   - reassign table to another zone (`zone_id`)
 - Can delete a table, subject to delete safety rules.
+- Access: `ADMIN_PANEL_ROLES` = `root`, `admin` (`rbac.py`).
 
-### 2.2 Waiter / Cashier / Other roles
+### 2.2 Waiter / Cashier / Account / Other roles
 - Must not be able to mutate table resources (create/update/delete).
 - Any attempted mutation must return `403 Forbidden`.
 

@@ -11,12 +11,14 @@ class LoginRequest(BaseModel):
 
     username: str
     password: str
+    device_id: str | None = None
 
 
 class LoginPinRequest(BaseModel):
     """Schema for PIN login (4-digit code)."""
 
     pin_code: str
+    device_id: str | None = None
 
     @model_validator(mode="after")
     def pin_must_be_four_digits(self):
@@ -43,7 +45,9 @@ class TokenResponse(BaseModel):
     user: UserResponse
 
 
-StaffRole = Literal["admin", "waiter", "kitchen", "cashier"]
+StaffRole = Literal["root", "admin", "account", "cashier", "waiter"]
+AdminStaffRole = Literal["cashier", "waiter", "account"]
+RootAdminRole = Literal["admin"]
 PrinterRouteLiteral = Literal["drinks", "food"]
 PrinterBackendLiteral = Literal["file", "escpos_network"]
 PrinterRenderModeLiteral = Literal["text", "image"]
@@ -53,18 +57,58 @@ OrderStatusLiteral = Literal["pending", "open", "dining", "completed", "paid", "
 
 
 class UserCreateRequest(BaseModel):
-    """Admin request body for creating/updating a staff/admin user via PIN login."""
+    """Admin request body for creating/updating staff (cashier, waiter, account)."""
 
     username: str
     role: StaffRole
-    pin_code: str
+    pin_code: str | None = None
+    password: str | None = None
 
     @field_validator("pin_code")
     @classmethod
-    def pin_code_must_be_four_digits(cls, v: str) -> str:
-        if not (v and len(v) == 4 and v.isdigit()):
+    def pin_code_must_be_four_digits(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not (len(v) == 4 and v.isdigit()):
             raise ValueError("pin_code must be exactly 4 digits")
         return v
+
+
+class RootAdminCreateRequest(BaseModel):
+    """Root request body for creating/updating admin users."""
+
+    username: str
+    password: str
+    pin_code: str | None = None
+
+    @field_validator("pin_code")
+    @classmethod
+    def pin_code_optional_four_digits(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if not (len(v) == 4 and v.isdigit()):
+            raise ValueError("pin_code must be exactly 4 digits")
+        return v
+
+
+class RootSetupRequest(BaseModel):
+    """One-time root account setup."""
+
+    username: str
+    password: str
+
+
+class SetupStatusResponse(BaseModel):
+    needs_setup: bool
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
 
 
 class UserAdminResponse(BaseModel):
@@ -74,8 +118,21 @@ class UserAdminResponse(BaseModel):
 
     id: int
     username: str
-    role: StaffRole
+    role: str
     pin_code: str | None = None
+
+
+class AdminAuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    actor_user_id: int
+    actor_username: str | None = None
+    action: str
+    target_user_id: int | None = None
+    target_username: str | None = None
+    detail_json: dict | list | None = None
+    created_at: datetime
 
 
 class CategoryCreate(BaseModel):
@@ -254,6 +311,7 @@ class MenuItemCreate(BaseModel):
     description: str | None = None
     image_url: str | None = None
     is_available: bool = True
+    is_promoted: bool = False
     modifiers_config: List[ModifierGroup] = Field(default_factory=list)
 
 
@@ -270,6 +328,7 @@ class MenuItemResponse(BaseModel):
     description: str | None = None
     image_url: str | None = None
     is_available: bool = True
+    is_promoted: bool = False
     modifiers_config: List[ModifierGroup] = Field(default_factory=list)
 
 
@@ -289,6 +348,7 @@ class MenuItemUpdate(BaseModel):
     description: str | None = None
     image_url: str | None = None
     is_available: bool | None = None
+    is_promoted: bool | None = None
     modifiers_config: List[ModifierGroup] | None = None
 
 
@@ -601,6 +661,27 @@ class CancellationsSummaryResponse(BaseModel):
     total_cancelled_items: int
     total_lost_revenue: float
     top_cancelled_items: List[CancelledItemCountResponse]
+
+
+class StaffSalesPointResponse(BaseModel):
+    """Sales total attributed to one staff member."""
+
+    user_id: int
+    username: str
+    role: str
+    total_sales: float
+    order_count: int = 0
+
+
+class PromotedStaffSalesResponse(BaseModel):
+    """Promoted menu item sales attributed to order-taking staff."""
+
+    user_id: int
+    username: str
+    role: str
+    total_sales: float
+    quantity: int = 0
+    line_count: int = 0
 
 
 class ActiveTakeawayOrderResponse(BaseModel):

@@ -67,6 +67,7 @@ class MenuItem(Base):
     description = Column(String(1024), nullable=True)
     image_url = Column(String(512), nullable=True)  # e.g. /images/menu/xxx.png
     is_available = Column(Boolean, nullable=False, default=True, index=True)
+    is_promoted = Column(Boolean, nullable=False, default=False, index=True)
     is_deleted = Column(Boolean, nullable=False, default=False, index=True)
     deleted_at = Column(DateTime, nullable=True)
     # Flexible modifier groups/options config for this menu item.
@@ -153,8 +154,11 @@ class Order(Base):
     tax_amount = Column(Float, nullable=True, default=0.0)
     discount_type = Column(String(32), nullable=True)  # 'percentage' or 'amount'
     discount_value = Column(Float, nullable=True, default=0.0)
+    # Cashier who finalized payment (for per-cashier sales reporting).
+    checked_out_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     table = relationship("Table", back_populates="orders")
+    checked_out_by = relationship("User", foreign_keys=[checked_out_by_id], back_populates="checked_out_orders")
     order_items = relationship(
         "OrderItem",
         back_populates="order",
@@ -224,8 +228,8 @@ class OrderItem(Base):
 
 
 class User(Base):
-    """User account for authentication. role: admin, waiter, kitchen, cashier.
-    Staff use pin_code (4 digits); admins can use username/password.
+    """User account for authentication.
+    Roles: root, admin, account (password login); cashier, waiter (PIN login).
     """
 
     __tablename__ = "users"
@@ -233,8 +237,46 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(255), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(32), nullable=False, index=True)  # admin, waiter, kitchen, cashier
-    pin_code = Column(String(4), unique=True, nullable=True, index=True)  # exactly 4 chars, for staff
+    role = Column(String(32), nullable=False, index=True)
+    pin_code = Column(String(4), unique=True, nullable=True, index=True)
     is_deleted = Column(Boolean, nullable=False, default=False, index=True)
     deleted_at = Column(DateTime, nullable=True)
     created_order_items = relationship("OrderItem", back_populates="created_by")
+    checked_out_orders = relationship(
+        "Order",
+        foreign_keys="Order.checked_out_by_id",
+        back_populates="checked_out_by",
+    )
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
+
+
+class UserSession(Base):
+    """Active login session tied to JWT jti claim."""
+
+    __tablename__ = "user_sessions"
+    __table_args__ = (Index("ix_user_sessions_user_revoked", "user_id", "revoked_at"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    jti = Column(String(64), nullable=False, unique=True, index=True)
+    device_id = Column(String(128), nullable=False, default="unknown")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    revoked_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="sessions")
+
+
+class AdminAuditLog(Base):
+    """Audit trail for admin staff-management actions (visible to root)."""
+
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    action = Column(String(64), nullable=False)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    detail_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+    actor = relationship("User", foreign_keys=[actor_user_id])
+    target = relationship("User", foreign_keys=[target_user_id])

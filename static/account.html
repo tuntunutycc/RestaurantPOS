@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account Reports – POS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-50 min-h-screen p-4 md:p-6">
+  <div class="max-w-5xl mx-auto">
+    <div id="pos-nav"></div>
+    <h1 class="text-2xl font-bold text-slate-800 mb-2">Account Reports</h1>
+    <p class="text-sm text-slate-500 mb-6">Read-only access — historical data up to 93 days</p>
+
+    <div class="border-b border-slate-200 mb-6 overflow-x-auto">
+      <div class="flex min-w-max gap-1">
+        <button type="button" data-account-tab-btn="overview" class="account-tab px-4 py-2 text-sm font-semibold border-b-2 border-blue-600 text-blue-700">
+          Today's Overview
+        </button>
+        <button type="button" data-account-tab-btn="history" class="account-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">
+          Sales History
+        </button>
+      </div>
+    </div>
+
+    <div id="account-tab-overview" data-account-tab-content="overview">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <section class="bg-white rounded-lg shadow p-5 border-l-4 border-emerald-500">
+          <p class="text-sm text-slate-500 mb-2">Today's Sales</p>
+          <p id="kpi-total-sales" class="text-2xl font-bold text-slate-800">0</p>
+        </section>
+        <section class="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
+          <p class="text-sm text-slate-500 mb-2">Total Orders</p>
+          <p id="kpi-total-orders" class="text-2xl font-bold text-slate-800">0</p>
+        </section>
+        <section class="bg-white rounded-lg shadow p-5 border-l-4 border-purple-500">
+          <p class="text-sm text-slate-500 mb-2">Average Order Value</p>
+          <p id="kpi-average-order-value" class="text-2xl font-bold text-slate-800">0</p>
+        </section>
+      </div>
+      <section class="bg-white rounded-lg shadow p-5">
+        <h2 class="text-lg font-semibold mb-4">Sales by Cashier (Today)</h2>
+        <div id="cashier-sales-today" class="text-sm text-slate-600">Loading…</div>
+      </section>
+    </div>
+
+    <div id="account-tab-history" data-account-tab-content="history" class="hidden">
+      <section class="bg-white rounded-lg shadow p-5 mb-6">
+        <h2 class="text-lg font-semibold text-slate-800 mb-4">Date Range Filter</h2>
+        <p id="account-range-error" class="hidden mb-3 text-sm text-red-700 bg-red-50 rounded p-2"></p>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div>
+            <label for="account-start-date" class="block text-xs font-medium text-slate-600 mb-1">From</label>
+            <input type="date" id="account-start-date" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+          </div>
+          <div>
+            <label for="account-end-date" class="block text-xs font-medium text-slate-600 mb-1">To</label>
+            <input type="date" id="account-end-date" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+          </div>
+          <div>
+            <label for="account-year" class="block text-xs font-medium text-slate-600 mb-1">Monthly year</label>
+            <input type="number" id="account-year" min="2000" max="2100" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm" />
+          </div>
+          <div class="flex items-end">
+            <button type="button" id="btn-account-apply-filter" class="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">
+              Apply
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <section class="bg-white rounded-lg shadow p-5">
+          <h3 class="text-base font-semibold text-slate-800 mb-4">Daily Sales</h3>
+          <div class="relative h-72">
+            <canvas id="account-daily-chart"></canvas>
+          </div>
+        </section>
+        <section class="bg-white rounded-lg shadow p-5">
+          <h3 class="text-base font-semibold text-slate-800 mb-4">Monthly Sales</h3>
+          <div class="relative h-72">
+            <canvas id="account-monthly-chart"></canvas>
+          </div>
+        </section>
+      </div>
+
+      <section class="bg-white rounded-lg shadow p-5">
+        <h2 class="text-lg font-semibold mb-4">Sales by Cashier (Selected Range)</h2>
+        <div id="cashier-sales-range" class="text-sm text-slate-600">Apply a date range to load data.</div>
+      </section>
+    </div>
+  </div>
+  <script src="/device.js"></script>
+  <script src="/auth.js"></script>
+  <script src="/toast.js"></script>
+  <script src="/i18n.js"></script>
+  <script src="/currency.js"></script>
+  <script src="/account.js"></script>
+</body>
+</html>

@@ -127,6 +127,13 @@ This POS system is currently built with:
 
 ## Test Strategy (required for SDD merge gate)
 - Introduce automated tests with a backend test runner (e.g., `pytest`) for each feature.
+- Current suite (2026-07-04): **52 passed** — includes RBAC, kitchen printing, table management, money invariants, contracts.
+- Feature specs must maintain `validation.md` with honest automated vs manual checklist separation.
+
+## RBAC (current)
+- Five roles: `root`, `admin`, `account`, `cashier`, `waiter`.
+- Session-aware JWT (`jti` claim) with single-device enforcement for staff/account roles.
+- Spec: `specs/feature-rbac/`; constants: `rbac.py`.
 - Tests must verify:
   - correct HTTP response schemas
   - key business invariants (totals, cancellation effects, checkout validation)

@@ -2,6 +2,8 @@
 
 Restaurant POS built with **FastAPI + SQLAlchemy** (backend) and **Vanilla HTML/JS + Tailwind** (frontend).
 
+> **SDD docs:** Governance and feature contracts live under `specs/`. For the latest RBAC and feature state, prefer `specs/feature-*/` and `CHANGELOG.md` over `FULL_DOCUMENTATION_*.md` (may predate RBAC). Next.js is a **future** frontend target (see `specs/roadmap.md` Phase 3).
+
 This README is architecture-first so new programmers (and AI agents) can quickly understand how the system is wired before changing features.
 
 ---

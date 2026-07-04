@@ -16,14 +16,17 @@ from routers import kitchen_printers as kitchen_printers_router
 from routers import menu as menu_router
 from routers import orders as orders_router
 from routers import reports as reports_router
+from routers import root_users as root_users_router
+from routers import setup as setup_router
 from routers import tables as tables_router
 from routers import users as users_router
 from websocket_manager import ConnectionManager
 
+TEST_DEVICE_ID = "pytest-device"
+
 
 @pytest.fixture(scope="session")
 def test_engine():
-    # Single in-memory DB shared across sessions via StaticPool.
     engine = create_engine(
         "sqlite+pysqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -59,13 +62,11 @@ def _override_get_db(db: Session):
 
 @pytest.fixture()
 def app(db_session: Session) -> FastAPI:
-    # Build a test app that avoids `main.py` lifespan migrations touching real files.
     app = FastAPI()
-
-    # Provide the ws manager expected by order/table routers.
     app.state.ws_manager = ConnectionManager()
 
-    # Include routers (mirrors production wiring but without `main.py` lifespan).
+    app.include_router(setup_router.router)
+    app.include_router(root_users_router.router)
     app.include_router(auth_router.router)
     app.include_router(menu_router.router)
     app.include_router(orders_router.router)
@@ -85,18 +86,25 @@ def client(app: FastAPI) -> TestClient:
 
 @pytest.fixture()
 def seed_users(db_session: Session) -> dict[str, User]:
-    """
-    Seed a minimal set of users for RBAC/auth tests.
-    Note: PIN users still require `password_hash` (model is not nullable).
-    """
-    # Ensure a clean slate for user table inside the shared in-memory DB.
     db_session.query(User).delete()
     db_session.commit()
 
+    root = User(
+        username="root",
+        role="root",
+        password_hash=hash_password("root123"),
+        pin_code=None,
+    )
     admin = User(
         username="admin",
         role="admin",
         password_hash=hash_password("admin123"),
+        pin_code="1234",
+    )
+    account = User(
+        username="account1",
+        role="account",
+        password_hash=hash_password("acct123"),
         pin_code=None,
     )
     waiter = User(
@@ -111,51 +119,51 @@ def seed_users(db_session: Session) -> dict[str, User]:
         password_hash=hash_password("changeme"),
         pin_code="2222",
     )
-    kitchen = User(
-        username="kitchen1",
-        role="kitchen",
-        password_hash=hash_password("changeme"),
-        pin_code="3333",
-    )
-    db_session.add_all([admin, waiter, cashier, kitchen])
+    db_session.add_all([root, admin, account, waiter, cashier])
     db_session.commit()
-    db_session.refresh(admin)
-    db_session.refresh(waiter)
-    db_session.refresh(cashier)
-    db_session.refresh(kitchen)
-    return {"admin": admin, "waiter": waiter, "cashier": cashier, "kitchen": kitchen}
+    for u in (root, admin, account, waiter, cashier):
+        db_session.refresh(u)
+    return {
+        "root": root,
+        "admin": admin,
+        "account": account,
+        "waiter": waiter,
+        "cashier": cashier,
+    }
 
 
 @pytest.fixture()
 def auth_headers(client: TestClient, seed_users: dict[str, User]):
-    """
-    Factory that returns Authorization headers for a given role.
-    Usage: headers = auth_headers("admin") / auth_headers("waiter") / auth_headers("cashier") / auth_headers("kitchen")
-    """
-
     def _get(role: str) -> dict[str, str]:
         role = str(role or "").strip().lower()
-        if role == "admin":
-            res = client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+        if role in ("root", "admin", "account"):
+            passwords = {"root": "root123", "admin": "admin123", "account": "acct123"}
+            usernames = {"root": "root", "admin": "admin", "account": "account1"}
+            res = client.post(
+                "/api/auth/login",
+                json={
+                    "username": usernames[role],
+                    "password": passwords[role],
+                    "device_id": TEST_DEVICE_ID,
+                },
+            )
             assert res.status_code == 200, res.text
             token = res.json()["access_token"]
             return {"Authorization": f"Bearer {token}"}
         if role == "waiter":
-            res = client.post("/api/auth/login-pin", json={"pin_code": "1111"})
+            res = client.post(
+                "/api/auth/login-pin",
+                json={"pin_code": "1111", "device_id": TEST_DEVICE_ID},
+            )
             assert res.status_code == 200, res.text
-            token = res.json()["access_token"]
-            return {"Authorization": f"Bearer {token}"}
+            return {"Authorization": f"Bearer {res.json()['access_token']}"}
         if role == "cashier":
-            res = client.post("/api/auth/login-pin", json={"pin_code": "2222"})
+            res = client.post(
+                "/api/auth/login-pin",
+                json={"pin_code": "2222", "device_id": TEST_DEVICE_ID},
+            )
             assert res.status_code == 200, res.text
-            token = res.json()["access_token"]
-            return {"Authorization": f"Bearer {token}"}
-        if role == "kitchen":
-            res = client.post("/api/auth/login-pin", json={"pin_code": "3333"})
-            assert res.status_code == 200, res.text
-            token = res.json()["access_token"]
-            return {"Authorization": f"Bearer {token}"}
+            return {"Authorization": f"Bearer {res.json()['access_token']}"}
         raise ValueError(f"Unknown role: {role}")
 
     return _get
-

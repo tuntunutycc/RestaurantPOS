@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, joinedload
 from auth import get_current_user, require_roles
 from database import get_db
 from models import MenuItem, Order, OrderItem, Table, User
+from rbac import CHECKOUT_ROLES, POS_ORDER_ROLES
 from services.printing.routes import resolve_printer_route
 from services.printing.service import dispatch_kitchen_ticket
 from schemas import (
@@ -149,7 +150,7 @@ async def create_order(
     request: Request,
     order_data: OrderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     """
     Create or add to an order for a table (table-centric). If table already has an open/dining
@@ -341,7 +342,7 @@ async def create_order(
 def list_orders(
     status: list[str] | None = Query(None, description="Filter by status(es), e.g. status=pending&status=open"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     """List orders, optionally filtered by status. Eager-loads items and menu_item to avoid N+1."""
     q = (
@@ -361,7 +362,7 @@ def list_orders(
 @router.get("/orders/active-takeaways", response_model=list[ActiveTakeawayOrderResponse])
 def list_active_takeaways(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     """
     Return all active (unpaid) takeaway orders with their related order items.
@@ -429,7 +430,7 @@ def _canonical_order_for_table(orders):
 @router.get("/orders/tables", response_model=list[OrderResponseDetail])
 def list_orders_by_table(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     """
     List one order per table (the canonical order for checkout). Cashier uses this so each
@@ -459,7 +460,7 @@ def list_orders_by_table(
 def get_active_order_by_table(
     table_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     """
     Get the single canonical order for a table (all items + grand total). Prefers the
@@ -500,7 +501,7 @@ async def update_order_status(
     order_id: int,
     body: OrderStatusUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     """Update an order's status (e.g. completed). Broadcasts order_updated via WebSocket."""
     order = db.query(Order).filter(Order.id == order_id).first()
@@ -519,7 +520,7 @@ async def update_order_status(
 def get_order_details(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     order = (
         db.query(Order)
@@ -571,7 +572,7 @@ async def update_order_item_status(
     item_id: int,
     body: OrderItemStatusUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     order = (
         db.query(Order)
@@ -655,7 +656,7 @@ async def submit_order(
     request: Request,
     body: OrderSubmitRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier", "waiter"])),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     """
     Submit order endpoint supporting:
@@ -856,7 +857,7 @@ async def checkout_order(
     order_id: int,
     body: OrderCheckoutRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["admin", "cashier"])),
+    current_user: User = Depends(require_roles(CHECKOUT_ROLES)),
 ):
     """
     Finalize payment for an order with optional order-level discount:
@@ -919,6 +920,7 @@ async def checkout_order(
     order.change_amount = _round_money(change)
     order.tax_amount = _round_money(tax_amount)
     order.status = "paid"
+    order.checked_out_by_id = current_user.id
     # For takeaway orders, table_id is NULL, so skip table status update safely.
     table = db.query(Table).filter(Table.id == order.table_id).first() if order.table_id is not None else None
     previous_status = table.status if table else None
