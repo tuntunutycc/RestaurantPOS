@@ -1502,7 +1502,7 @@ function connectWebSocket() {
 if (
   window.auth &&
   window.auth.getToken() &&
-  ['waiter', 'admin'].includes(String(window.auth.getUser?.()?.role || '').toLowerCase())
+  ['waiter', 'cashier', 'admin', 'root'].includes(String(window.auth.getUser?.()?.role || '').toLowerCase())
 ) {
   (async function init() {
     bindSubmitOrder();

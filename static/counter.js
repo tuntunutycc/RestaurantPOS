@@ -107,11 +107,14 @@ function applyDashboardTabState(nextTab) {
     section.classList.toggle('hidden', key !== nextTab);
   });
   if (nextTab === 'overview') {
-    Promise.allSettled([loadTopItemsChart(), loadHourlyTrendChart()]).then((results) => {
-      if (results.some((r) => r.status === 'rejected')) {
-        console.error('Dashboard chart loading failed:', results);
-      }
-    });
+    const role = getCounterUserRole();
+    if (role === 'root' || role === 'admin') {
+      Promise.allSettled([loadTopItemsChart(), loadHourlyTrendChart()]).then((results) => {
+        if (results.some((r) => r.status === 'rejected')) {
+          console.error('Dashboard chart loading failed:', results);
+        }
+      });
+    }
   }
   if (nextTab === 'history' && !hasLoadedSalesHistoryTab) {
     const filterBtn = document.getElementById('btn-filter-history');
@@ -590,18 +593,47 @@ function bindSalesHistoryFilters() {
   });
 }
 
-function setStaffFilterDefaultDate() {
-  const input = document.getElementById('staff-filter-date');
-  if (!input) return;
-  input.value = formatDateInputValue(new Date());
+function getStaffReportDateRange() {
+  const startInput = document.getElementById('staff-filter-start-date');
+  const endInput = document.getElementById('staff-filter-end-date');
+  const startDate = startInput?.value || '';
+  const endDate = endInput?.value || '';
+  if (startDate && endDate && startDate > endDate) {
+    throw new Error('Start date cannot be after end date.');
+  }
+  return { startDate, endDate };
 }
 
-async function fetchStaffSales(endpoint, dateStr) {
-  const params = new URLSearchParams();
-  if (dateStr) {
-    params.set('start_date', dateStr);
-    params.set('end_date', dateStr);
+function setStaffFilterDateRange(startDate, endDate) {
+  const startInput = document.getElementById('staff-filter-start-date');
+  const endInput = document.getElementById('staff-filter-end-date');
+  if (startInput) startInput.value = startDate;
+  if (endInput) endInput.value = endDate;
+  updateStaffReportPeriodLabel(startDate, endDate);
+}
+
+function setStaffFilterDefaultDate() {
+  const today = formatDateInputValue(new Date());
+  const monthStart = formatDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  setStaffFilterDateRange(monthStart, today);
+}
+
+function updateStaffReportPeriodLabel(startDate, endDate) {
+  const el = document.getElementById('staff-report-period');
+  if (!el) return;
+  if (!startDate || !endDate) {
+    el.textContent = '';
+    return;
   }
+  el.textContent = startDate === endDate
+    ? `Showing data for ${startDate}`
+    : `Showing data from ${startDate} to ${endDate}`;
+}
+
+async function fetchStaffSales(endpoint, startDate, endDate) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
   const res = await fetch(`${API_BASE}/api/reports/sales/${endpoint}?${params.toString()}`, {
     headers: { ...window.auth.getAuthHeaders() },
   });
@@ -662,14 +694,14 @@ function renderStaffBarChart(canvasId, emptyId, rows, label) {
 }
 
 async function loadStaffBreakdownCharts() {
-  const dateInput = document.getElementById('staff-filter-date');
-  const dateStr = dateInput?.value || formatDateInputValue(new Date());
+  const { startDate, endDate } = getStaffReportDateRange();
+  updateStaffReportPeriodLabel(startDate, endDate);
   const role = getCounterUserRole();
   const showCashier = role === 'root' || role === 'admin';
   const showWaiter = role === 'root' || role === 'admin' || role === 'cashier';
 
   if (showCashier) {
-    const cashierRows = await fetchStaffSales('by-cashier', dateStr);
+    const cashierRows = await fetchStaffSales('by-cashier', startDate, endDate);
     if (cashierRows) {
       staffCashierChart = renderStaffBarChart(
         'staffCashierChart',
@@ -681,7 +713,7 @@ async function loadStaffBreakdownCharts() {
   }
 
   if (showWaiter) {
-    const waiterRows = await fetchStaffSales('by-order-staff', dateStr);
+    const waiterRows = await fetchStaffSales('by-order-staff', startDate, endDate);
     if (waiterRows) {
       staffWaiterChart = renderStaffBarChart(
         'staffWaiterChart',
@@ -694,16 +726,37 @@ async function loadStaffBreakdownCharts() {
 }
 
 function bindStaffBreakdownFilters() {
-  const btn = document.getElementById('btn-staff-filter');
-  if (!btn) return;
-  btn.addEventListener('click', async () => {
+  const load = async () => {
     try {
       await loadStaffBreakdownCharts();
     } catch (err) {
       console.error(err);
       if (window.toast?.error) window.toast.error(err.message || 'Failed to load staff reports');
     }
-  });
+  };
+
+  const btn = document.getElementById('btn-staff-filter');
+  if (btn) btn.addEventListener('click', load);
+
+  const todayBtn = document.getElementById('btn-staff-preset-today');
+  if (todayBtn) {
+    todayBtn.addEventListener('click', async () => {
+      const today = formatDateInputValue(new Date());
+      setStaffFilterDateRange(today, today);
+      await load();
+    });
+  }
+
+  const monthBtn = document.getElementById('btn-staff-preset-month');
+  if (monthBtn) {
+    monthBtn.addEventListener('click', async () => {
+      const now = new Date();
+      const monthStart = formatDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+      const today = formatDateInputValue(now);
+      setStaffFilterDateRange(monthStart, today);
+      await load();
+    });
+  }
 }
 
 function setIncentivesDefaultDates() {

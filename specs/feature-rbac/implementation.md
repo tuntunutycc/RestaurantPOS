@@ -168,7 +168,13 @@ PYTHONPATH=. python scripts/seed_root.py --username root
 | Cashier breakdown chart | ✓ | ✓ | hidden (KPI shows own total) |
 | Waiter/order-staff breakdown chart | ✓ | ✓ | ✓ |
 
-Staff tab uses `GET /api/reports/sales/by-cashier` and `by-order-staff` with `start_date=end_date` (default today).
+**Staff Performance tab** (`dashboard-tab-staff`):
+- Date range: `#staff-filter-start-date` / `#staff-filter-end-date`
+- Presets: `#btn-staff-preset-today`, `#btn-staff-preset-month`
+- Period label: `#staff-report-period`
+- Default range: first day of current month → today
+- APIs: `GET /api/reports/sales/by-cashier` and `by-order-staff` with `start_date` + `end_date` (supports single-day and multi-day/month ranges)
+- JS: `getStaffReportDateRange()`, `setStaffFilterDateRange()`, `loadStaffBreakdownCharts()` in `counter.js`
 
 ### Phase 4b — Promoted items (2026-07-04)
 
@@ -223,7 +229,7 @@ Documented for SDD honesty — resolve in a follow-up spec amendment or implemen
 | Audit log UI | §7 FR-A3 root viewer | Counter **Audit Logs** tab; filters + table | **Done** (2026-07-04) |
 | Account monthly UI | §2.3 daily/monthly reports | `/account` History tab with monthly chart + date range | **Done** (2026-07-04) |
 | Cashier → waiter link | §2.4 may use waiter screen | Nav **Take Orders** → `/waiter` (cashier/waiter only) | **Done** (2026-07-04) |
-| Admin dashboard staff breakdown | FR-8 per-cashier/waiter | Counter Dashboard → Staff Performance charts | **Done** (2026-07-04) |
+| Admin dashboard staff breakdown | FR-8 / FR-D1 per-cashier/waiter | Staff Performance: date-range charts + Today/This Month presets | **Done** (2026-07-05) |
 | Phase 4b promoted items | §4.2 incentives | `is_promoted` + incentives report + waiter badges | **Done** (2026-07-04) |
 | Root POS capabilities | Role table silent | Root in `POS_ORDER_ROLES` and `CHECKOUT_ROLES` | **Undocumented** — intentional superuser |
 
@@ -232,7 +238,7 @@ Documented for SDD honesty — resolve in a follow-up spec amendment or implemen
 Primary: `tests/test_rbac.py`  
 Related: `tests/test_orders_rbac.py`, `tests/conftest.py` (root/admin/account/cashier/waiter seeds)
 
-Latest suite: `PYTHONPATH=. venv/bin/python -m pytest -q` → **72 passed** (2026-07-04, RBAC Phases 1–4b + hierarchy compliance)
+Latest suite: `PYTHONPATH=. venv/bin/python -m pytest -q` → **72 passed** (2026-07-05, includes monthly `by-cashier` range in `test_per_cashier_and_waiter_reports`)
 
 Primary: `tests/test_rbac.py`  
 Hierarchy: `tests/test_rbac_hierarchy.py`

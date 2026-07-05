@@ -117,11 +117,11 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 
 ### Automated — attribution correctness
 - [x] Checkout sets `Order.checked_out_by_id` to current cashier — `test_checkout_sets_checked_out_by_id`
-- [x] `by-cashier` totals match checkout-attributed paid orders for date range — `test_per_cashier_and_waiter_reports`
+- [x] `by-cashier` totals match checkout-attributed paid orders for date range (daily and monthly) — `test_per_cashier_and_waiter_reports`
 - [x] `by-order-staff` totals match `OrderItem.created_by_id` for paid/completed orders — `test_per_cashier_and_waiter_reports`
 - [ ] Cashier submitting order via waiter flow sets `created_by_id` = cashier id — not isolated
 
-- [x] Counter Phase 4 UI contract — `test_phase4_dashboard_ui_contract`
+- [x] Counter Phase 4 UI contract — `test_phase4_dashboard_ui_contract` (includes staff date-range controls)
 - [x] Account can access monthly sales API — `test_account_monthly_sales_access`
 - [x] Cashier cannot access monthly store sales API — `test_cashier_cannot_access_monthly_store_sales`
 - [x] `cashier` can `POST /api/orders/submit` (waiter capability) — `test_waiter_cannot_checkout_but_can_submit` (waiter submit); cashier checkout in `test_cashier_and_admin_can_checkout`
@@ -129,8 +129,8 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 - [ ] `cashier` cannot mutate menu/tables → `403` — not isolated in RBAC suite
 
 ### Manual — dashboard UI
-- [x] **Root:** today total + Staff Performance cashier/waiter charts + Sales History daily/monthly
-- [x] **Admin:** today total + Staff Performance charts + Sales History
+- [x] **Root:** today total + Staff Performance cashier/waiter charts (date range + Today/This Month) + Sales History daily/monthly
+- [x] **Admin:** today total + Staff Performance charts (date range) + Sales History
 - [x] **Account:** `/account` daily + monthly views with date-range picker (≤ 93 days) — manual sign-off on live UI
 - [x] **Cashier:** today own checkout KPI + Staff Performance waiter chart (no monthly store widget)
 - [x] **Cashier:** nav **Take Orders** → `/waiter` (`auth.js`, cashier/waiter only)
@@ -180,4 +180,4 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 | `CHANGELOG.md` entry added | yes |
 | Open decisions in `requirements.md` §12 resolved or explicitly accepted | yes |
 
-**Current evidence (2026-07-04):** **72 passed** — RBAC Phases 1–4b complete; role creation hierarchy verified in `tests/test_rbac_hierarchy.py`.
+**Current evidence (2026-07-05):** **72 passed** — RBAC Phases 1–4b complete; Staff Performance date-range UI; role creation hierarchy in `tests/test_rbac_hierarchy.py`.

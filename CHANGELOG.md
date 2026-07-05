@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-07-05 — Cashier reports & waiter incentives SDD + tests
+
+### Summary
+Formalized SDD for cashier ordering inheritance, scoped daily sales, staff breakdown, and promoted-item incentives. Added dedicated pytest modules; backend already complete on `main`.
+
+### Spec
+- `specs/feature-cashier-reports/` — requirements, plan, implementation, validation
+- `specs/feature-waiter-incentives/` — requirements, plan, implementation, validation
+
+### Tests
+- `tests/test_cashier_reports.py` (5)
+- `tests/test_waiter_incentives.py` (7)
+- Full suite: **84 passed** (`pytest -q`, 2026-07-05)
+
+### Validation
+- `PYTHONPATH=. venv/bin/python -m pytest -q` → **84 passed**
+
+## 2026-07-05 — Staff Performance date-range reporting (root QA gap)
+
+### Summary
+Counter Dashboard → Staff Performance now supports **daily and monthly** per-cashier and per-waiter breakdowns via a date-range picker (not single-day only).
+
+### Frontend
+- `static/counter.html` — `staff-filter-start-date` / `staff-filter-end-date`; presets **Today** and **This Month**
+- `static/counter.js` — `getStaffReportDateRange()`, default month-to-date; charts call `by-cashier` / `by-order-staff` with `start_date` + `end_date`
+
+### Spec / Tests
+- `specs/feature-rbac/` — requirements (FR-D1), implementation, validation, plan, roadmap synced
+- `test_per_cashier_and_waiter_reports` — monthly `by-cashier` range assertion
+- `test_phase4_dashboard_ui_contract` — staff date-range UI contract
+
+### Validation
+- `PYTHONPATH=. venv/bin/python -m pytest -q` → **72 passed**
+
 ## 2026-07-04 - feat(rbac): complete feature delivery (Phases 1–4b)
 
 ### Summary

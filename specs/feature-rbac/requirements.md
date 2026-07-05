@@ -88,13 +88,15 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 - **Must not** view per-waiter staff breakdown (incentive data restricted to operational roles).
 
 ### 3.4 Cashier
-**POS capabilities**
+**User management:** None (created by admin/root).
+
+**POS capabilities (see `specs/feature-cashier-reports/requirements.md` FR-C1)**
 - Counter screen: checkout, billing, discounts, payment methods.
 - **Includes waiter capabilities:** may use `/waiter` to take orders when counter service or waiter tablet fallback is needed.
 - Order lines submitted while logged in as cashier attribute to cashier via `OrderItem.created_by_id`.
 - Checkouts attribute to cashier via `Order.checked_out_by_id`.
 
-**Dashboard & reports**
+**Dashboard & reports (see `specs/feature-cashier-reports/requirements.md` FR-C2, FR-C3)**
 - **Own daily total sales** (checkout-attributed revenue only) via `GET /api/reports/summary/today`.
 - **Daily sales by waiter** (all staff order-line attribution for operational visibility).
 - **No monthly self-view** — cashier is excluded from `GET /api/reports/monthly-sales` and counter UI must not show a monthly sales widget.
@@ -124,6 +126,10 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 - `GET /api/reports/sales/promoted-by-waiter` — daily/monthly per-staff promoted qty/revenue.
 - Waiter Incentives dashboard (root/admin). Waiter API scoped to self.
 - Waiter/cashier menu shows **★ Promo** badge on promoted items.
+
+**Dedicated SDD folders (2026-07-05):**
+- `specs/feature-cashier-reports/` — FR-C1–FR-C3 (ordering inheritance, cashier daily sales, waiter breakdown)
+- `specs/feature-waiter-incentives/` — FR-P1–FR-P3 (promoted flag + incentive report)
 
 ## 5. Session & Device Management
 
@@ -190,6 +196,14 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 | Promoted items by waiter | all | all | no | no | self only (future) |
 | Top items / cancellations | yes | yes | yes (≤93d) | no | no |
 
+### FR-D1: Counter Staff Performance UI (Dashboard → Staff Performance)
+- **Date range:** `From` / `To` inputs (`staff-filter-start-date`, `staff-filter-end-date`).
+- **Presets:** **Today** (single day) and **This Month** (1st of month through today).
+- **Default on first load:** current calendar month to date (month start → today).
+- **Charts:** Sales by Cashier (`GET /api/reports/sales/by-cashier`) and Sales by Waiter (`GET /api/reports/sales/by-order-staff`) both use the same `start_date` / `end_date` query params.
+- **Roles:** root and admin see cashier + waiter charts; cashier sees waiter chart only (cashier breakdown hidden in UI; API scoped to self if called).
+- **Validation:** client rejects `start_date > end_date` before fetch.
+
 **Money rule:** Report totals must use the same rounding and tax-after-discount rules as checkout (backend source of truth).
 
 ## 9. Bootstrap & Migration
@@ -229,3 +243,4 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 | 1 | Root admin-panel superset | **Yes** — `root` has full `ADMIN_PANEL_ROLES` plus `/api/root/admins` governance |
 | 2 | Cashier monthly view | **No** — daily own-checkout total only; no monthly dashboard for cashier |
 | 3 | Audit log PIN snapshots | **Redacted** — `"[REDACTED]"` in snapshots; `pin_set` / `pin_changed` flags in `detail_json` |
+| 4 | Staff monthly per-cashier UI | **Yes** — Counter Staff Performance uses date range + **This Month** preset (FR-D1); API `by-cashier` unchanged |

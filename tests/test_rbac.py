@@ -209,10 +209,12 @@ def _seed_paid_order_with_staff(db_session, cashier: User, waiter: User):
 
 def test_per_cashier_and_waiter_reports(client, auth_headers, seed_users, db_session):
     _seed_paid_order_with_staff(db_session, seed_users["cashier"], seed_users["waiter"])
-    today = datetime.utcnow().date().isoformat()
+    today = datetime.utcnow().date()
+    today_str = today.isoformat()
+    month_start = today.replace(day=1).isoformat()
 
     by_cashier = client.get(
-        f"/api/reports/sales/by-cashier?start_date={today}&end_date={today}",
+        f"/api/reports/sales/by-cashier?start_date={today_str}&end_date={today_str}",
         headers=auth_headers("root"),
     )
     assert by_cashier.status_code == 200
@@ -221,8 +223,18 @@ def test_per_cashier_and_waiter_reports(client, auth_headers, seed_users, db_ses
     assert cashier_row is not None
     assert cashier_row["total_sales"] >= 10.5
 
+    by_cashier_month = client.get(
+        f"/api/reports/sales/by-cashier?start_date={month_start}&end_date={today_str}",
+        headers=auth_headers("root"),
+    )
+    assert by_cashier_month.status_code == 200
+    month_rows = by_cashier_month.json()
+    month_cashier_row = next((r for r in month_rows if r["user_id"] == seed_users["cashier"].id), None)
+    assert month_cashier_row is not None
+    assert month_cashier_row["total_sales"] >= 10.5
+
     by_staff = client.get(
-        f"/api/reports/sales/by-order-staff?start_date={today}&end_date={today}",
+        f"/api/reports/sales/by-order-staff?start_date={today_str}&end_date={today_str}",
         headers=auth_headers("admin"),
     )
     assert by_staff.status_code == 200
@@ -347,8 +359,12 @@ def test_phase4_dashboard_ui_contract():
     assert 'id="dashboard-tab-staff"' in counter_html
     assert 'id="staffCashierChart"' in counter_html
     assert 'id="staffWaiterChart"' in counter_html
+    assert 'id="staff-filter-start-date"' in counter_html
+    assert 'id="staff-filter-end-date"' in counter_html
+    assert 'id="btn-staff-preset-month"' in counter_html
     assert "applyDashboardRoleVisibility" in counter_js
     assert "loadStaffBreakdownCharts" in counter_js
+    assert "getStaffReportDateRange" in counter_js
     assert "showDashboard = isAdminPanel || isCashier" in counter_js
     assert 'data-role-widget="cashier-breakdown"' in counter_html
 

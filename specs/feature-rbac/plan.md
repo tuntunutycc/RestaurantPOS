@@ -158,10 +158,10 @@ Update `require_roles` on: `orders`, `menu`, `tables`, `kitchen_printers`, `repo
 ### 4.4 Dashboard UI by role
 | Role | Widgets / pages |
 |------|-----------------|
-| **root** | Today total; daily/monthly cashier breakdown chart; daily/monthly waiter breakdown; link to audit logs |
-| **admin** | Today total; daily waiter breakdown chart |
+| **root** | Today total; Staff Performance date-range cashier/waiter charts (Today / This Month presets); Sales History daily/monthly store charts; audit logs |
+| **admin** | Today total; Staff Performance date-range cashier + waiter charts; Sales History |
 | **account** | `/account` read-only daily + monthly charts; date-range picker (≤ 93 days) |
-| **cashier** | Today own checkout total; daily waiter breakdown (operational) |
+| **cashier** | Today own checkout total; Staff Performance waiter chart (date range); no store monthly widget |
 | **waiter** | Today own order-line total (minimal or none) |
 
 ### 4.5 Cashier ↔ waiter navigation
@@ -226,6 +226,6 @@ flowchart LR
 | Phase 4 dashboard widgets | **Done** (2026-07-04) — account history, staff charts, Take Orders nav |
 | Phase 4b promoted items | **Done** (2026-07-04) |
 | Open decisions (§12) | **Resolved** 2026-07-04 — root superset, cashier daily-only, audit PIN redaction |
-| Automated tests | **72 passed** (2026-07-04) |
+| Automated tests | **72 passed** (2026-07-05) |
 | Role creation hierarchy | **Verified** — `tests/test_rbac_hierarchy.py` (5 scenarios) |
 | First root bootstrap | **CLI** — `scripts/seed_root.py` (production); `/api/setup/root` dev/test only |

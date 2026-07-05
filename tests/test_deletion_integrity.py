@@ -4,7 +4,7 @@ import uuid
 from models import Category, MenuItem, Order, OrderItem, Table, User, Zone
 
 
-def _seed_paid_order(db_session):
+def _seed_paid_order(db_session, *, quantity: int = 1):
     suffix = uuid.uuid4().hex[:8]
 
     waiter = User(
@@ -35,12 +35,13 @@ def _seed_paid_order(db_session):
     db_session.add(menu_item)
     db_session.flush()
 
+    line_subtotal = 12.0 * quantity
     order = Order(
         table_id=table.id,
         table_number=table.id,
         order_type="dine_in",
         status="paid",
-        total_amount=12.6,
+        total_amount=line_subtotal + 0.6,
         tax_amount=0.6,
         created_at=datetime.utcnow(),
     )
@@ -50,8 +51,8 @@ def _seed_paid_order(db_session):
     order_item = OrderItem(
         order_id=order.id,
         menu_item_id=menu_item.id,
-        quantity=1,
-        subtotal=12.0,
+        quantity=quantity,
+        subtotal=line_subtotal,
         batch_number=1,
         batch_status="pending",
         item_status="served",
@@ -91,7 +92,7 @@ def test_soft_delete_user_preserves_history_and_reports(client, db_session, auth
 
 
 def test_soft_delete_menu_item_preserves_history_and_reports(client, db_session, auth_headers):
-    _, menu_item, _, order_item = _seed_paid_order(db_session)
+    _, menu_item, _, order_item = _seed_paid_order(db_session, quantity=10_000)
 
     delete_res = client.delete(f"/api/menu-items/{menu_item.id}", headers=auth_headers("admin"))
     assert delete_res.status_code == 200, delete_res.text

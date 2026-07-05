@@ -188,16 +188,16 @@ All planned remediation steps are now implemented and test-backed:
   - Image-rendered ticket mode for Myanmar Unicode output
   - Non-blocking print failures on order submit
   - Automated tests for routing + submit integrity (`tests/test_kitchen_printing.py`)
-- Step 10: RBAC hierarchy expansion (mostly complete — UI gaps remain)
+- Step 10: RBAC hierarchy expansion (complete on `main`)
   - Five roles: `root`, `admin`, `account`, `cashier`, `waiter`
-  - Session/device policy, one-time root setup, audit logs API, role-scoped reports
+  - Session/device policy, one-time root setup, audit logs API + UI, role-scoped reports
   - Per-cashier (`checked_out_by_id`) and per-waiter (`created_by_id`) report endpoints
-  - Frontend: `/setup`, `/account`, Admin Accounts tab, Change Password modal
-  - Open: audit log UI, account monthly UI, cashier→waiter nav link, some automated tests
-  - Spec: `specs/feature-rbac/`; tests: `tests/test_rbac.py`
+  - Counter Staff Performance: date-range cashier/waiter breakdown (Today / This Month presets)
+  - Frontend: `/setup`, `/account`, Admin Accounts tab, Audit Logs tab, Change Password modal, Take Orders nav
+  - Spec: `specs/feature-rbac/`; tests: `tests/test_rbac.py`, `tests/test_rbac_hierarchy.py`
 
 Validation evidence:
-- Automated backend suite: **52 passed** (`pytest -q`, 2026-07-04).
+- Automated backend suite: **72 passed** (`pytest -q`, 2026-07-05).
 
 ## Phase 1 (0–30 days): Fully Functional POS MVP
 ### Goal
