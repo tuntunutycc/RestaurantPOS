@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-07-05 — Multi-cashier real-time checkout sync
+
+### Summary
+When one cashier checks out a table or takeaway order, all other open cashier Counter sessions refresh immediately (table grid, takeaway list, and stale receipt cleared).
+
+### Backend
+- `routers/orders.py` — broadcast `order_updated` on checkout alongside `order_completed`
+
+### Frontend
+- `static/counter.js` — handle `order_completed`, `takeaways_updated`, and paid `order_updated` via shared `handleRemoteOrderClosed`
+
+### Tests
+- Full suite: **121 passed** (`PYTHONPATH=. python -m pytest -q`)
+
 ## 2026-07-05 — Cashier denied Staff Performance (SDD alignment)
 
 ### Summary

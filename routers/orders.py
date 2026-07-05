@@ -1024,6 +1024,10 @@ async def checkout_order(
             "status": order.status,
             "table_id": order.table_id,
         }
+        await manager.broadcast(
+            "order_updated",
+            {"id": order.id, "status": order.status, "table_id": order.table_id},
+        )
         await manager.broadcast("order_completed", payload)
         if (order.order_type or "").strip().lower() == "takeaway":
             await manager.broadcast("takeaways_updated", payload)

@@ -1328,6 +1328,24 @@ function loadUnpaidOrders() {
     });
 }
 
+function clearCheckoutSelection() {
+  selectedOrderId = null;
+  selectedTableNumber = null;
+  selectedOrderTotal = 0;
+  selectedOrderSubtotal = 0;
+  document.getElementById('receipt-container')?.classList.add('hidden');
+  document.getElementById('receipt-placeholder')?.classList.remove('hidden');
+}
+
+function handleRemoteOrderClosed(data) {
+  if (!data) return;
+  loadUnpaidOrders();
+  const orderId = data.order_id != null ? data.order_id : data.id;
+  if (orderId != null && selectedOrderId != null && Number(orderId) === Number(selectedOrderId)) {
+    clearCheckoutSelection();
+  }
+}
+
 function selectOrder(order) {
   if (!order) return;
   selectedOrderId = order.id;
@@ -1498,15 +1516,9 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     renderReceiptForPrint(data);
     window.print();
 
-    selectedOrderId = null;
-    selectedTableNumber = null;
-    selectedOrderTotal = 0;
-    selectedOrderSubtotal = 0;
-    document.getElementById('receipt-container').classList.add('hidden');
-    document.getElementById('receipt-placeholder').classList.remove('hidden');
+    clearCheckoutSelection();
     // Reload grid from backend after payment.
     loadUnpaidOrders();
-    loadTakeawayOrders();
   } catch (e) {
     console.error(e);
     await dialogAlert(t('payment_failed', 'Payment failed'), 'error', t('error', 'Error'));
@@ -3101,20 +3113,18 @@ function connectCounterWebSocket() {
         }
       }
       if (msg.event === 'order_updated' && msg.data && msg.data.status) {
-        // Status changes (e.g. completed/cancelled) can affect which tables are active; refresh list.
-        loadUnpaidOrders();
-        if (
-          String(msg.data.status || '').toLowerCase() === 'cancelled' &&
-          selectedOrderId != null &&
-          Number(msg.data.id) === Number(selectedOrderId)
-        ) {
-          selectedOrderId = null;
-          selectedTableNumber = null;
-          selectedOrderTotal = 0;
-          selectedOrderSubtotal = 0;
-          document.getElementById('receipt-container')?.classList.add('hidden');
-          document.getElementById('receipt-placeholder')?.classList.remove('hidden');
+        const status = String(msg.data.status || '').toLowerCase();
+        if (status === 'cancelled' || status === 'paid') {
+          handleRemoteOrderClosed(msg.data);
+        } else {
+          loadUnpaidOrders();
         }
+      }
+      if (msg.event === 'order_completed' && msg.data) {
+        handleRemoteOrderClosed(msg.data);
+      }
+      if (msg.event === 'takeaways_updated') {
+        handleRemoteOrderClosed(msg.data || {});
       }
       if (msg.event === 'table_grid_updated' || msg.event === 'table_status_changed') {
         loadUnpaidOrders();
