@@ -11,7 +11,6 @@ from auth import require_roles
 from database import get_db
 from models import Category, MenuItem, Order, OrderItem, User
 from rbac import (
-    ACCOUNT_MAX_REPORT_DAYS,
     ROLE_ACCOUNT,
     ROLE_CASHIER,
     ROLE_ROOT,
@@ -30,7 +29,12 @@ from schemas import (
     TopSellingItemResponse,
     TodaySalesSummaryResponse,
 )
-from services.report_access import assert_report_date_range, dt_range_for_dates
+from services.report_access import (
+    ACCOUNT_ACCESS_DENIED_DETAIL,
+    account_oldest_allowed_start,
+    assert_report_date_range,
+    dt_range_for_dates,
+)
 
 router = APIRouter(prefix="/api")
 DELETED_ITEM_LABEL = "[Deleted Item]"
@@ -209,12 +213,9 @@ def get_monthly_sales_history(
     start_dt = datetime(target_year, 1, 1)
     end_dt = datetime(target_year + 1, 1, 1)
     if current_user.role == ROLE_ACCOUNT:
-        oldest = datetime.utcnow().date() - timedelta(days=ACCOUNT_MAX_REPORT_DAYS - 1)
+        oldest = account_oldest_allowed_start()
         if date(target_year, 12, 31) < oldest:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Account role cannot view data older than {ACCOUNT_MAX_REPORT_DAYS} days",
-            )
+            raise HTTPException(status_code=400, detail=ACCOUNT_ACCESS_DENIED_DETAIL)
         oldest_dt = datetime.combine(oldest, time.min)
         if start_dt < oldest_dt:
             start_dt = oldest_dt

@@ -99,7 +99,7 @@ def seed_users(db_session: Session) -> dict[str, User]:
         username="admin",
         role="admin",
         password_hash=hash_password("admin123"),
-        pin_code="1234",
+        pin_code=None,
     )
     account = User(
         username="account1",

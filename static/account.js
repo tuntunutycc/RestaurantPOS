@@ -2,7 +2,9 @@
   if (!window.auth || !window.auth.requireAuth() || !window.auth.requireRole(["account"])) return;
   window.auth.renderNav("pos-nav");
 
-  const ACCOUNT_MAX_DAYS = 93;
+  const ACCOUNT_MAX_DAYS = 90;
+  const ACCOUNT_ACCESS_DENIED_MSG =
+    "Access denied. Accountant access is strictly limited to the last 90 days of financial data.";
   const fmt = (n) => (window.formatCurrency ? window.formatCurrency(n) : String(n));
   let dailyChart = null;
   let monthlyChart = null;
@@ -23,8 +25,29 @@
     return Math.floor(ms / 86400000) + 1;
   }
 
+  function getOldestAllowedDate() {
+    const oldest = new Date();
+    oldest.setDate(oldest.getDate() - (ACCOUNT_MAX_DAYS - 1));
+    oldest.setHours(0, 0, 0, 0);
+    return oldest;
+  }
+
+  function applyDatePickerBounds() {
+    const today = formatDateInput(new Date());
+    const minDate = formatDateInput(getOldestAllowedDate());
+    const startEl = document.getElementById("account-start-date");
+    const endEl = document.getElementById("account-end-date");
+    if (startEl) {
+      startEl.min = minDate;
+      startEl.max = today;
+    }
+    if (endEl) {
+      endEl.min = minDate;
+      endEl.max = today;
+    }
+  }
+
   function validateDateRange(startStr, endStr) {
-    const errEl = document.getElementById("account-range-error");
     const start = parseDateOnly(startStr);
     const end = parseDateOnly(endStr);
     if (!start || !end) {
@@ -35,15 +58,12 @@
     }
     const span = daysInclusive(start, end);
     if (span > ACCOUNT_MAX_DAYS) {
-      return { ok: false, message: `Date range cannot exceed ${ACCOUNT_MAX_DAYS} days.` };
+      return { ok: false, message: ACCOUNT_ACCESS_DENIED_MSG };
     }
-    const oldest = new Date();
-    oldest.setDate(oldest.getDate() - (ACCOUNT_MAX_DAYS - 1));
-    oldest.setHours(0, 0, 0, 0);
+    const oldest = getOldestAllowedDate();
     if (start < oldest) {
-      return { ok: false, message: `Cannot view data older than ${ACCOUNT_MAX_DAYS} days.` };
+      return { ok: false, message: ACCOUNT_ACCESS_DENIED_MSG };
     }
-    if (errEl) errEl.classList.add("hidden");
     return { ok: true, start: startStr, end: endStr };
   }
 
@@ -52,6 +72,24 @@
     if (!errEl) return;
     errEl.textContent = message;
     errEl.classList.remove("hidden");
+  }
+
+  function hideRangeError() {
+    const errEl = document.getElementById("account-range-error");
+    if (errEl) errEl.classList.add("hidden");
+  }
+
+  function handleReportApiError(res, data) {
+    const detail = typeof data?.detail === "string" ? data.detail : "";
+    if (res.status === 400 || res.status === 403) {
+      if (detail) {
+        showRangeError(detail);
+        return detail;
+      }
+      showRangeError(ACCOUNT_ACCESS_DENIED_MSG);
+      return ACCOUNT_ACCESS_DENIED_MSG;
+    }
+    return detail || "Failed to load reports";
   }
 
   function renderCashierList(elId, rows) {
@@ -87,7 +125,8 @@
     if (window.auth.checkUnauthorized(res)) return;
     const el = document.getElementById("cashier-sales-today");
     if (!res.ok) {
-      if (el) el.textContent = "Unable to load";
+      const data = await res.json().catch(() => ({}));
+      if (el) el.textContent = handleReportApiError(res, data);
       return;
     }
     renderCashierList("cashier-sales-today", await res.json());
@@ -99,14 +138,15 @@
     const params = new URLSearchParams({ start_date: start, end_date: end });
     const res = await fetch(`/api/reports/daily-sales?${params}`, { headers: window.auth.getAuthHeaders() });
     if (window.auth.checkUnauthorized(res)) return;
-    const rows = await res.json().catch(() => []);
-    if (!res.ok) throw new Error(typeof rows.detail === "string" ? rows.detail : "Failed to load daily sales");
+    const rows = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(handleReportApiError(res, rows));
+    const data = Array.isArray(rows) ? rows : [];
     if (dailyChart) dailyChart.destroy();
     dailyChart = new Chart(canvas, {
       type: "line",
       data: {
-        labels: rows.map((r) => r.date),
-        datasets: [{ label: "Sales", data: rows.map((r) => r.total), borderColor: "#2563eb", tension: 0.2, fill: false }],
+        labels: data.map((r) => r.date),
+        datasets: [{ label: "Sales", data: data.map((r) => r.total), borderColor: "#2563eb", tension: 0.2, fill: false }],
       },
       options: {
         responsive: true,
@@ -122,14 +162,15 @@
     if (!canvas || !window.Chart) return;
     const res = await fetch(`/api/reports/monthly-sales?year=${year}`, { headers: window.auth.getAuthHeaders() });
     if (window.auth.checkUnauthorized(res)) return;
-    const rows = await res.json().catch(() => []);
-    if (!res.ok) throw new Error(typeof rows.detail === "string" ? rows.detail : "Failed to load monthly sales");
+    const rows = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(handleReportApiError(res, rows));
+    const data = Array.isArray(rows) ? rows : [];
     if (monthlyChart) monthlyChart.destroy();
     monthlyChart = new Chart(canvas, {
       type: "bar",
       data: {
-        labels: rows.map((r) => r.month),
-        datasets: [{ label: "Sales", data: rows.map((r) => r.total), backgroundColor: "#0ea5e9", borderRadius: 6 }],
+        labels: data.map((r) => r.month),
+        datasets: [{ label: "Sales", data: data.map((r) => r.total), backgroundColor: "#0ea5e9", borderRadius: 6 }],
       },
       options: {
         responsive: true,
@@ -146,7 +187,7 @@
     if (window.auth.checkUnauthorized(res)) return;
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      document.getElementById("cashier-sales-range").textContent = data.detail || "Unable to load";
+      document.getElementById("cashier-sales-range").textContent = handleReportApiError(res, data);
       return;
     }
     renderCashierList("cashier-sales-range", await res.json());
@@ -161,6 +202,7 @@
       showRangeError(check.message);
       return;
     }
+    hideRangeError();
     try {
       await Promise.all([
         loadDailyChart(check.start, check.end),
@@ -168,7 +210,7 @@
         loadCashierSalesRange(check.start, check.end),
       ]);
     } catch (e) {
-      showRangeError(e.message || "Failed to load reports");
+      showRangeError(e.message || ACCOUNT_ACCESS_DENIED_MSG);
     }
   }
 
@@ -182,6 +224,7 @@
     if (endEl) endEl.value = formatDateInput(today);
     if (startEl) startEl.value = formatDateInput(start);
     if (yearEl) yearEl.value = String(today.getFullYear());
+    applyDatePickerBounds();
   }
 
   function applyAccountTab(tab) {

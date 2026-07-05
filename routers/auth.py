@@ -26,7 +26,7 @@ def _device_id(raw: str | None) -> str:
 
 @router.post("/login-pin", response_model=TokenResponse)
 def login_pin(body: LoginPinRequest, db: Session = Depends(get_db)):
-    """Authenticate with 4-digit PIN. Used by cashier and waiter staff."""
+    """Authenticate with 4-digit PIN (cashier, waiter). Single-device: new login revokes prior sessions."""
     user = (
         db.query(User)
         .filter(User.pin_code == body.pin_code, User.is_deleted.is_(False))
@@ -48,7 +48,12 @@ def login_pin(body: LoginPinRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
-    """Authenticate with username and password (root, admin, account)."""
+    """
+    Authenticate with username and password (root, admin, account).
+
+    root/admin: multi-device sessions allowed.
+    account: single-device — new login revokes prior sessions.
+    """
     user = (
         db.query(User)
         .filter(User.username == body.username.strip().lower(), User.is_deleted.is_(False))

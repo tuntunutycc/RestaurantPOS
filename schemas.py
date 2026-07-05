@@ -75,20 +75,10 @@ class UserCreateRequest(BaseModel):
 
 
 class RootAdminCreateRequest(BaseModel):
-    """Root request body for creating/updating admin users."""
+    """Root request body for creating/updating admin users (password login only)."""
 
     username: str
-    password: str
-    pin_code: str | None = None
-
-    @field_validator("pin_code")
-    @classmethod
-    def pin_code_optional_four_digits(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        if not (len(v) == 4 and v.isdigit()):
-            raise ValueError("pin_code must be exactly 4 digits")
-        return v
+    password: str = ""
 
 
 class RootSetupRequest(BaseModel):
@@ -120,6 +110,7 @@ class UserAdminResponse(BaseModel):
     username: str
     role: str
     pin_code: str | None = None
+    is_active: bool = True
 
 
 class AdminAuditLogResponse(BaseModel):

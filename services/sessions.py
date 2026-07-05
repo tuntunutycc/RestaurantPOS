@@ -6,7 +6,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from models import User, UserSession
-from rbac import SINGLE_DEVICE_ROLES
+from rbac import uses_single_device_sessions
 
 
 def revoke_user_sessions(db: Session, user_id: int) -> None:
@@ -24,10 +24,15 @@ def revoke_user_sessions(db: Session, user_id: int) -> None:
 
 def create_session(db: Session, user: User, device_id: str) -> str:
     """
-    Create a new session for the user. For single-device roles, revoke prior sessions first.
+    Create a new session for the user.
+
+    Session policy (see rbac.MULTI_DEVICE_ROLES / SINGLE_DEVICE_ROLES):
+    - root, admin: keep existing sessions; allow multiple devices.
+    - account, cashier, waiter: revoke all prior sessions before issuing a new jti.
+
     Returns the new session jti.
     """
-    if user.role in SINGLE_DEVICE_ROLES:
+    if uses_single_device_sessions(user.role):
         revoke_user_sessions(db, user.id)
 
     jti = uuid.uuid4().hex

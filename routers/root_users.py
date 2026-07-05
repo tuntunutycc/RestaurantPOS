@@ -53,16 +53,12 @@ def create_admin(
 
     if db.query(User).filter(User.username == username, User.is_deleted.is_(False)).first():
         raise HTTPException(status_code=400, detail="username already exists")
-    if body.pin_code and db.query(User).filter(
-        User.pin_code == body.pin_code, User.is_deleted.is_(False)
-    ).first():
-        raise HTTPException(status_code=400, detail="pin_code already exists")
 
     user = User(
         username=username,
         role=ROLE_ADMIN,
         password_hash=hash_password(body.password),
-        pin_code=body.pin_code,
+        pin_code=None,
     )
     db.add(user)
     try:
@@ -78,7 +74,7 @@ def create_admin(
         db.refresh(user)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="username or pin_code already exists")
+        raise HTTPException(status_code=400, detail="username already exists")
     return user
 
 
@@ -102,17 +98,13 @@ def update_admin(
         User.username == username, User.id != user_id, User.is_deleted.is_(False)
     ).first():
         raise HTTPException(status_code=400, detail="username already exists")
-    if body.pin_code and db.query(User).filter(
-        User.pin_code == body.pin_code, User.id != user_id, User.is_deleted.is_(False)
-    ).first():
-        raise HTTPException(status_code=400, detail="pin_code already exists")
 
     user.username = username
     if body.password:
         if len(body.password) < 6:
             raise HTTPException(status_code=400, detail="password must be at least 6 characters")
         user.password_hash = hash_password(body.password)
-    user.pin_code = body.pin_code
+    user.pin_code = None
 
     try:
         write_admin_audit_log(
@@ -127,7 +119,7 @@ def update_admin(
         db.refresh(user)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="username or pin_code already exists")
+        raise HTTPException(status_code=400, detail="username already exists")
     return user
 
 
@@ -146,6 +138,7 @@ def delete_admin(
     before = user_snapshot(user)
     user.is_deleted = True
     user.deleted_at = datetime.utcnow()
+    user.pin_code = None
     write_admin_audit_log(
         db,
         actor=root,

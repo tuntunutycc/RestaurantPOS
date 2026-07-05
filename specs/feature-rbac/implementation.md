@@ -18,7 +18,7 @@ Records the **current** RBAC implementation as of 2026-07-04. Use with `requirem
 | `CHECKOUT_ROLES` | `root`, `admin`, `cashier` |
 | `FULL_REPORT_ROLES` | `root`, `admin`, `account` |
 | `ADMIN_MANAGEABLE_ROLES` | `cashier`, `waiter`, `account` |
-| `ACCOUNT_MAX_REPORT_DAYS` | `93` |
+| `ACCOUNT_MAX_REPORT_DAYS` | `90` (align from `93` on next implementation pass) |
 
 Legacy `kitchen` login role is removed from schemas and login allowlists. Existing `kitchen` DB rows cannot authenticate.
 
@@ -104,7 +104,7 @@ PYTHONPATH=. python scripts/seed_root.py --username root
 | Method | Path | Roles |
 |--------|------|-------|
 | `GET` | `/api/reports/summary/today` | root, admin, account, cashier (cashier = own checkout only) |
-| `GET` | `/api/reports/daily-sales` etc. | Dashboard roles; account ≤ 93 days |
+| `GET` | `/api/reports/daily-sales` etc. | Dashboard roles; account ≤ 90 days |
 | `GET` | `/api/reports/sales/by-cashier` | root, admin, account, cashier (cashier = self) |
 | `GET` | `/api/reports/sales/by-order-staff` | root, admin, cashier, waiter (waiter = self) |
 | `GET` | `/api/reports/sales/promoted-by-waiter` | root, admin (all); waiter (self) |
@@ -257,7 +257,9 @@ Hierarchy: `tests/test_rbac_hierarchy.py`
 | `auth.py` | JWT + session-aware `get_current_user` |
 | `services/sessions.py` | Session create/revoke |
 | `services/audit.py` | Admin audit log writes |
-| `services/report_access.py` | Account 93-day cap |
+| `services/report_access.py` | Account 90-day cap |
+
+**Related feature SDD:** `specs/feature-account-reports/` — accountant role contract (FR-A1–FR-A5).
 | `routers/setup.py` | One-time root HTTP bootstrap (dev/test) |
 | `scripts/seed_root.py` | CLI seed for first root (production) |
 | `routers/root_users.py` | Root admin CRUD + audit read |

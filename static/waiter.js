@@ -250,6 +250,36 @@ function autoLogoutToPin() {
   window.location.href = '/pin-login';
 }
 
+function isCashierRole() {
+  return String(window.auth?.getUser?.()?.role || '').toLowerCase() === 'cashier';
+}
+
+const COUNTER_DASHBOARD_ROLES = new Set(['cashier', 'admin', 'root']);
+
+function redirectCashierToBillingTab() {
+  window.location.href = '/counter?tab=cashier';
+}
+
+function bindBackToDashboardNav() {
+  const btn = document.getElementById('btn-back-to-dashboard');
+  if (!btn) return;
+
+  const role = String(window.auth?.getUser?.()?.role || '').toLowerCase();
+  if (COUNTER_DASHBOARD_ROLES.has(role)) {
+    btn.classList.remove('hidden');
+    btn.textContent =
+      role === 'cashier'
+        ? t('back_to_cashier', '🔙 Back to Cashier')
+        : t('back_to_dashboard', 'Dashboard');
+  } else {
+    btn.classList.add('hidden');
+  }
+
+  btn.addEventListener('click', () => {
+    window.location.href = role === 'cashier' ? '/counter?tab=cashier' : '/counter';
+  });
+}
+
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, {
     ...options,
@@ -1242,7 +1272,15 @@ function renderTableDetailsItems(orderDetails) {
       cancelBtn.disabled = true;
       try {
         const updatedOrder = await updateOrderItemStatus(orderIdForUpdate, itemId, 'cancelled');
-        renderTableDetailsItems(updatedOrder || orderDetails);
+        if (String(updatedOrder?.status || '').toLowerCase() === 'cancelled') {
+          closeDetailsSidebar();
+          setActiveOrderContext(null);
+          selectedTableId = null;
+          updateOrderSourceView();
+          renderSelectedTableLabel();
+        } else {
+          renderTableDetailsItems(updatedOrder || orderDetails);
+        }
         showSuccess(t('cancelled', 'Cancelled'));
         queueRefresh();
       } catch (err) {
@@ -1315,6 +1353,10 @@ function bindSubmitOrder() {
       showSuccess(data.message || t('order_submitted', 'Order submitted.'));
       if (AUTO_LOGOUT_AFTER_SUBMIT) {
         setTimeout(() => autoLogoutToPin(), 650);
+      } else if (isCashierRole()) {
+        setTimeout(() => redirectCashierToBillingTab(), 500);
+      } else {
+        submitBtn.disabled = false;
       }
     } catch (err) {
       console.error(err);
@@ -1505,6 +1547,7 @@ if (
   ['waiter', 'cashier', 'admin', 'root'].includes(String(window.auth.getUser?.()?.role || '').toLowerCase())
 ) {
   (async function init() {
+    bindBackToDashboardNav();
     bindSubmitOrder();
     bindModifierModal();
     bindTakeawayModal();

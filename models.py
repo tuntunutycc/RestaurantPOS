@@ -249,6 +249,10 @@ class User(Base):
     )
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
+    @property
+    def is_active(self) -> bool:
+        return not bool(self.is_deleted)
+
 
 class UserSession(Base):
     """Active login session tied to JWT jti claim."""

@@ -143,7 +143,7 @@ Update `require_roles` on: `orders`, `menu`, `tables`, `kitchen_printers`, `repo
 - Restrict checkout to `CHECKOUT_ROLES`.
 
 ### 4.2 Report access layer (`services/report_access.py`)
-- `assert_report_date_range` — 93-day cap for `account`.
+- `assert_report_date_range` — 90-day cap for `account`.
 - `can_view_staff_breakdown`, `can_view_all_waiter_sales` helpers.
 
 ### 4.3 Report endpoints (`routers/reports.py`)
@@ -160,7 +160,7 @@ Update `require_roles` on: `orders`, `menu`, `tables`, `kitchen_printers`, `repo
 |------|-----------------|
 | **root** | Today total; Staff Performance date-range cashier/waiter charts (Today / This Month presets); Sales History daily/monthly store charts; audit logs |
 | **admin** | Today total; Staff Performance date-range cashier + waiter charts; Sales History |
-| **account** | `/account` read-only daily + monthly charts; date-range picker (≤ 93 days) |
+| **account** | `/account` read-only daily + monthly charts; date-range picker (≤ 90 days) |
 | **cashier** | Today own checkout total; Staff Performance waiter chart (date range); no store monthly widget |
 | **waiter** | Today own order-line total (minimal or none) |
 

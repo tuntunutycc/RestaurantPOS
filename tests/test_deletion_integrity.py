@@ -75,9 +75,37 @@ def _seed_paid_order(db_session, *, quantity: int = 1):
 
 def test_soft_delete_user_preserves_history_and_reports(client, db_session, auth_headers):
     waiter, _, order, _ = _seed_paid_order(db_session)
+    archived_pin = waiter.pin_code
 
     delete_res = client.delete(f"/api/admin/users/{waiter.id}", headers=auth_headers("admin"))
     assert delete_res.status_code == 200, delete_res.text
+
+    db_session.expire_all()
+    archived = db_session.query(User).filter(User.id == waiter.id).first()
+    assert archived is not None
+    assert archived.is_deleted is True
+    assert archived.pin_code is None
+
+    list_res = client.get("/api/admin/users", headers=auth_headers("admin"))
+    assert list_res.status_code == 200, list_res.text
+    archived_row = next((u for u in list_res.json() if u["id"] == waiter.id), None)
+    assert archived_row is not None
+    assert archived_row["is_active"] is False
+
+    dup_username = client.post(
+        "/api/admin/users",
+        headers=auth_headers("admin"),
+        json={"username": waiter.username, "role": "waiter", "pin_code": "4321"},
+    )
+    assert dup_username.status_code == 400
+    assert dup_username.json()["detail"] == "Username is already taken (including by archived users)."
+
+    reuse_pin = client.post(
+        "/api/admin/users",
+        headers=auth_headers("admin"),
+        json={"username": f"new_{waiter.username}", "role": "waiter", "pin_code": archived_pin},
+    )
+    assert reuse_pin.status_code == 200, reuse_pin.text
 
     details_res = client.get(f"/api/orders/{order.id}/details", headers=auth_headers("cashier"))
     assert details_res.status_code == 200, details_res.text

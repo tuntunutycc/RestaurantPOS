@@ -187,6 +187,21 @@ document.addEventListener('click', (e) => {
   showPanel(panel);
 });
 
+function applyCounterTabQueryParam() {
+  const tab = new URLSearchParams(window.location.search).get('tab');
+  if (tab !== 'cashier' || !panelCashier) return;
+  showPanel(panelCashier);
+  hasInitializedDefaultPanel = true;
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('tab');
+    const qs = url.searchParams.toString();
+    window.history.replaceState({}, '', url.pathname + (qs ? `?${qs}` : ''));
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 function applyAdminOnlyTabVisibility(role) {
   const normalizedRole = String(role || '').toLowerCase();
   const isAdminPanel = normalizedRole === 'admin' || normalizedRole === 'root';
@@ -216,6 +231,7 @@ function applyAdminOnlyTabVisibility(role) {
     showPanel(showDashboard && panelDashboard ? panelDashboard : panelCashier);
     hasInitializedDefaultPanel = true;
   }
+  applyCounterTabQueryParam();
 }
 
 // User + table management tabs are admin-only.
@@ -1528,6 +1544,15 @@ async function fetchUsers() {
   return res.json();
 }
 
+function formatUserSaveError(detail) {
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail.map((x) => (typeof x === 'string' ? x : x?.msg || '')).filter(Boolean);
+    if (msgs.length) return msgs.join(', ');
+  }
+  return 'Failed to save user';
+}
+
 function renderUsers(users) {
   usersState = users || [];
   const tbody = document.getElementById('users-table-body');
@@ -1538,17 +1563,23 @@ function renderUsers(users) {
   }
   tbody.innerHTML = usersState
     .map((u) => {
-      const pin = u.pin_code || '';
+      const isActive = u.is_active !== false;
+      const pin = u.pin_code || (isActive ? '' : '—');
+      const rowClass = isActive
+        ? 'border-b border-slate-100'
+        : 'border-b border-slate-100 opacity-50 bg-slate-50 text-slate-500';
+      const archivedBadge = isActive
+        ? ''
+        : '<span class="ml-2 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">Archived</span>';
+      const editBtn = isActive
+        ? `<button type="button" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-sm" data-edit-user-id="${u.id}">Edit</button>`
+        : '<span class="text-xs text-slate-400">—</span>';
       return `
-        <tr class="border-b border-slate-100">
+        <tr class="${rowClass}">
           <td class="py-2">${escapeHtml(u.username)}</td>
-          <td class="py-2">${escapeHtml(u.role)}</td>
+          <td class="py-2">${escapeHtml(u.role)}${archivedBadge}</td>
           <td class="py-2 font-medium">${escapeHtml(pin)}</td>
-          <td class="py-2 text-right">
-            <button type="button" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-sm" data-edit-user-id="${u.id}">
-              Edit
-            </button>
-          </td>
+          <td class="py-2 text-right">${editBtn}</td>
         </tr>
       `;
     })
@@ -1558,17 +1589,16 @@ function renderUsers(users) {
     btn.addEventListener('click', () => {
       const id = parseInt(btn.dataset.editUserId, 10);
       const user = usersState.find((x) => x.id === id);
-      if (user) {
-        selectedUserId = user.id;
-        document.getElementById('user-id').value = user.id;
-        document.getElementById('user-username').value = user.username || '';
-        document.getElementById('user-role').value = user.role || 'waiter';
-        document.getElementById('user-pin').value = user.pin_code || '';
-        document.getElementById('user-form-title').textContent = 'Edit Staff';
-        document.getElementById('btn-delete-user').classList.remove('hidden');
-        syncStaffRoleFields();
-        renderUserPinValidationState();
-      }
+      if (!user || user.is_active === false) return;
+      selectedUserId = user.id;
+      document.getElementById('user-id').value = user.id;
+      document.getElementById('user-username').value = user.username || '';
+      document.getElementById('user-role').value = user.role || 'waiter';
+      document.getElementById('user-pin').value = user.pin_code || '';
+      document.getElementById('user-form-title').textContent = 'Edit Staff';
+      document.getElementById('btn-delete-user').classList.remove('hidden');
+      syncStaffRoleFields();
+      renderUserPinValidationState();
     });
   });
 }
@@ -1641,16 +1671,14 @@ function renderRootAdmins(admins) {
   const tbody = document.getElementById('admins-table-body');
   if (!tbody) return;
   if (!rootAdminsState.length) {
-    tbody.innerHTML = '<tr><td colspan="3" class="py-3 text-slate-500">No admin accounts</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="2" class="py-3 text-slate-500">No admin accounts</td></tr>';
     return;
   }
   tbody.innerHTML = rootAdminsState
     .map((u) => {
-      const pin = u.pin_code || '—';
       return `
         <tr class="border-b border-slate-100">
           <td class="py-2">${escapeHtml(u.username)}</td>
-          <td class="py-2 font-medium">${escapeHtml(pin)}</td>
           <td class="py-2 text-right">
             <button type="button" class="px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 text-sm" data-edit-admin-id="${u.id}">
               Edit
@@ -1670,7 +1698,6 @@ function renderRootAdmins(admins) {
       document.getElementById('admin-id').value = admin.id;
       document.getElementById('admin-username').value = admin.username || '';
       document.getElementById('admin-password').value = '';
-      document.getElementById('admin-pin').value = admin.pin_code || '';
       document.getElementById('admin-form-title').textContent = 'Edit Admin';
       document.getElementById('btn-delete-admin').classList.remove('hidden');
       document.getElementById('btn-reset-admin-password').classList.remove('hidden');
@@ -1698,7 +1725,6 @@ function resetAdminForm() {
   document.getElementById('admin-form-title').textContent = 'Create Admin';
   document.getElementById('admin-username').value = '';
   document.getElementById('admin-password').value = '';
-  document.getElementById('admin-pin').value = '';
   document.getElementById('btn-delete-admin').classList.add('hidden');
   document.getElementById('btn-reset-admin-password').classList.add('hidden');
   syncAdminFormMode(false);
@@ -1711,7 +1737,7 @@ async function loadRootAdmins() {
   } catch (e) {
     console.error(e);
     const tbody = document.getElementById('admins-table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="py-3 text-red-600">Error loading admins.</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="2" class="py-3 text-red-600">Error loading admins.</td></tr>';
   }
 }
 
@@ -1954,7 +1980,7 @@ if (userForm) {
       if (window.auth && window.auth.checkUnauthorized(res)) return;
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        await dialogAlert(data.detail || 'Failed to save user', 'error', 'Save User');
+        await dialogAlert(formatUserSaveError(data.detail), 'error', 'Save User');
         return;
       }
       if (window.toast) window.toast.success('User saved successfully.');
@@ -2003,20 +2029,11 @@ if (btnResetUser) {
 // Bind Root Admin Management UI
 const adminForm = document.getElementById('admin-form');
 if (adminForm) {
-  const adminPinEl = document.getElementById('admin-pin');
-  if (adminPinEl) {
-    adminPinEl.addEventListener('input', () => {
-      adminPinEl.value = (adminPinEl.value || '').replace(/\D/g, '').slice(0, 4);
-    });
-  }
-
   adminForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const adminId = document.getElementById('admin-id').value;
     const username = document.getElementById('admin-username').value.trim().toLowerCase();
     const password = document.getElementById('admin-password').value;
-    const pinRaw = document.getElementById('admin-pin').value.trim();
-    const pin = pinRaw || null;
 
     if (!username) {
       if (window.toast) window.toast.error('Username is required.');
@@ -2026,16 +2043,12 @@ if (adminForm) {
       if (window.toast) window.toast.error('Password must be at least 6 characters.');
       return;
     }
-    if (pinRaw && !/^\d{4}$/.test(pinRaw)) {
-      if (window.toast) window.toast.error('PIN must be exactly 4 digits or empty.');
-      return;
-    }
 
     const method = adminId ? 'PUT' : 'POST';
     const url = adminId
       ? `${API_BASE}/api/root/admins/${encodeURIComponent(adminId)}`
       : `${API_BASE}/api/root/admins`;
-    const payload = { username, password: password || '', pin_code: pin };
+    const payload = { username, password: password || '' };
 
     try {
       const res = await fetch(url, {
@@ -3093,11 +3106,23 @@ function connectCounterWebSocket() {
         }
       }
       if (msg.event === 'order_updated' && msg.data && msg.data.status) {
-        // Status changes (e.g. completed) can affect which tables are active; refresh list.
+        // Status changes (e.g. completed/cancelled) can affect which tables are active; refresh list.
         loadUnpaidOrders();
+        if (
+          String(msg.data.status || '').toLowerCase() === 'cancelled' &&
+          selectedOrderId != null &&
+          Number(msg.data.id) === Number(selectedOrderId)
+        ) {
+          selectedOrderId = null;
+          selectedTableNumber = null;
+          selectedOrderTotal = 0;
+          selectedOrderSubtotal = 0;
+          document.getElementById('receipt-container')?.classList.add('hidden');
+          document.getElementById('receipt-placeholder')?.classList.remove('hidden');
+        }
       }
-      if (msg.event === 'table_status_changed') {
-        // Keep admin table management view in sync with occupancy updates.
+      if (msg.event === 'table_grid_updated' || msg.event === 'table_status_changed') {
+        loadUnpaidOrders();
         if (panelTables && !panelTables.classList.contains('hidden')) {
           loadTableManagementData();
         }

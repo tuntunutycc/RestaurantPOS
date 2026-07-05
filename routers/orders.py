@@ -60,6 +60,70 @@ def _recalculate_order_total_excluding_cancelled(order: Order) -> float:
     return round(max(subtotal - discount_amount, 0.0), 2)
 
 
+def _order_has_non_cancelled_items(order: Order) -> bool:
+    return any(
+        _normalized_item_status_value(getattr(oi, "item_status", None)) != "cancelled"
+        for oi in (order.order_items or [])
+    )
+
+
+def _release_table_if_order_fully_cancelled(db: Session, order: Order) -> Table | None:
+    """
+    When every line item is cancelled, finalize the order and free the table.
+    Returns the table if its status was changed to available.
+    """
+    if _order_has_non_cancelled_items(order):
+        return None
+
+    order_status = str(getattr(order, "status", "") or "").strip().lower()
+    if order_status == "paid":
+        return None
+
+    if order_status != "cancelled":
+        order.status = "cancelled"
+    order.total_amount = _recalculate_order_total_excluding_cancelled(order)
+
+    if order.table_id is None:
+        return None
+
+    table = db.query(Table).filter(Table.id == order.table_id).first()
+    if not table:
+        return None
+
+    status_value = getattr(table.status, "value", table.status)
+    if status_value == "available":
+        return None
+
+    table.status = "available"
+    return table
+
+
+def _cancel_order_items_and_release_table(db: Session, order: Order) -> Table | None:
+    """Mark all items cancelled, finalize order, and release dine-in table."""
+    for oi in order.order_items or []:
+        if _normalized_item_status_value(getattr(oi, "item_status", None)) != "cancelled":
+            oi.item_status = "cancelled"
+
+    order_status = str(getattr(order, "status", "") or "").strip().lower()
+    if order_status != "paid":
+        order.status = "cancelled"
+        order.total_amount = _recalculate_order_total_excluding_cancelled(order)
+
+    if order.table_id is None:
+        return None
+
+    table = db.query(Table).filter(Table.id == order.table_id).first()
+    if not table:
+        return None
+
+    status_value = getattr(table.status, "value", table.status)
+    if status_value == "available":
+        return None
+
+    table.status = "available"
+    return table
+
+
 def _table_number_from_table(table: Table) -> int:
     """Best-effort integer table number for legacy UI/response compatibility."""
     try:
@@ -504,12 +568,26 @@ async def update_order_status(
     current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
     """Update an order's status (e.g. completed). Broadcasts order_updated via WebSocket."""
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.order_items))
+        .filter(Order.id == order_id)
+        .first()
+    )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    order.status = body.status
+
+    normalized_status = (body.status or "").strip().lower()
+    released_table = None
+    if normalized_status == "cancelled":
+        released_table = _cancel_order_items_and_release_table(db, order)
+    else:
+        order.status = normalized_status
+
     db.commit()
     db.refresh(order)
+    if released_table:
+        await _broadcast_table_status_changed(request, released_table)
     manager = getattr(request.app.state, "ws_manager", None)
     if manager:
         await manager.broadcast("order_updated", {"id": order.id, "status": order.status})
@@ -603,6 +681,11 @@ async def update_order_item_status(
     order_status = str(getattr(order, "status", "") or "").strip().lower()
     if order_status != "paid":
         order.total_amount = _recalculate_order_total_excluding_cancelled(order)
+
+    released_table = None
+    if normalized_status == "cancelled":
+        released_table = _release_table_if_order_fully_cancelled(db, order)
+
     db.commit()
     updated_order = (
         db.query(Order)
@@ -615,6 +698,9 @@ async def update_order_item_status(
     )
     if not updated_order:
         raise HTTPException(status_code=404, detail="Order not found after update")
+
+    if released_table:
+        await _broadcast_table_status_changed(request, released_table)
 
     manager = getattr(request.app.state, "ws_manager", None)
     if manager:

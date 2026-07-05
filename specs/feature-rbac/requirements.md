@@ -83,9 +83,11 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 **Dashboard & reports**
 - Daily sales summaries.
 - Monthly sales summaries.
-- Historical queries capped at **93 days** (≈ 3 months) per request and as oldest viewable date.
+- Historical queries capped at **90 days** (3 calendar months) per request and as oldest viewable date.
 - May view store-level and per-cashier breakdowns within the cap.
 - **Must not** view per-waiter staff breakdown (incentive data restricted to operational roles).
+
+**Dedicated SDD:** `specs/feature-account-reports/` — FR-A1–FR-A5 (role definition, permitted reports, 90-day cap, provisioning, `/account` UI).
 
 ### 3.4 Cashier
 **User management:** None (created by admin/root).
@@ -128,6 +130,7 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 - Waiter/cashier menu shows **★ Promo** badge on promoted items.
 
 **Dedicated SDD folders (2026-07-05):**
+- `specs/feature-account-reports/` — FR-A1–FR-A5 (accountant role, 90-day report cap, `/account` UI)
 - `specs/feature-cashier-reports/` — FR-C1–FR-C3 (ordering inheritance, cashier daily sales, waiter breakdown)
 - `specs/feature-waiter-incentives/` — FR-P1–FR-P3 (promoted flag + incentive report)
 
@@ -189,12 +192,12 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 
 | Report / capability | root | admin | account | cashier | waiter |
 |---------------------|------|-------|---------|---------|--------|
-| Store daily total | yes | yes | yes (≤93d) | own checkout daily | no |
-| Store monthly trend | yes | yes | yes (≤93d) | no | no |
-| Sales by cashier (daily/monthly) | all | all | all (≤93d) | self only | no |
+| Store daily total | yes | yes | yes (≤90d) | own checkout daily | no |
+| Store monthly trend | yes | yes | yes (≤90d) | no | no |
+| Sales by cashier (daily/monthly) | all | all | all (≤90d) | self only | no |
 | Sales by waiter / order staff (daily/monthly) | all | all | no | all (order lines) | self only |
 | Promoted items by waiter | all | all | no | no | self only (future) |
-| Top items / cancellations | yes | yes | yes (≤93d) | no | no |
+| Top items / cancellations | yes | yes | yes (≤90d) | no | no |
 
 ### FR-D1: Counter Staff Performance UI (Dashboard → Staff Performance)
 - **Date range:** `From` / `To` inputs (`staff-filter-start-date`, `staff-filter-end-date`).

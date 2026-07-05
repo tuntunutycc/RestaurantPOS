@@ -23,6 +23,9 @@ from services.audit import user_snapshot, write_admin_audit_log
 
 router = APIRouter(prefix="/api", tags=["admin-users"])
 
+_USERNAME_TAKEN_MSG = "Username is already taken (including by archived users)."
+_PIN_TAKEN_MSG = "PIN code is already in use by an active user."
+
 
 def _normalize_username(username: str) -> str:
     normalized = username.strip().lower()
@@ -40,6 +43,11 @@ def _validate_staff_body(body: UserCreateRequest) -> None:
     if body.role == ROLE_ACCOUNT:
         if not body.password or len(body.password) < 6:
             raise HTTPException(status_code=400, detail="password is required for account role (min 6 chars)")
+        if body.pin_code:
+            raise HTTPException(
+                status_code=400,
+                detail="account role uses password login only; PIN is not allowed",
+            )
 
 
 def _reject_privileged_roles_via_staff_api(body: UserCreateRequest, actor: User) -> None:
@@ -54,15 +62,33 @@ def _reject_privileged_roles_via_staff_api(body: UserCreateRequest, actor: User)
     )
 
 
+def _assert_username_available(db: Session, username: str, *, exclude_user_id: int | None = None) -> None:
+    q = db.query(User).filter(User.username == username)
+    if exclude_user_id is not None:
+        q = q.filter(User.id != exclude_user_id)
+    if q.first():
+        raise HTTPException(status_code=400, detail=_USERNAME_TAKEN_MSG)
+
+
+def _assert_pin_available(db: Session, pin_code: str | None, *, exclude_user_id: int | None = None) -> None:
+    if not pin_code:
+        return
+    q = db.query(User).filter(User.pin_code == pin_code, User.is_deleted.is_(False))
+    if exclude_user_id is not None:
+        q = q.filter(User.id != exclude_user_id)
+    if q.first():
+        raise HTTPException(status_code=400, detail=_PIN_TAKEN_MSG)
+
+
 @router.get("/admin/users", response_model=list[UserAdminResponse])
 def list_users(
     db: Session = Depends(get_db),
     current: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
-    q = db.query(User).filter(User.is_deleted.is_(False))
+    q = db.query(User)
     if current.role == ROLE_ADMIN:
         q = q.filter(User.role.in_(tuple(ADMIN_MANAGEABLE_ROLES)))
-    q = q.order_by(User.id.asc())
+    q = q.order_by(User.is_deleted.asc(), User.id.asc())
     return q.all()
 
 
@@ -78,13 +104,8 @@ def create_user(
     _reject_privileged_roles_via_staff_api(body, actor)
     _validate_staff_body(body)
     username = _normalize_username(body.username)
-
-    if db.query(User).filter(User.username == username, User.is_deleted.is_(False)).first():
-        raise HTTPException(status_code=400, detail="username already exists")
-    if body.pin_code and db.query(User).filter(
-        User.pin_code == body.pin_code, User.is_deleted.is_(False)
-    ).first():
-        raise HTTPException(status_code=400, detail="pin_code already exists")
+    _assert_username_available(db, username)
+    _assert_pin_available(db, body.pin_code)
 
     password_seed = body.password if body.role == ROLE_ACCOUNT else "changeme"
     if body.role == ROLE_ACCOUNT and body.password:
@@ -93,7 +114,7 @@ def create_user(
     user = User(
         username=username,
         role=body.role,
-        pin_code=body.pin_code,
+        pin_code=None if body.role == ROLE_ACCOUNT else body.pin_code,
         password_hash=hash_password(password_seed),
     )
     db.add(user)
@@ -112,7 +133,7 @@ def create_user(
         db.refresh(user)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="username or pin_code already exists")
+        raise HTTPException(status_code=400, detail=_USERNAME_TAKEN_MSG)
     return user
 
 
@@ -139,22 +160,12 @@ def update_user(
     before = user_snapshot(user)
     old_pin = user.pin_code
 
-    if db.query(User).filter(
-        User.username == username,
-        User.id != user_id,
-        User.is_deleted.is_(False),
-    ).first():
-        raise HTTPException(status_code=400, detail="username already exists")
-    if body.pin_code and db.query(User).filter(
-        User.pin_code == body.pin_code,
-        User.id != user_id,
-        User.is_deleted.is_(False),
-    ).first():
-        raise HTTPException(status_code=400, detail="pin_code already exists")
+    _assert_username_available(db, username, exclude_user_id=user_id)
+    _assert_pin_available(db, body.pin_code, exclude_user_id=user_id)
 
     user.username = username
     user.role = body.role
-    user.pin_code = body.pin_code
+    user.pin_code = None if body.role == ROLE_ACCOUNT else body.pin_code
     if body.role == ROLE_ACCOUNT and body.password:
         user.password_hash = hash_password(body.password)
 
@@ -173,7 +184,7 @@ def update_user(
         db.refresh(user)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="username or pin_code already exists")
+        raise HTTPException(status_code=400, detail=_USERNAME_TAKEN_MSG)
     return user
 
 
@@ -197,6 +208,7 @@ def delete_user(
     before = user_snapshot(user)
     user.is_deleted = True
     user.deleted_at = datetime.utcnow()
+    user.pin_code = None
     if actor.role == ROLE_ADMIN:
         write_admin_audit_log(
             db,

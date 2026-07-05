@@ -209,24 +209,96 @@ Main pages:
 
 ---
 
-## 8) Setup
+## 8) Setup & Deployment
 
-1. Install dependencies:
-   - `pip install -r requirements.txt`
-2. Create `.env`:
-   - `DATABASE_URL=sqlite:///./pos.db`
-   - `JWT_SECRET_KEY=<your-secret>`
-3. Run:
-   - `uvicorn main:app --host 0.0.0.0 --port 8000 --reload`
-4. Open:
-   - `http://localhost:8000/login`
-   - `http://localhost:8000/pin-login`
+### First-time install (local)
 
-Default admin:
+1. **Install dependencies**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate   # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-- Username: `admin`
-- Password: `admin123`
-- PIN: `1234`
+2. **Configure environment** — copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+   Minimum variables:
+   - `DATABASE_URL=sqlite:///./pos.db` (default SQLite file in project root)
+   - `JWT_SECRET_KEY=<random-32+-char-secret>` (required in production)
+
+3. **Start the server**
+   ```bash
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+   On first startup, SQLAlchemy creates tables automatically (`main.py` lifespan).
+
+4. **Bootstrap the first root user** (required before anyone can log in)
+
+   **Production / recommended — CLI:**
+   ```bash
+   PYTHONPATH=. python scripts/seed_root.py --username root --password 'YourSecurePass123'
+   ```
+   Idempotent: if a root already exists, the script exits without changes.
+
+   **Local dev only — Setup UI:**
+   - Open `http://localhost:8000/login`
+   - When no root exists, you are redirected to `/setup`
+   - Create the first root account there  
+   - **Do not expose `/setup` on a public production URL** while `needs_setup` is true (unauthenticated).
+
+5. **Log in and configure the restaurant**
+   - Root → `/counter` → create admin/staff, menu, tables, printers
+   - Staff PIN login → `/pin-login`
+   - Password roles (root, admin, account) → `/login`
+
+### Fresh database reset (start from zero)
+
+Use this when you want to wipe all users, menu, orders, and sales history.
+
+1. **Stop the running server** (Ctrl+C in the terminal running `uvicorn`).
+
+2. **Delete the SQLite database file**
+   ```bash
+   rm -f pos.db
+   ```
+   If you use a custom path, delete the file matching `DATABASE_URL` in `.env`.
+
+3. **Recreate tables and seed root**
+   ```bash
+   PYTHONPATH=. python -c "from database import engine; from models import Base; Base.metadata.create_all(bind=engine)"
+   PYTHONPATH=. python scripts/seed_root.py --username root --password 'YourSecurePass123'
+   ```
+
+4. **Restart the server**
+   ```bash
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+5. **Clear browser session** (recommended) — remove `pos_token` and `pos_user` from Local Storage, or log out, so old JWTs are not reused.
+
+**What is wiped:** all users, menu, zones/tables, orders, reports history, audit logs, and sessions. You must seed root again and reconfigure the restaurant.
+
+### Production notes
+
+| Topic | Guidance |
+|-------|----------|
+| **Database** | SQLite is fine for single-instance dev. For production, set `DATABASE_URL` to PostgreSQL when ready (see `specs/roadmap.md`). |
+| **Secrets** | Set a strong `JWT_SECRET_KEY` in the host environment; never commit `.env`. |
+| **Root bootstrap** | Use `scripts/seed_root.py` on the server after deploy; avoid relying on `/setup` in production. |
+| **Persistent disk** | On Cloud Run / containers, mount a volume for `pos.db` (or use PostgreSQL); otherwise data is lost on redeploy. |
+| **HTTPS** | Terminate TLS at your reverse proxy or platform; app serves same-origin static + API. |
+
+### Default dev credentials (after reset)
+
+Only applies if you used the seed command above during a local reset:
+
+| Role | Login | Credentials |
+|------|-------|---------------|
+| root | `/login` (password) | `root` / `ChangeMe123` |
+
+Change the root password immediately after first login. Create admin, cashier, and waiter staff from Counter → Staff Management.
 
 ---
 

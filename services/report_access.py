@@ -14,6 +14,15 @@ from rbac import (
     ROLE_ROOT,
 )
 
+ACCOUNT_ACCESS_DENIED_DETAIL = (
+    "Access denied. Accountant access is strictly limited to the last 90 days of financial data."
+)
+
+
+def account_oldest_allowed_start() -> date:
+    """Earliest start_date (inclusive) for account role: today minus (90 - 1) days."""
+    return datetime.utcnow().date() - timedelta(days=ACCOUNT_MAX_REPORT_DAYS - 1)
+
 
 def assert_report_date_range(user: User, start: date, end: date) -> None:
     if start > end:
@@ -21,16 +30,10 @@ def assert_report_date_range(user: User, start: date, end: date) -> None:
     if user.role == ROLE_ACCOUNT:
         span = (end - start).days + 1
         if span > ACCOUNT_MAX_REPORT_DAYS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Account role is limited to {ACCOUNT_MAX_REPORT_DAYS} days per query",
-            )
-        oldest = datetime.utcnow().date() - timedelta(days=ACCOUNT_MAX_REPORT_DAYS - 1)
+            raise HTTPException(status_code=400, detail=ACCOUNT_ACCESS_DENIED_DETAIL)
+        oldest = account_oldest_allowed_start()
         if start < oldest:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Account role cannot view data older than {ACCOUNT_MAX_REPORT_DAYS} days",
-            )
+            raise HTTPException(status_code=400, detail=ACCOUNT_ACCESS_DENIED_DETAIL)
 
 
 def dt_range_for_dates(start: date, end: date) -> tuple[datetime, datetime]:

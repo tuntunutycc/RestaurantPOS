@@ -9,7 +9,16 @@
 <body class="bg-slate-50 min-h-screen p-4 md:p-6">
   <div class="max-w-6xl mx-auto">
     <div id="pos-nav"></div>
-    <h1 class="text-xl md:text-2xl font-bold text-slate-800 mb-4" data-i18n="app_waiter_title">Waiter POS – Take Order</h1>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <h1 class="text-xl md:text-2xl font-bold text-slate-800" data-i18n="app_waiter_title">Waiter POS – Take Order</h1>
+      <button
+        type="button"
+        id="btn-back-to-dashboard"
+        class="hidden px-3 py-1.5 bg-slate-700 text-white text-sm font-medium rounded hover:bg-slate-800 whitespace-nowrap"
+      >
+        Dashboard
+      </button>
+    </div>
 
     <div class="grid md:grid-cols-2 gap-4 md:gap-6">
       <!-- Menu: sticky category tabs + grid -->

@@ -43,14 +43,48 @@ def test_root_creates_admin_and_lists(client, auth_headers):
     res = client.post(
         "/api/root/admins",
         headers=auth_headers("root"),
-        json={"username": "mgr", "password": "mgr12345", "pin_code": "4321"},
+        json={"username": "mgr", "password": "mgr12345"},
     )
     assert res.status_code == 200, res.text
-    assert res.json()["role"] == "admin"
+    data = res.json()
+    assert data["role"] == "admin"
+    assert data.get("pin_code") in (None, "")
 
     listed = client.get("/api/root/admins", headers=auth_headers("root"))
     assert listed.status_code == 200
-    assert any(u["username"] == "mgr" for u in listed.json())
+    row = next((u for u in listed.json() if u["username"] == "mgr"), None)
+    assert row is not None
+    assert row.get("pin_code") in (None, "")
+
+
+def test_password_roles_cannot_login_with_pin(client, db_session, seed_users):
+    """Root/admin/account must use /api/auth/login, not PIN."""
+    seed_users["admin"].pin_code = "9876"
+    seed_users["account"].pin_code = "5555"
+    seed_users["root"].pin_code = "3333"
+    db_session.commit()
+
+    for pin in ("9876", "5555", "3333"):
+        res = client.post(
+            "/api/auth/login-pin",
+            json={"pin_code": pin, "device_id": "pytest-pin-blocked"},
+        )
+        assert res.status_code == 401, f"password role must not PIN-login with {pin}"
+
+
+def test_account_staff_rejects_pin_code(client, auth_headers):
+    res = client.post(
+        "/api/admin/users",
+        headers=auth_headers("admin"),
+        json={
+            "username": "acct2",
+            "role": "account",
+            "password": "acct2345",
+            "pin_code": "4444",
+        },
+    )
+    assert res.status_code == 400, res.text
+    assert "PIN is not allowed" in res.text
 
 
 def test_admin_staff_crud_writes_audit_log(client, auth_headers, db_session):
@@ -106,34 +140,23 @@ def test_audit_log_never_stores_plaintext_pin(client, auth_headers):
         if row["action"] == "admin_update_staff" and row.get("target_user_id") == user_id:
             assert detail.get("pin_changed") is True
 
-def test_single_device_login_revokes_prior_session(client, auth_headers):
-    first = client.post(
-        "/api/auth/login-pin",
-        json={"pin_code": "2222", "device_id": "device-a"},
-    )
-    assert first.status_code == 200
+def _assert_second_login_revokes_first(client, *, first_login, second_login):
+    first = first_login()
+    assert first.status_code == 200, first.text
     token_a = first.json()["access_token"]
 
-    second = client.post(
-        "/api/auth/login-pin",
-        json={"pin_code": "2222", "device_id": "device-b"},
-    )
-    assert second.status_code == 200
+    second = second_login()
+    assert second.status_code == 200, second.text
 
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token_a}"})
-    assert me.status_code == 401
+    assert me.status_code == 401, "first device session must be revoked"
 
 
-def test_multi_device_admin_sessions_both_valid(client, auth_headers):
-    a = client.post(
-        "/api/auth/login",
-        json={"username": "admin", "password": "admin123", "device_id": "admin-a"},
-    )
-    b = client.post(
-        "/api/auth/login",
-        json={"username": "admin", "password": "admin123", "device_id": "admin-b"},
-    )
-    assert a.status_code == 200 and b.status_code == 200
+def _assert_multi_device_sessions_both_valid(client, *, login_a, login_b):
+    a = login_a()
+    b = login_b()
+    assert a.status_code == 200, a.text
+    assert b.status_code == 200, b.text
     assert (
         client.get("/api/auth/me", headers={"Authorization": f"Bearer {a.json()['access_token']}"}).status_code
         == 200
@@ -141,6 +164,79 @@ def test_multi_device_admin_sessions_both_valid(client, auth_headers):
     assert (
         client.get("/api/auth/me", headers={"Authorization": f"Bearer {b.json()['access_token']}"}).status_code
         == 200
+    )
+
+
+def test_cashier_second_device_login_revokes_first_session(client):
+    """Cashier (below admin): Device B login invalidates Device A."""
+    _assert_second_login_revokes_first(
+        client,
+        first_login=lambda: client.post(
+            "/api/auth/login-pin",
+            json={"pin_code": "2222", "device_id": "cashier-device-a"},
+        ),
+        second_login=lambda: client.post(
+            "/api/auth/login-pin",
+            json={"pin_code": "2222", "device_id": "cashier-device-b"},
+        ),
+    )
+
+
+def test_waiter_second_device_login_revokes_first_session(client):
+    _assert_second_login_revokes_first(
+        client,
+        first_login=lambda: client.post(
+            "/api/auth/login-pin",
+            json={"pin_code": "1111", "device_id": "waiter-device-a"},
+        ),
+        second_login=lambda: client.post(
+            "/api/auth/login-pin",
+            json={"pin_code": "1111", "device_id": "waiter-device-b"},
+        ),
+    )
+
+
+def test_account_second_device_login_revokes_first_session(client):
+    _assert_second_login_revokes_first(
+        client,
+        first_login=lambda: client.post(
+            "/api/auth/login",
+            json={"username": "account1", "password": "acct123", "device_id": "account-device-a"},
+        ),
+        second_login=lambda: client.post(
+            "/api/auth/login",
+            json={"username": "account1", "password": "acct123", "device_id": "account-device-b"},
+        ),
+    )
+
+
+def test_admin_multi_device_sessions_remain_valid(client):
+    """Admin: concurrent Device A + Device B sessions both stay valid."""
+    _assert_multi_device_sessions_both_valid(
+        client,
+        login_a=lambda: client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123", "device_id": "admin-device-a"},
+        ),
+        login_b=lambda: client.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": "admin123", "device_id": "admin-device-b"},
+        ),
+    )
+
+
+def test_root_multi_device_sessions_remain_valid(client):
+    """Root: concurrent Device A + Device B sessions both stay valid."""
+    _assert_multi_device_sessions_both_valid(
+        client,
+        login_a=lambda: client.post(
+            "/api/auth/login",
+            json={"username": "root", "password": "root123", "device_id": "root-device-a"},
+        ),
+        login_b=lambda: client.post(
+            "/api/auth/login",
+            json={"username": "root", "password": "root123", "device_id": "root-device-b"},
+        ),
     )
 
 
@@ -158,6 +254,9 @@ def test_account_cannot_submit_orders(client, auth_headers):
 
 
 def test_account_report_range_capped(client, auth_headers):
+    """Regression alias — see tests/test_account_reports.py for full account cap suite."""
+    from services.report_access import ACCOUNT_ACCESS_DENIED_DETAIL
+
     today = date.today()
     start = today - timedelta(days=100)
     res = client.get(
@@ -165,6 +264,7 @@ def test_account_report_range_capped(client, auth_headers):
         headers=auth_headers("account"),
     )
     assert res.status_code == 400
+    assert res.json()["detail"] == ACCOUNT_ACCESS_DENIED_DETAIL
 
 
 def _seed_paid_order_with_staff(db_session, cashier: User, waiter: User):
@@ -353,7 +453,9 @@ def test_phase4_dashboard_ui_contract():
 
     assert 'id="account-monthly-chart"' in account_html
     assert 'id="account-start-date"' in account_html
-    assert "ACCOUNT_MAX_DAYS = 93" in account_js
+    assert "historical data up to 90 days" in account_html
+    assert "ACCOUNT_MAX_DAYS = 90" in account_js
+    assert "applyDatePickerBounds" in account_js
     assert "/api/reports/monthly-sales" in account_js
 
     assert 'id="dashboard-tab-staff"' in counter_html
