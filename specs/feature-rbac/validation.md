@@ -110,10 +110,10 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 - [x] `admin` and `root` can access full store + both breakdown endpoints — `test_per_cashier_and_waiter_reports`
 - [ ] `account` can read store summary within 93-day window — partial via monthly/daily tests
 - [ ] `account` cannot read data older than 93 days → `400` — not isolated
-- [ ] `waiter` can access `by-order-staff` scoped to self only — not isolated
+- [x] `waiter` sees self only on `by-order-staff` — `test_waiter_order_staff_scoped_to_self`
 - [ ] `waiter` cannot access `by-cashier` → `403` — not isolated
-- [ ] `cashier` can access `by-cashier` scoped to self only — not isolated
-- [ ] `cashier` can access `by-order-staff` for all staff (operational view) — not isolated
+- [x] `cashier` cannot access `by-cashier` → `403` — `test_cashier_cannot_view_by_cashier_breakdown`
+- [x] `cashier` cannot access `by-order-staff` → `403` — `test_cashier_cannot_view_order_staff_breakdown`
 
 ### Automated — attribution correctness
 - [x] Checkout sets `Order.checked_out_by_id` to current cashier — `test_checkout_sets_checked_out_by_id`
@@ -132,12 +132,12 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 - [x] **Root:** today total + Staff Performance cashier/waiter charts (date range + Today/This Month) + Sales History daily/monthly
 - [x] **Admin:** today total + Staff Performance charts (date range) + Sales History
 - [x] **Account:** `/account` daily + monthly views with date-range picker (≤ 93 days) — manual sign-off on live UI
-- [x] **Cashier:** today own checkout KPI + Staff Performance waiter chart (no monthly store widget)
+- [x] **Cashier:** today own checkout KPI only; **no** Staff Performance tab; no monthly store widget
 - [x] **Cashier:** nav **Take Orders** → `/waiter` (`auth.js`, cashier/waiter only)
 - [ ] **Waiter:** own daily total on waiter screen (minimal; optional)
 
 ### Regression
-- [x] Full suite `pytest -q` passes (record count in CHANGELOG) — **72 passed**
+- [x] Full suite `pytest -q` passes (record count in CHANGELOG) — **121 passed**
 - [x] Checkout tax/discount money invariants unchanged — included in full suite
 - [x] `tests/test_kitchen_printing.py` still passes — included in full suite
 - [x] Table management RBAC (`ADMIN_PANEL_ROLES`) unchanged — included in full suite
@@ -180,4 +180,4 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 | `CHANGELOG.md` entry added | yes |
 | Open decisions in `requirements.md` §12 resolved or explicitly accepted | yes |
 
-**Current evidence (2026-07-05):** **72 passed** — RBAC Phases 1–4b complete; Staff Performance date-range UI; role creation hierarchy in `tests/test_rbac_hierarchy.py`.
+**Current evidence (2026-07-05):** **121 passed** — RBAC Phases 1–4b complete; Staff Performance root/admin only; role creation hierarchy in `tests/test_rbac_hierarchy.py` + `tests/test_rbac_security_gaps.py`.

@@ -301,7 +301,7 @@ function applyDashboardRoleVisibility(role) {
   document.querySelectorAll('[data-role-section]').forEach((el) => {
     const section = el.getAttribute('data-role-section');
     let visible = false;
-    if (section === 'staff') visible = isRoot || isAdmin || isCashier;
+    if (section === 'staff') visible = isRoot || isAdmin;
     else if (section === 'incentives') visible = isRoot || isAdmin;
     else if (section === 'history' || section === 'insights') visible = isAdminPanel;
     else visible = true;
@@ -313,18 +313,13 @@ function applyDashboardRoleVisibility(role) {
     let visible = true;
     if (widget === 'admin-charts') visible = isAdminPanel;
     if (widget === 'cashier-breakdown') visible = isRoot || isAdmin;
-    if (widget === 'waiter-breakdown') visible = isRoot || isAdmin || isCashier;
+    if (widget === 'waiter-breakdown') visible = isRoot || isAdmin;
     el.classList.toggle('hidden', !visible);
   });
 
   const salesLabel = document.querySelector('#dashboard-tab-overview .border-emerald-500 p.text-sm');
   if (salesLabel) {
     salesLabel.textContent = isCashier ? 'My Checkout Sales (Today)' : "Today's Sales";
-  }
-
-  const staffCashierTitle = document.querySelector('#staff-cashier-section h3');
-  if (staffCashierTitle && isCashier) {
-    staffCashierTitle.textContent = 'My Checkout Sales';
   }
 }
 

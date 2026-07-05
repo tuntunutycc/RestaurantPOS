@@ -47,8 +47,8 @@ def can_view_store_reports(user: User) -> bool:
 
 
 def can_view_staff_breakdown(user: User) -> bool:
-    return user.role in (ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER)
+    return user.role in (ROLE_ROOT, ROLE_ADMIN)
 
 
 def can_view_all_waiter_sales(user: User) -> bool:
-    return user.role in (ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER)
+    return user.role in (ROLE_ROOT, ROLE_ADMIN)

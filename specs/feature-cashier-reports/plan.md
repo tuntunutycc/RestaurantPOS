@@ -29,13 +29,14 @@ Requirements FR-C1–FR-C3 are **already implemented** on `main`. This plan defi
 | Waiter screen access | `waiter.js` | cashier in `requireRole` |
 | Take Orders | `auth.js` | link for cashier/waiter |
 | Cashier KPI | `counter.js` | `applyDashboardRoleVisibility` — own checkout label |
-| Staff charts | `counter.js` | `loadStaffBreakdownCharts` → `by-order-staff` |
+| Staff charts | `counter.js` | `loadStaffBreakdownCharts` — **root/admin only** (cashier: hidden) |
 
 ## Phase 4 — Tests & validation
 | Test | File | Covers |
 |------|------|--------|
 | Cashier today scoped | extend or manual QA | `summary/today` |
-| by-order-staff | `test_per_cashier_and_waiter_reports` | root + date range |
+| Cashier staff denied | `test_cashier_cannot_view_order_staff_breakdown`, `test_cashier_cannot_view_by_cashier_breakdown` | **403** |
+| by-order-staff (root) | `test_per_cashier_and_waiter_reports` | root + date range |
 | Cashier submit | `test_waiter_cannot_checkout_but_can_submit` pattern | cashier submit |
 | UI contract | `test_phase4_dashboard_ui_contract` | staff charts |
 

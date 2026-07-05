@@ -13,6 +13,7 @@ Records the **current** RBAC implementation as of 2026-07-04. Use with `requirem
 | `PIN_ROLES` | `cashier`, `waiter` |
 | `SINGLE_DEVICE_ROLES` | `account`, `cashier`, `waiter` |
 | `MULTI_DEVICE_ROLES` | `root`, `admin` |
+| `uses_single_device_sessions()` / `uses_multi_device_sessions()` | Session policy helpers in `rbac.py`; used by `services/sessions.py` |
 | `ADMIN_PANEL_ROLES` | `root`, `admin` |
 | `POS_ORDER_ROLES` | `root`, `admin`, `cashier`, `waiter` |
 | `CHECKOUT_ROLES` | `root`, `admin`, `cashier` |
@@ -105,8 +106,8 @@ PYTHONPATH=. python scripts/seed_root.py --username root
 |--------|------|-------|
 | `GET` | `/api/reports/summary/today` | root, admin, account, cashier (cashier = own checkout only) |
 | `GET` | `/api/reports/daily-sales` etc. | Dashboard roles; account ≤ 90 days |
-| `GET` | `/api/reports/sales/by-cashier` | root, admin, account, cashier (cashier = self) |
-| `GET` | `/api/reports/sales/by-order-staff` | root, admin, cashier, waiter (waiter = self) |
+| `GET` | `/api/reports/sales/by-cashier` | root, admin, account (≤90d); cashier, waiter → **403** |
+| `GET` | `/api/reports/sales/by-order-staff` | root, admin (all); waiter (self); cashier, account → **403** |
 | `GET` | `/api/reports/sales/promoted-by-waiter` | root, admin (all); waiter (self) |
 | `PUT` | `/api/menu-items/{id}/toggle-promoted` | `ADMIN_PANEL_ROLES` |
 
@@ -163,10 +164,10 @@ PYTHONPATH=. python scripts/seed_root.py --username root
 | Hourly + Top Items charts | ✓ | ✓ | hidden |
 | Sales History subtab (daily/monthly store) | ✓ | ✓ | hidden |
 | Insights subtab | ✓ | ✓ | hidden |
-| **Staff Performance** subtab | ✓ | ✓ | ✓ (waiter only) |
+| **Staff Performance** subtab | ✓ | ✓ | hidden |
 | **Waiter Incentives** subtab | ✓ | ✓ | hidden |
-| Cashier breakdown chart | ✓ | ✓ | hidden (KPI shows own total) |
-| Waiter/order-staff breakdown chart | ✓ | ✓ | ✓ |
+| Cashier breakdown chart | ✓ | ✓ | hidden |
+| Waiter/order-staff breakdown chart | ✓ | ✓ | hidden |
 
 **Staff Performance tab** (`dashboard-tab-staff`):
 - Date range: `#staff-filter-start-date` / `#staff-filter-end-date`
@@ -238,7 +239,7 @@ Documented for SDD honesty — resolve in a follow-up spec amendment or implemen
 Primary: `tests/test_rbac.py`  
 Related: `tests/test_orders_rbac.py`, `tests/conftest.py` (root/admin/account/cashier/waiter seeds)
 
-Latest suite: `PYTHONPATH=. venv/bin/python -m pytest -q` → **72 passed** (2026-07-05, includes monthly `by-cashier` range in `test_per_cashier_and_waiter_reports`)
+Latest suite: `PYTHONPATH=. python -m pytest -q` → **121 passed** (2026-07-05)
 
 Primary: `tests/test_rbac.py`  
 Hierarchy: `tests/test_rbac_hierarchy.py`

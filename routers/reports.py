@@ -354,8 +354,8 @@ def get_cancellations_summary(
     )
 
 
-_STAFF_REPORT_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT, ROLE_CASHIER]
-_ORDER_STAFF_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER, ROLE_WAITER]
+_STAFF_REPORT_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT]
+_ORDER_STAFF_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_WAITER]
 
 
 @router.get("/reports/sales/by-cashier", response_model=list[StaffSalesPointResponse])
@@ -390,8 +390,6 @@ def get_sales_by_cashier(
         .group_by(User.id, User.username, User.role)
         .order_by(func.sum(Order.total_amount).desc())
     )
-    if current_user.role == ROLE_CASHIER:
-        q = q.filter(User.id == current_user.id)
 
     rows = q.all()
     return [

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-07-05 — Cashier denied Staff Performance (SDD alignment)
+
+### Summary
+Cashiers may view **own checkout total today** only. Staff Performance APIs and Counter UI (`by-cashier`, `by-order-staff`, dashboard subtab) are **root/admin only**.
+
+### Backend
+- `routers/reports.py` — removed `cashier` from `_STAFF_REPORT_ROLES` and `_ORDER_STAFF_ROLES`
+- `services/report_access.py` — `can_view_staff_breakdown` / `can_view_all_waiter_sales` → root/admin only
+
+### Frontend
+- `static/counter.js` — hide Staff Performance section and charts for cashier
+
+### Spec / Tests
+- `specs/feature-cashier-reports/` + `specs/feature-rbac/` — requirements, implementation, validation synced
+- `tests/test_cashier_reports.py` — `test_cashier_cannot_view_*` (**403**)
+- Full suite: **121 passed** (`pytest -q`)
+
 ## 2026-07-05 — Cashier reports & waiter incentives SDD + tests
 
 ### Summary

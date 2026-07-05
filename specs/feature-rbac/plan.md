@@ -152,8 +152,8 @@ Update `require_roles` on: `orders`, `menu`, `tables`, `kitchen_printers`, `repo
 | `GET /api/reports/summary/today` | Role-filtered totals |
 | `GET /api/reports/daily-sales` | Store trend; account cap |
 | `GET /api/reports/monthly-sales` | Store trend; account cap |
-| `GET /api/reports/sales/by-cashier` | root/admin/account: all; cashier: self |
-| `GET /api/reports/sales/by-order-staff` | root/admin/cashier: all; waiter: self |
+| `GET /api/reports/sales/by-cashier` | root/admin/account: all (account ≤90d); cashier/waiter: **403** |
+| `GET /api/reports/sales/by-order-staff` | root/admin: all; waiter: self; cashier/account: **403** |
 
 ### 4.4 Dashboard UI by role
 | Role | Widgets / pages |
@@ -161,7 +161,7 @@ Update `require_roles` on: `orders`, `menu`, `tables`, `kitchen_printers`, `repo
 | **root** | Today total; Staff Performance date-range cashier/waiter charts (Today / This Month presets); Sales History daily/monthly store charts; audit logs |
 | **admin** | Today total; Staff Performance date-range cashier + waiter charts; Sales History |
 | **account** | `/account` read-only daily + monthly charts; date-range picker (≤ 90 days) |
-| **cashier** | Today own checkout total; Staff Performance waiter chart (date range); no store monthly widget |
+| **cashier** | Today own checkout total (overview KPI); **no** Staff Performance; no store monthly widget |
 | **waiter** | Today own order-line total (minimal or none) |
 
 ### 4.5 Cashier ↔ waiter navigation

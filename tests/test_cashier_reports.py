@@ -135,8 +135,8 @@ def test_cashier_summary_scoped_to_own_checkout(client, db_session, auth_headers
     assert sales_a < 40.0  # must not include cashier B's 25.0 order
 
 
-def test_cashier_can_view_order_staff_breakdown(client, auth_headers, seed_users, db_session):
-    """FR-C3: Cashier can load global order-staff breakdown (waiter row visible)."""
+def test_cashier_cannot_view_order_staff_breakdown(client, auth_headers, seed_users, db_session):
+    """Cashier must not access Staff Performance / waiter breakdown APIs."""
     _seed_paid_order(db_session, cashier=seed_users["cashier"], waiter=seed_users["waiter"])
     today = datetime.utcnow().date().isoformat()
 
@@ -144,10 +144,19 @@ def test_cashier_can_view_order_staff_breakdown(client, auth_headers, seed_users
         f"/api/reports/sales/by-order-staff?start_date={today}&end_date={today}",
         headers=auth_headers("cashier"),
     )
-    assert res.status_code == 200, res.text
-    waiter_row = next((r for r in res.json() if r["user_id"] == seed_users["waiter"].id), None)
-    assert waiter_row is not None
-    assert float(waiter_row["total_sales"]) >= 10.0
+    assert res.status_code == 403, res.text
+
+
+def test_cashier_cannot_view_by_cashier_breakdown(client, auth_headers, seed_users, db_session):
+    """Cashier must not access per-cashier Staff Performance breakdown."""
+    _seed_paid_order(db_session, cashier=seed_users["cashier"], waiter=seed_users["waiter"])
+    today = datetime.utcnow().date().isoformat()
+
+    res = client.get(
+        f"/api/reports/sales/by-cashier?start_date={today}&end_date={today}",
+        headers=auth_headers("cashier"),
+    )
+    assert res.status_code == 403, res.text
 
 
 def test_waiter_order_staff_scoped_to_self(client, auth_headers, seed_users, db_session):
@@ -162,31 +171,3 @@ def test_waiter_order_staff_scoped_to_self(client, auth_headers, seed_users, db_
     rows = res.json()
     assert len(rows) >= 1
     assert all(r["user_id"] == seed_users["waiter"].id for r in rows)
-
-
-def test_cashier_by_cashier_scoped_to_self(client, auth_headers, seed_users, db_session):
-    cashier_a = seed_users["cashier"]
-    waiter = seed_users["waiter"]
-
-    cashier_b = User(
-        username=f"cb2_{uuid.uuid4().hex[:6]}",
-        role="cashier",
-        password_hash="x",
-        pin_code=f"{int(uuid.uuid4().hex[:4], 16) % 10000:04d}",
-    )
-    db_session.add(cashier_b)
-    db_session.commit()
-
-    _seed_paid_order(db_session, cashier=cashier_a, waiter=waiter, total=12.0, subtotal=11.0)
-    _seed_paid_order(db_session, cashier=cashier_b, waiter=waiter, total=20.0, subtotal=19.0)
-
-    today = datetime.utcnow().date().isoformat()
-    res = client.get(
-        f"/api/reports/sales/by-cashier?start_date={today}&end_date={today}",
-        headers=auth_headers("cashier"),
-    )
-    assert res.status_code == 200, res.text
-    rows = res.json()
-    ids = {r["user_id"] for r in rows}
-    assert cashier_a.id in ids
-    assert cashier_b.id not in ids

@@ -25,19 +25,18 @@
 
 **Frontend:** `counter.js` → `applyDashboardRoleVisibility` — KPI label **"My Checkout Sales (Today)"** for cashier.
 
-## Waiter / order-staff breakdown (FR-C3)
+## Staff Performance — root/admin only (FR-C3)
 
 | Method | Path | Roles |
 |--------|------|-------|
-| `GET` | `/api/reports/sales/by-order-staff` | `root`, `admin`, `cashier` → all; `waiter` → self; `account` → `403` |
+| `GET` | `/api/reports/sales/by-order-staff` | `root`, `admin` → all; `waiter` → self; `cashier`, `account` → **403** |
+| `GET` | `/api/reports/sales/by-cashier` | `root`, `admin`, `account` (≤90d); `cashier`, `waiter` → **403** |
 
-**Attribution:** `OrderItem.created_by_id`; paid/completed orders; non-cancelled lines.
+**Attribution:** `OrderItem.created_by_id` / `Order.checked_out_by_id`; paid/completed orders; non-cancelled lines.
 
-**Frontend:** Counter → Dashboard → Staff Performance → `loadStaffBreakdownCharts()` → `fetchStaffSales('by-order-staff', ...)`.
+**Frontend:** Counter → Dashboard → **Staff Performance** subtab — `root` and `admin` only (`applyDashboardRoleVisibility` hides `data-role-section="staff"` for cashier). `loadStaffBreakdownCharts()` → `fetchStaffSales('by-cashier' | 'by-order-staff', ...)`.
 
-| Method | Path | Cashier scoping |
-|--------|------|-----------------|
-| `GET` | `/api/reports/sales/by-cashier` | Cashier sees **self only** |
+**Cashier:** Overview KPI only via `GET /api/reports/summary/today` (own checkout total).
 
 ## Schema (no migration required)
 
@@ -48,7 +47,7 @@
 
 | File | Scenarios |
 |------|-----------|
-| `tests/test_cashier_reports.py` | Submit as cashier, own summary, staff breakdown, scoping |
+| `tests/test_cashier_reports.py` | Submit as cashier, own summary, **403** on staff breakdown APIs |
 | `tests/test_orders_rbac.py` | Cashier checkout allowed |
 | `tests/test_rbac.py` | `test_per_cashier_and_waiter_reports`, `test_checkout_sets_checked_out_by_id` |
 

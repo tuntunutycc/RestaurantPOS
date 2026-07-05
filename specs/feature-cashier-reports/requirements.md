@@ -40,23 +40,21 @@ A cashier **must** see only **their own** total daily sales (revenue from orders
 
 ---
 
-## FR-C3: Global daily waiter sales view (root, admin, cashier)
+## FR-C3: Staff Performance reports (root, admin only)
 
-`root`, `admin`, and `cashier` **must** be able to view **daily** (and by date range) sales **grouped by order-taking staff**, primarily for waiter performance monitoring.
+`root` and `admin` **must** be able to view **daily** (and by date range) sales **grouped by order-taking staff** and by cashier checkout, for operational monitoring. **`cashier` must not** access Staff Performance APIs or UI.
 
 | Item | Contract |
 |------|----------|
 | API | `GET /api/reports/sales/by-order-staff?start_date=&end_date=` |
-| Roles | `root`, `admin`, `cashier` → all staff rows; `waiter` → self only; `account` → `403` |
+| Roles | `root`, `admin` → all staff rows; `waiter` → self only; `cashier`, `account` → **403** |
 | Attribution | `OrderItem.created_by_id` on paid/completed, non-cancelled lines |
 | Grouping | `GROUP BY` staff `user_id`, `username`, `role` |
 | Metrics | `total_sales` (sum `OrderItem.subtotal`), `order_count` (line count) |
-| UI | Counter → Dashboard → **Staff Performance** → **Sales by Waiter / Order Staff** chart |
+| UI | Counter → Dashboard → **Staff Performance** → **root/admin only** |
 | Date range | Same `start_date` / `end_date` as cashier breakdown (see `FR-D1` in RBAC spec) |
 
 **Clarification:** The API returns **all order-taking staff** (waiter and cashier rows when cashiers submit orders). UI title may say "Waiter / Order Staff". Optional future filter: `role=waiter` query param (out of scope unless requested).
-
-**Cashier restriction:** Cashier **must not** see other cashiers' checkout totals (`by-cashier` scoped to self if called as cashier).
 
 ---
 
@@ -65,8 +63,8 @@ A cashier **must** see only **their own** total daily sales (revenue from orders
 | Endpoint | root | admin | cashier | waiter | account |
 |----------|------|-------|---------|--------|---------|
 | `summary/today` (store) | all | all | **own checkout** | — | capped |
-| `sales/by-order-staff` | all staff | all staff | all staff | self | **403** |
-| `sales/by-cashier` | all | all | self | **403** | capped |
+| `sales/by-order-staff` | all staff | all staff | **403** | self | **403** |
+| `sales/by-cashier` | all | all | **403** | **403** | capped |
 
 ---
 
