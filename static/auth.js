@@ -20,7 +20,7 @@
     cashier: "/counter",
   };
 
-  const PASSWORD_ROLES = ["root", "admin", "account"];
+  const PASSWORD_ROLES = ["root", "admin"];
 
   function t(key, fallback) {
     return window.i18n?.t?.(key) || fallback || key;

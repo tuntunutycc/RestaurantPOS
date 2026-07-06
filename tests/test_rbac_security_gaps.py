@@ -237,7 +237,6 @@ def _assert_change_password_flow(client, *, username: str, old_password: str, ne
     [
         ("root", "root", "root123", "rootNew123"),
         ("admin", "admin", "admin123", "adminNew123"),
-        ("account", "account1", "acct123", "acctNew123"),
     ],
 )
 def test_change_password_succeeds_for_password_roles(
@@ -262,10 +261,11 @@ def test_change_password_rejects_wrong_current_password(client, auth_headers):
     assert "incorrect" in res.json()["detail"].lower()
 
 
-def test_change_password_forbidden_for_pin_roles(client, auth_headers):
+@pytest.mark.parametrize("role", ["cashier", "waiter", "account"])
+def test_change_password_forbidden_for_pin_roles(client, auth_headers, role):
     res = client.post(
         "/api/auth/change-password",
-        headers=auth_headers("cashier"),
+        headers=auth_headers(role),
         json={"current_password": "x", "new_password": "newpass123"},
     )
     assert res.status_code == 403, res.text

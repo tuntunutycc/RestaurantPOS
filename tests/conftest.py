@@ -104,8 +104,8 @@ def seed_users(db_session: Session) -> dict[str, User]:
     account = User(
         username="account1",
         role="account",
-        password_hash=hash_password("acct123"),
-        pin_code=None,
+        password_hash=hash_password("changeme"),
+        pin_code="3355",
     )
     waiter = User(
         username="waiter1",
@@ -136,9 +136,9 @@ def seed_users(db_session: Session) -> dict[str, User]:
 def auth_headers(client: TestClient, seed_users: dict[str, User]):
     def _get(role: str) -> dict[str, str]:
         role = str(role or "").strip().lower()
-        if role in ("root", "admin", "account"):
-            passwords = {"root": "root123", "admin": "admin123", "account": "acct123"}
-            usernames = {"root": "root", "admin": "admin", "account": "account1"}
+        if role in ("root", "admin"):
+            passwords = {"root": "root123", "admin": "admin123"}
+            usernames = {"root": "root", "admin": "admin"}
             res = client.post(
                 "/api/auth/login",
                 json={
@@ -150,17 +150,11 @@ def auth_headers(client: TestClient, seed_users: dict[str, User]):
             assert res.status_code == 200, res.text
             token = res.json()["access_token"]
             return {"Authorization": f"Bearer {token}"}
-        if role == "waiter":
+        if role in ("account", "waiter", "cashier"):
+            pins = {"account": "3355", "waiter": "1111", "cashier": "2222"}
             res = client.post(
                 "/api/auth/login-pin",
-                json={"pin_code": "1111", "device_id": TEST_DEVICE_ID},
-            )
-            assert res.status_code == 200, res.text
-            return {"Authorization": f"Bearer {res.json()['access_token']}"}
-        if role == "cashier":
-            res = client.post(
-                "/api/auth/login-pin",
-                json={"pin_code": "2222", "device_id": TEST_DEVICE_ID},
+                json={"pin_code": pins[role], "device_id": TEST_DEVICE_ID},
             )
             assert res.status_code == 200, res.text
             return {"Authorization": f"Bearer {res.json()['access_token']}"}

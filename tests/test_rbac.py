@@ -58,13 +58,12 @@ def test_root_creates_admin_and_lists(client, auth_headers):
 
 
 def test_password_roles_cannot_login_with_pin(client, db_session, seed_users):
-    """Root/admin/account must use /api/auth/login, not PIN."""
+    """Root/admin must use /api/auth/login, not PIN."""
     seed_users["admin"].pin_code = "9876"
-    seed_users["account"].pin_code = "5555"
-    seed_users["root"].pin_code = "3333"
+    seed_users["root"].pin_code = "9999"
     db_session.commit()
 
-    for pin in ("9876", "5555", "3333"):
+    for pin in ("9876", "9999"):
         res = client.post(
             "/api/auth/login-pin",
             json={"pin_code": pin, "device_id": "pytest-pin-blocked"},
@@ -72,7 +71,7 @@ def test_password_roles_cannot_login_with_pin(client, db_session, seed_users):
         assert res.status_code == 401, f"password role must not PIN-login with {pin}"
 
 
-def test_account_staff_rejects_pin_code(client, auth_headers):
+def test_account_staff_rejects_password(client, auth_headers):
     res = client.post(
         "/api/admin/users",
         headers=auth_headers("admin"),
@@ -84,7 +83,17 @@ def test_account_staff_rejects_pin_code(client, auth_headers):
         },
     )
     assert res.status_code == 400, res.text
-    assert "PIN is not allowed" in res.text
+    assert "password is not allowed" in res.text.lower()
+
+
+def test_account_staff_requires_pin_code(client, auth_headers):
+    res = client.post(
+        "/api/admin/users",
+        headers=auth_headers("admin"),
+        json={"username": "acct3", "role": "account"},
+    )
+    assert res.status_code == 400, res.text
+    assert "pin_code is required" in res.text
 
 
 def test_admin_staff_crud_writes_audit_log(client, auth_headers, db_session):
@@ -200,12 +209,12 @@ def test_account_second_device_login_revokes_first_session(client):
     _assert_second_login_revokes_first(
         client,
         first_login=lambda: client.post(
-            "/api/auth/login",
-            json={"username": "account1", "password": "acct123", "device_id": "account-device-a"},
+            "/api/auth/login-pin",
+            json={"pin_code": "3355", "device_id": "account-device-a"},
         ),
         second_login=lambda: client.post(
-            "/api/auth/login",
-            json={"username": "account1", "password": "acct123", "device_id": "account-device-b"},
+            "/api/auth/login-pin",
+            json={"pin_code": "3355", "device_id": "account-device-b"},
         ),
     )
 

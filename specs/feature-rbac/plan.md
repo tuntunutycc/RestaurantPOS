@@ -79,7 +79,7 @@ on login(user):
 |----------|--------|
 | `GET /api/setup/status` | Public |
 | `POST /api/setup/root` | Public only when no root |
-| `POST /api/auth/change-password` | `root`, `admin`, `account` |
+| `POST /api/auth/change-password` | `root`, `admin` only (`account` → `403`) |
 
 ### 2.5 Client device id
 | File | Work |

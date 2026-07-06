@@ -9,8 +9,8 @@ Records the **current** RBAC implementation as of 2026-07-04. Use with `requirem
 | Constant | Values |
 |----------|--------|
 | `ALL_ROLES` | `root`, `admin`, `account`, `cashier`, `waiter` |
-| `PASSWORD_ROLES` | `root`, `admin`, `account` |
-| `PIN_ROLES` | `cashier`, `waiter` |
+| `PASSWORD_ROLES` | `root`, `admin` |
+| `PIN_ROLES` | `cashier`, `waiter`, `account` |
 | `SINGLE_DEVICE_ROLES` | `account`, `cashier`, `waiter` |
 | `MULTI_DEVICE_ROLES` | `root`, `admin` |
 | `uses_single_device_sessions()` / `uses_multi_device_sessions()` | Session policy helpers in `rbac.py`; used by `services/sessions.py` |
@@ -46,7 +46,7 @@ Legacy `kitchen` login role is removed from schemas and login allowlists. Existi
 | `POST` | `/api/auth/login` | Password roles; accepts `device_id` |
 | `POST` | `/api/auth/login-pin` | PIN roles; accepts `device_id` |
 | `GET` | `/api/auth/me` | Validates JWT + active session |
-| `POST` | `/api/auth/change-password` | Password roles only |
+| `POST` | `/api/auth/change-password` | `root`, `admin` only — `403` for PIN roles (`account`, `cashier`, `waiter`) |
 
 ### Root admin management
 | Method | Path | Access |
@@ -132,7 +132,7 @@ PYTHONPATH=. python scripts/seed_root.py --username root
 | `/account` | account | `account.js` |
 
 ### Nav (`static/auth.js`)
-- **Change Password** button for password roles → `POST /api/auth/change-password` modal.
+- **Change Password** button for `root`/`admin` only → `POST /api/auth/change-password` modal. Hidden for PIN roles (`account`, `cashier`, `waiter`).
 - **Take Orders** link (`/waiter`) — visible only for `cashier` and `waiter` roles.
 - Default pages: `ROLE_DEFAULT_PAGE` map.
 

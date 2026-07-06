@@ -12,11 +12,9 @@ from models import User
 from rbac import (
     ADMIN_MANAGEABLE_ROLES,
     ADMIN_PANEL_ROLES,
-    ROLE_ACCOUNT,
+    PIN_ROLES,
     ROLE_ADMIN,
-    ROLE_CASHIER,
     ROLE_ROOT,
-    ROLE_WAITER,
 )
 from schemas import UserAdminResponse, UserCreateRequest
 from services.audit import user_snapshot, write_admin_audit_log
@@ -37,17 +35,14 @@ def _normalize_username(username: str) -> str:
 def _validate_staff_body(body: UserCreateRequest) -> None:
     if body.role not in ADMIN_MANAGEABLE_ROLES:
         raise HTTPException(status_code=400, detail="invalid staff role")
-    if body.role in (ROLE_CASHIER, ROLE_WAITER):
+    if body.role in PIN_ROLES:
         if not body.pin_code:
-            raise HTTPException(status_code=400, detail="pin_code is required for cashier/waiter")
-    if body.role == ROLE_ACCOUNT:
-        if not body.password or len(body.password) < 6:
-            raise HTTPException(status_code=400, detail="password is required for account role (min 6 chars)")
-        if body.pin_code:
-            raise HTTPException(
-                status_code=400,
-                detail="account role uses password login only; PIN is not allowed",
-            )
+            raise HTTPException(status_code=400, detail="pin_code is required for cashier/waiter/account")
+    if body.password:
+        raise HTTPException(
+            status_code=400,
+            detail="password is not allowed for staff roles; use PIN for cashier/waiter/account",
+        )
 
 
 def _reject_privileged_roles_via_staff_api(body: UserCreateRequest, actor: User) -> None:
@@ -107,14 +102,12 @@ def create_user(
     _assert_username_available(db, username)
     _assert_pin_available(db, body.pin_code)
 
-    password_seed = body.password if body.role == ROLE_ACCOUNT else "changeme"
-    if body.role == ROLE_ACCOUNT and body.password:
-        password_seed = body.password
+    password_seed = "changeme"
 
     user = User(
         username=username,
         role=body.role,
-        pin_code=None if body.role == ROLE_ACCOUNT else body.pin_code,
+        pin_code=body.pin_code if body.role in PIN_ROLES else None,
         password_hash=hash_password(password_seed),
     )
     db.add(user)
@@ -165,9 +158,7 @@ def update_user(
 
     user.username = username
     user.role = body.role
-    user.pin_code = None if body.role == ROLE_ACCOUNT else body.pin_code
-    if body.role == ROLE_ACCOUNT and body.password:
-        user.password_hash = hash_password(body.password)
+    user.pin_code = body.pin_code if body.role in PIN_ROLES else None
 
     try:
         if actor.role == ROLE_ADMIN:

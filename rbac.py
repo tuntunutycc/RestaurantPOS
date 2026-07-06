@@ -7,8 +7,8 @@ ROLE_CASHIER = "cashier"
 ROLE_WAITER = "waiter"
 
 ALL_ROLES = frozenset({ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT, ROLE_CASHIER, ROLE_WAITER})
-PASSWORD_ROLES = frozenset({ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT})
-PIN_ROLES = frozenset({ROLE_CASHIER, ROLE_WAITER})
+PASSWORD_ROLES = frozenset({ROLE_ROOT, ROLE_ADMIN})
+PIN_ROLES = frozenset({ROLE_CASHIER, ROLE_WAITER, ROLE_ACCOUNT})
 # Below admin: one active session per user (new login revokes prior jti).
 SINGLE_DEVICE_ROLES = frozenset({ROLE_ACCOUNT, ROLE_CASHIER, ROLE_WAITER})
 # root and admin may stay logged in on multiple devices concurrently.

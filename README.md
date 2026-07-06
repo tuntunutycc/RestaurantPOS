@@ -251,7 +251,8 @@ Main pages:
 5. **Log in and configure the restaurant**
    - Root → `/counter` → create admin/staff, menu, tables, printers
    - Staff PIN login → `/pin-login`
-   - Password roles (root, admin, account) → `/login`
+   - Password roles (root, admin) → `/login`
+   - PIN roles (cashier, waiter, account) → `/pin-login`
 
 ### Fresh database reset (start from zero)
 

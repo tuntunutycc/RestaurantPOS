@@ -8,7 +8,8 @@
 | Constant | Value (target) | Purpose |
 |----------|----------------|---------|
 | `ROLE_ACCOUNT` | `"account"` | Role identifier |
-| `PASSWORD_ROLES` | includes `account` | Password login + change-password |
+| `PASSWORD_ROLES` | `root`, `admin` only | Password login + change-password |
+| `PIN_ROLES` | includes `account` | PIN login via `/api/auth/login-pin` |
 | `SINGLE_DEVICE_ROLES` | includes `account` | One active session |
 | `FULL_REPORT_ROLES` | root, admin, account | Store report access |
 | `ADMIN_MANAGEABLE_ROLES` | cashier, waiter, account | Staff CRUD targets |
@@ -20,9 +21,9 @@
 
 | Endpoint | account access |
 |----------|----------------|
-| `POST /api/auth/login` | ✓ (password) |
-| `POST /api/auth/login-pin` | ✗ |
-| `POST /api/auth/change-password` | ✓ |
+| `POST /api/auth/login` | ✗ |
+| `POST /api/auth/login-pin` | ✓ |
+| `POST /api/auth/change-password` | ✗ (`403`) |
 | `GET /api/auth/me` | ✓ |
 
 ## Report access (`services/report_access.py`)
@@ -57,7 +58,7 @@ Used by date-ranged report handlers in `routers/reports.py`.
 
 ## Staff provisioning (`routers/users.py`)
 
-- Admin/root create `account` users with password (no PIN).
+- Admin/root create `account` users with **PIN** (password rejected).
 - Account cannot call staff CRUD APIs.
 
 ## Frontend
@@ -68,7 +69,8 @@ Used by date-ranged report handlers in `routers/reports.py`.
 | `static/account.html` | Overview + History tabs, date inputs, charts |
 | `static/account.js` | `requireRole(['account'])`, client date validation, fetches report APIs |
 | `static/auth.js` | `ROLE_DEFAULT_PAGE.account = '/account'` |
-| `static/login.js` | Password login redirect for account |
+| `static/login.js` | Password login for `root`/`admin` only |
+| `static/pin-login.js` | PIN login for `account` → redirect `/account` |
 
 **Not used by account:** `counter.js`, `waiter.js` (guarded by role).
 

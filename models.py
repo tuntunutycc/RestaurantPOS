@@ -229,7 +229,7 @@ class OrderItem(Base):
 
 class User(Base):
     """User account for authentication.
-    Roles: root, admin, account (password login); cashier, waiter (PIN login).
+    Roles: root, admin (password login); cashier, waiter, account (PIN login).
     """
 
     __tablename__ = "users"

@@ -13,10 +13,10 @@ Define the `account` role for finance staff who need **read-only** access to sto
 | Item | Contract |
 |------|----------|
 | Role string | `account` on `User.role` |
-| Login | Username + password via `POST /api/auth/login` |
+| Login | 4-digit PIN via `POST /api/auth/login-pin` (same as cashier/waiter) |
 | Default page | `/account` (`ROLE_DEFAULT_PAGE` in `auth.js`) |
 | Session policy | Single-device (`SINGLE_DEVICE_ROLES`) |
-| Password change | `POST /api/auth/change-password` allowed |
+| Password change | **Forbidden** — `POST /api/auth/change-password` returns `403`; no Change Password UI |
 
 **Must not:**
 - Submit orders (`POST /api/orders/submit` → **403**)
@@ -92,8 +92,8 @@ Constant: `ACCOUNT_MAX_REPORT_DAYS = 90` in `rbac.py`.
 |------|----------|
 | Created by | `root` or `admin` via `POST /api/admin/users` |
 | Role value | `account` in `AdminStaffRole` |
-| Password | Required on create (min 6 chars); optional on update |
-| PIN | Not used (`pin_code = null`) |
+| Password | **Not allowed** — rejected on create/update |
+| PIN | Required on create (4 digits); admin/root may update via staff API |
 
 ---
 

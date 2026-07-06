@@ -1625,9 +1625,6 @@ function resetUserForm() {
   if (usernameEl) usernameEl.value = '';
   if (roleEl) roleEl.value = 'waiter';
   if (pinEl) pinEl.value = '';
-  const accountPassEl = document.getElementById('user-account-password');
-  if (accountPassEl) accountPassEl.value = '';
-  syncStaffRoleFields();
   if (pinWarningEl) pinWarningEl.classList.add('hidden');
   if (pinEl) {
     pinEl.classList.remove('border-rose-500', 'focus:ring-rose-500', 'focus:border-rose-500');
@@ -1901,15 +1898,8 @@ if (btnApplyAuditFilters) {
 }
 
 function syncStaffRoleFields() {
-  const roleEl = document.getElementById('user-role');
-  const pinWrap = document.getElementById('user-pin-wrap');
-  const accountWrap = document.getElementById('user-account-password-wrap');
   const pinEl = document.getElementById('user-pin');
-  if (!roleEl) return;
-  const isAccount = roleEl.value === 'account';
-  if (pinWrap) pinWrap.classList.toggle('hidden', isAccount);
-  if (accountWrap) accountWrap.classList.toggle('hidden', !isAccount);
-  if (pinEl) pinEl.required = !isAccount;
+  if (pinEl) pinEl.required = true;
 }
 
 async function loadUsers() {
@@ -1949,18 +1939,12 @@ if (userForm) {
     const username = document.getElementById('user-username').value.trim().toLowerCase();
     const role = document.getElementById('user-role').value;
     const pin = document.getElementById('user-pin').value.trim();
-    const accountPassword = document.getElementById('user-account-password')?.value || '';
 
     if (!username) {
       if (window.toast) window.toast.error('Username is required.');
       return;
     }
-    if (role === 'account') {
-      if (!userId && accountPassword.length < 6) {
-        if (window.toast) window.toast.error('Account password must be at least 6 characters.');
-        return;
-      }
-    } else if (!renderUserPinValidationState() || !pin) {
+    if (!renderUserPinValidationState() || !pin) {
       if (window.toast) window.toast.error('PIN must be exactly 4 digits.');
       return;
     }
@@ -1970,13 +1954,7 @@ if (userForm) {
       ? `${API_BASE}/api/admin/users/${encodeURIComponent(userId)}`
       : `${API_BASE}/api/admin/users`;
 
-    const payload = { username, role };
-    if (role === 'account') {
-      payload.pin_code = null;
-      if (accountPassword) payload.password = accountPassword;
-    } else {
-      payload.pin_code = pin;
-    }
+    const payload = { username, role, pin_code: pin };
 
     try {
       const res = await fetch(url, {

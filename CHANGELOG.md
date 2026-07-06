@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-07-06 — Account role PIN-only authentication (SDD alignment)
+
+### Summary
+`account` is now a PIN-based role like `cashier`/`waiter`. Only `root` and `admin` use username + password. Change Password is forbidden for `account`.
+
+### Spec
+- `specs/feature-rbac/` — auth matrix, change-password contract, validation checklist
+- `specs/feature-account-reports/` — login, provisioning, validation updated
+
+### Backend
+- `rbac.py` — `PIN_ROLES` includes `account`; `PASSWORD_ROLES` is `root`/`admin` only
+- `routers/auth.py` — change-password `403` for account; login-pin accepts account
+- `routers/users.py` — account requires `pin_code`; rejects `password` on staff API
+
+### Frontend
+- `static/auth.js`, `static/login.js` — Change Password / password login for `root`/`admin` only
+- `static/pin-login.js` — account logs in via PIN → `/account`
+- `static/counter.js`, `counter.html` — staff form uses PIN for all roles including account
+
+### Tests
+- `tests/test_rbac_security_gaps.py` — account in forbidden change-password cases
+- `tests/test_rbac.py` — account PIN provisioning + session tests
+- Full suite: **123 passed** (`PYTHONPATH=. python -m pytest -q`)
+
 ## 2026-07-05 — Multi-cashier real-time checkout sync
 
 ### Summary

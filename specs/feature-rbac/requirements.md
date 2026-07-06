@@ -11,9 +11,11 @@ Define a five-role authorization model for the Myanmar restaurant POS. The syste
 |------|-------------|--------------|-----------------|
 | `root` | username + password | **yes** | Setup, admin accounts, audit logs, full reports, admin panel |
 | `admin` | username + password | **yes** | Staff CRUD (non-admin), POS admin panel, operational reports |
-| `account` | username + password | **no** | Read-only financial reports (≤ 3 months) |
+| `account` | PIN | **no** | Read-only financial reports (≤ 3 months) via `/account` |
 | `cashier` | PIN | **no** | Counter checkout + waiter ordering fallback |
 | `waiter` | PIN | **no** | Tablet ordering only |
+
+**Auth rule (strict):** Only `root` and `admin` may use username + password. `cashier`, `waiter`, and `account` **must** authenticate via `POST /api/auth/login-pin` only. Password self-service (`POST /api/auth/change-password`) is **forbidden** for PIN roles, including `account`.
 
 **Removed:** legacy `kitchen` login role. Kitchen printing remains automatic on order submit (see `specs/feature-kitchen-printing/`).
 
@@ -170,8 +172,8 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 | Soft delete | Preserve historical orders; `ON DELETE SET NULL` on attribution FKs |
 
 ### FR-U3: Password change
-- `POST /api/auth/change-password` for `root`, `admin`, `account`.
-- PIN roles change PIN via staff update endpoints (admin/root only).
+- `POST /api/auth/change-password` for **`root` and `admin` only** → `403` for `account`, `cashier`, and `waiter`.
+- PIN roles (`account`, `cashier`, `waiter`) change PIN via staff update endpoints (admin/root only); no self-service password change UI or API.
 
 ## 7. Audit Logs
 

@@ -56,7 +56,7 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 - [x] **Multi-device:** two concurrent `admin` sessions both valid — `test_multi_device_admin_sessions_both_valid`
 - [ ] **Multi-device:** two concurrent `root` sessions both valid — not explicit test
 - [ ] `device_id` persisted on `UserSession` row after login — not asserted in tests
-- [ ] `POST /api/auth/change-password` succeeds for `root`/`admin`/`account`; fails for PIN roles — not in RBAC suite
+- [x] `POST /api/auth/change-password` succeeds for `root`/`admin`; fails for `account`/`cashier`/`waiter` — `test_rbac_security_gaps.py`
 - [ ] Legacy `kitchen` role user cannot authenticate (`401`) — not automated
 
 ### Manual
@@ -94,7 +94,7 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 - [ ] Fresh install: `/login` → `/setup` → create root → login as root
 - [ ] Root uses **Admin Accounts** tab: create admin, reset password, edit, delete
 - [ ] Admin uses **Staff Management**: create cashier, waiter, account (no admin in role dropdown)
-- [ ] **Change Password** modal works for root/admin/account
+- [ ] **Change Password** modal works for root/admin only (hidden for `account`, `cashier`, `waiter`)
 - [x] Root **Audit Logs** tab implemented (`counter.html` + `counter.js`); manual sign-off: verify as root on live `/counter`
 - [x] Admin attempting staff form with `admin` role is blocked in UI and API — API: `TestScenario2AdminCannotCreateAdmin`; UI: staff role dropdown excludes admin/root
 

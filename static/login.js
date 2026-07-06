@@ -3,7 +3,7 @@
   const submitBtn = document.getElementById("login-submit");
   const errorEl = document.getElementById("login-error");
   const unauthorizedEl = document.getElementById("login-unauthorized");
-  const PASSWORD_ROLES = ["root", "admin", "account"];
+  const PASSWORD_ROLES = ["root", "admin"];
 
   function deviceId() {
     return window.posDevice && window.posDevice.getDeviceId ? window.posDevice.getDeviceId() : "unknown";

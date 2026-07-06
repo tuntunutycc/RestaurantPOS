@@ -16,7 +16,7 @@ PYTHONPATH=. pytest tests/test_rbac.py::test_account_cannot_submit_orders \
 
 | # | Scenario | Test (planned) | Expected |
 |---|----------|----------------|----------|
-| 1 | Account can login with password | existing auth tests | 200 + JWT |
+| 1 | Account can login with PIN | `auth_headers("account")` / login-pin tests | 200 + JWT |
 | 2 | Account cannot submit orders | `test_account_cannot_submit_orders` | **403** |
 | 3 | Account cannot access staff breakdown | new: `test_account_cannot_access_by_order_staff` | **403** |
 | 4 | Account cannot access promoted report | `test_account_cannot_access_promoted_report` | **403** |

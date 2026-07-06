@@ -26,7 +26,7 @@ def _device_id(raw: str | None) -> str:
 
 @router.post("/login-pin", response_model=TokenResponse)
 def login_pin(body: LoginPinRequest, db: Session = Depends(get_db)):
-    """Authenticate with 4-digit PIN (cashier, waiter). Single-device: new login revokes prior sessions."""
+    """Authenticate with 4-digit PIN (cashier, waiter, account). Single-device: new login revokes prior sessions."""
     user = (
         db.query(User)
         .filter(User.pin_code == body.pin_code, User.is_deleted.is_(False))
@@ -49,10 +49,9 @@ def login_pin(body: LoginPinRequest, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(body: LoginRequest, db: Session = Depends(get_db)):
     """
-    Authenticate with username and password (root, admin, account).
+    Authenticate with username and password (root, admin only).
 
     root/admin: multi-device sessions allowed.
-    account: single-device — new login revokes prior sessions.
     """
     user = (
         db.query(User)
@@ -98,7 +97,7 @@ def change_password(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Change own password (root, admin, account)."""
+    """Change own password (root, admin only). PIN roles receive 403."""
     if user.role not in PASSWORD_ROLES:
         raise HTTPException(status_code=403, detail="Password change not allowed for this role")
     if len(body.new_password) < 6:

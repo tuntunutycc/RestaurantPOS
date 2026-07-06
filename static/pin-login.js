@@ -67,7 +67,7 @@
         if (!data || !data.access_token || !data.user) return;
         if (window.auth) window.auth.setAuth(data.access_token, data.user);
         const role = data.user.role;
-        const PIN_ROLES = ["waiter", "cashier"];
+        const PIN_ROLES = ["waiter", "cashier", "account"];
         if (!PIN_ROLES.includes(role)) {
           if (window.toast && window.toast.error) {
             window.toast.error("This account role is not allowed to log in here.");
@@ -75,7 +75,9 @@
           if (window.auth) window.auth.clearAuth();
           return;
         }
-        const page = role === "waiter" ? "/waiter" : "/counter";
+        let page = "/counter";
+        if (role === "waiter") page = "/waiter";
+        else if (role === "account") page = "/account";
         window.location.href = page;
       })
       .catch(() => {
@@ -103,11 +105,14 @@
   // Already logged in → redirect by role
   if (window.auth && window.auth.getToken() && window.auth.getUser()) {
     const user = window.auth.getUser();
-    if (!["waiter", "cashier"].includes(user.role)) {
+    if (!["waiter", "cashier", "account"].includes(user.role)) {
       window.auth.clearAuth();
       return;
     }
-    window.location.href = user.role === "waiter" ? "/waiter" : "/counter";
+    let page = "/counter";
+    if (user.role === "waiter") page = "/waiter";
+    else if (user.role === "account") page = "/account";
+    window.location.href = page;
     return;
   }
 
