@@ -247,6 +247,7 @@ let selectedOrderId = null;
 let selectedTableNumber = null;
 let selectedOrderTotal = 0;
 let selectedOrderSubtotal = 0;
+let selectedOrderVisibleItems = [];
 let cashierZones = [];
 let cashierActiveZoneId = null;
 let menuItemsCache = [];
@@ -1078,13 +1079,29 @@ function roundMoney(value) {
   return Math.round(safe * 100) / 100;
 }
 
+function computeOrderLineTaxTotal(items) {
+  return roundMoney((items || []).reduce((sum, item) => {
+    const unitTax = Number(item?.unit_tax_at_sale ?? 0);
+    const qty = Number(item?.quantity) || 0;
+    return sum + unitTax * qty;
+  }, 0));
+}
+
+function syncTaxValueFieldState() {
+  const taxTypeEl = document.getElementById('item-tax-type');
+  const taxValueEl = document.getElementById('item-tax-value');
+  if (!taxTypeEl || !taxValueEl) return;
+  const isNone = String(taxTypeEl.value || 'none') === 'none';
+  taxValueEl.disabled = isNone;
+  if (isNone) taxValueEl.value = '0';
+}
+
 function recalculateCheckoutTotals() {
   const subtotal = Number.isFinite(selectedOrderSubtotal) ? selectedOrderSubtotal : 0;
   const { type, value } = getCheckoutDiscountState();
   const discountAmount = roundMoney(calculateOrderDiscountAmount(subtotal, type, value));
-  const taxableAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
-  const taxAmount = roundMoney(taxableAmount * 0.05);
-  const finalTotal = roundMoney(taxableAmount + taxAmount);
+  const taxAmount = computeOrderLineTaxTotal(selectedOrderVisibleItems);
+  const finalTotal = roundMoney(Math.max(subtotal - discountAmount, 0));
 
   const subtotalEl = document.getElementById('receipt-subtotal');
   const discountEl = document.getElementById('receipt-discount-amount');
@@ -1249,7 +1266,7 @@ function renderTakeawayOrders(orders) {
         class="w-full text-left border border-orange-200 rounded-md p-2 bg-orange-50 hover:bg-orange-100"
       >
         <div class="flex items-center justify-between gap-2">
-          <span class="text-sm font-medium text-orange-800">${escapeHtml(t('order', 'Order'))} #${o.id}</span>
+          <span class="text-sm font-medium text-orange-800">${escapeHtml(formatTakeawayOrderLabel(o.id))}</span>
           <span class="text-xs text-orange-700">${escapeHtml(t('total', 'Total'))}: ${formatMoney(Number(o.total_amount || 0))}</span>
         </div>
         <div class="text-xs text-orange-700 mt-0.5">${escapeHtml(t('customer', 'Customer'))}: ${escapeHtml(customer)}</div>
@@ -1310,15 +1327,22 @@ function clearCheckoutSelection() {
   selectedTableNumber = null;
   selectedOrderTotal = 0;
   selectedOrderSubtotal = 0;
+  selectedOrderVisibleItems = [];
   document.getElementById('receipt-container')?.classList.add('hidden');
   document.getElementById('receipt-placeholder')?.classList.remove('hidden');
 }
 
 function handleRemoteOrderClosed(data) {
   if (!data) return;
-  loadUnpaidOrders();
+  const status = String(data.status || '').toLowerCase();
   const orderId = data.order_id != null ? data.order_id : data.id;
-  if (orderId != null && selectedOrderId != null && Number(orderId) === Number(selectedOrderId)) {
+  loadUnpaidOrders();
+  if (
+    orderId != null &&
+    selectedOrderId != null &&
+    Number(orderId) === Number(selectedOrderId) &&
+    (status === 'cancelled' || status === 'paid')
+  ) {
     clearCheckoutSelection();
   }
 }
@@ -1328,6 +1352,7 @@ function selectOrder(order) {
   selectedOrderId = order.id;
   selectedTableNumber = order.table_number;
   const visibleItems = (order.items || []).filter((i) => String(i?.item_status || '').toLowerCase() !== 'cancelled');
+  selectedOrderVisibleItems = visibleItems;
   selectedOrderSubtotal = visibleItems.reduce((sum, i) => sum + (Number(i.subtotal) || 0), 0);
   selectedOrderTotal = selectedOrderSubtotal;
   document.getElementById('receipt-placeholder').classList.add('hidden');
@@ -1338,7 +1363,7 @@ function selectOrder(order) {
   const customer = String(order.customer_name || '').trim() || t('walk_in', 'Walk-in');
   if (checkoutHeaderEl) {
     checkoutHeaderEl.textContent = isTakeaway
-      ? `${t('checkout', 'Checkout')} - ${t('takeaway', 'Takeaway')} (${t('customer', 'Customer')}: ${customer})`
+      ? `${t('checkout', 'Checkout')} - ${formatTakeawayOrderLabel(order.id)} (${t('customer', 'Customer')}: ${customer})`
       : `${t('checkout', 'Checkout')} - ${t('table', 'Table')} ${orderTableLabel(order)}`;
   }
   const itemsRows = visibleItems
@@ -1414,8 +1439,7 @@ function renderReceiptForPrint(order) {
     const discountType = String(order.discount_type || '').toLowerCase();
     const discountValue = Number(order.discount_value) || 0;
     const discountAmount = roundMoney(calculateOrderDiscountAmount(subtotal, discountType, discountValue));
-    const taxableAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
-    const taxAmount = roundMoney(Number(order.tax_amount) || (taxableAmount * 0.05));
+    const taxAmount = roundMoney(Number(order.tax_amount) || computeOrderLineTaxTotal(visibleItems));
     if (rpItems) rpItems.innerHTML = rows || '<div class="text-sm text-slate-600">No items</div>';
     if (rpSubtotal) rpSubtotal.textContent = formatMoney(subtotal);
     if (rpDiscount) rpDiscount.textContent = formatMoneyNegative(discountAmount);
@@ -2142,9 +2166,16 @@ function tableDisplayName(t) {
   return t.name || t.name_or_number || `#${t.id}`;
 }
 
+function formatTakeawayOrderLabel(orderId) {
+  return `🛍️ ${t('takeaway', 'Takeaway')} #${orderId}`;
+}
+
 function orderTableLabel(order) {
   const isTakeaway = String(order?.order_type || '').toLowerCase() === 'takeaway';
-  if (isTakeaway) return t('takeaway', 'Takeaway');
+  if (isTakeaway || (order?.table_id == null && order?.id != null)) {
+    if (order?.id != null) return formatTakeawayOrderLabel(order.id);
+    return t('takeaway', 'Takeaway');
+  }
   if (order?.table_id == null && order?.table_number == null) return t('deleted_table', '[Deleted Table]');
   if (order?.table_number != null) return order.table_number;
   return t('unknown', 'Unknown');
@@ -2589,9 +2620,16 @@ function resetMenuItemFormMode() {
   cancelBtn.classList.add('hidden');
   editId.value = '';
   const discountInput = document.getElementById('item-discount-price');
+  const takeawayInput = document.getElementById('item-takeaway-price');
+  const taxTypeInput = document.getElementById('item-tax-type');
+  const taxValueInput = document.getElementById('item-tax-value');
   const promotedInput = document.getElementById('item-is-promoted');
   if (discountInput) discountInput.value = '';
+  if (takeawayInput) takeawayInput.value = '';
+  if (taxTypeInput) taxTypeInput.value = 'none';
+  if (taxValueInput) taxValueInput.value = '0';
   if (promotedInput) promotedInput.checked = false;
+  syncTaxValueFieldState();
 }
 
 function startMenuItemEdit(itemId) {
@@ -2615,6 +2653,13 @@ function startMenuItemEdit(itemId) {
   document.getElementById('item-name').value = item.name || '';
   document.getElementById('item-price').value = Number(item.price || 0);
   document.getElementById('item-discount-price').value = item.discount_price != null ? Number(item.discount_price) : '';
+  const takeawayInput = document.getElementById('item-takeaway-price');
+  if (takeawayInput) takeawayInput.value = item.takeaway_price != null ? Number(item.takeaway_price) : '';
+  const taxTypeInput = document.getElementById('item-tax-type');
+  const taxValueInput = document.getElementById('item-tax-value');
+  if (taxTypeInput) taxTypeInput.value = String(item.tax_type || 'none');
+  if (taxValueInput) taxValueInput.value = Number(item.tax_value || 0);
+  syncTaxValueFieldState();
   document.getElementById('item-description').value = item.description || '';
   document.getElementById('item-category').value = String(item.category_id || '');
   document.getElementById('item-image-url').value = item.image_url || '';
@@ -2629,6 +2674,73 @@ function printerRouteLabel(route) {
   if (normalized === 'drinks') return 'Drinks';
   if (normalized === 'food') return 'Food counter';
   return 'Food counter (default)';
+}
+
+function openCategoryEditModal(categoryId, currentName) {
+  const modal = document.getElementById('category-edit-modal');
+  const idEl = document.getElementById('category-edit-id');
+  const nameEl = document.getElementById('category-edit-name');
+  if (!modal || !idEl || !nameEl) return;
+  idEl.value = String(categoryId);
+  nameEl.value = currentName || '';
+  modal.classList.remove('hidden');
+  nameEl.focus();
+  nameEl.select();
+}
+
+function closeCategoryEditModal() {
+  const modal = document.getElementById('category-edit-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function bindCategoryEditModal() {
+  const form = document.getElementById('category-edit-form');
+  const cancelBtn = document.getElementById('category-edit-cancel');
+  const modal = document.getElementById('category-edit-modal');
+  if (!form || form.dataset.bound === '1') return;
+  form.dataset.bound = '1';
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => closeCategoryEditModal());
+  }
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeCategoryEditModal();
+    });
+  }
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const categoryId = Number(document.getElementById('category-edit-id')?.value);
+    const nameEl = document.getElementById('category-edit-name');
+    const trimmed = String(nameEl?.value || '').trim();
+    if (!categoryId || !trimmed) {
+      await dialogAlert('Category name cannot be empty.', 'error', 'Edit Category');
+      return;
+    }
+    const saveBtn = document.getElementById('category-edit-save');
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/api/categories/${encodeURIComponent(categoryId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (window.auth && window.auth.checkUnauthorized(res)) return;
+      const err = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detail = typeof err.detail === 'string' ? err.detail : 'Failed to update category';
+        await dialogAlert(detail, 'error', 'Edit Category');
+        return;
+      }
+      closeCategoryEditModal();
+      await loadMenuData();
+    } catch (err) {
+      console.error(err);
+      await dialogAlert('Failed to update category', 'error', 'Edit Category');
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
 }
 
 function renderCategories(categories) {
@@ -2647,8 +2759,8 @@ function renderCategories(categories) {
             <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${escapeHtml(printerRouteLabel(currentRoute))}</span>
           </div>
           <div class="flex flex-wrap items-center gap-2">
-            <button type="button" data-edit-category-id="${c.id}" data-category-name="${escapeAttr(c.name)}" class="text-xs px-2 py-1 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50" title="Edit category name">Edit</button>
-            <button type="button" data-delete-category-id="${c.id}" data-category-name="${escapeAttr(c.name)}" class="text-xs px-2 py-1 border border-red-200 text-red-700 rounded-md hover:bg-red-50" title="Delete category">Delete</button>
+            <button type="button" data-edit-category-id="${c.id}" data-category-name="${escapeAttr(c.name)}" class="text-xs px-2 py-1.5 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 font-medium" title="Edit category name">Edit</button>
+            <button type="button" data-delete-category-id="${c.id}" data-category-name="${escapeAttr(c.name)}" class="text-xs px-2 py-1.5 border border-red-200 text-red-700 rounded-md hover:bg-red-50 font-medium" title="Delete category">Delete</button>
             <select data-category-route-id="${c.id}" class="text-sm px-2 py-1 border border-slate-300 rounded-md">
               <option value="" ${currentRoute === '' ? 'selected' : ''}>Default (Food)</option>
               <option value="food" ${currentRoute === 'food' ? 'selected' : ''}>Food counter</option>
@@ -2692,39 +2804,11 @@ function renderCategories(categories) {
   });
 
   el.querySelectorAll('[data-edit-category-id]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', () => {
       const categoryId = Number(btn.getAttribute('data-edit-category-id'));
       const currentName = btn.getAttribute('data-category-name') || '';
       if (!categoryId) return;
-      const newName = window.prompt('Enter new category name:', currentName);
-      if (newName === null) return;
-      const trimmed = String(newName).trim();
-      if (!trimmed) {
-        await dialogAlert('Category name cannot be empty.', 'error', 'Edit Category');
-        return;
-      }
-      if (trimmed === currentName) return;
-      btn.disabled = true;
-      try {
-        const res = await fetch(`${API_BASE}/api/categories/${encodeURIComponent(categoryId)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-          body: JSON.stringify({ name: trimmed }),
-        });
-        if (window.auth && window.auth.checkUnauthorized(res)) return;
-        const err = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const detail = typeof err.detail === 'string' ? err.detail : 'Failed to update category';
-          await dialogAlert(detail, 'error', 'Edit Category');
-          return;
-        }
-        await loadMenuData();
-      } catch (err) {
-        console.error(err);
-        await dialogAlert('Failed to update category', 'error', 'Edit Category');
-      } finally {
-        btn.disabled = false;
-      }
+      openCategoryEditModal(categoryId, currentName);
     });
   });
 
@@ -3086,6 +3170,8 @@ document.getElementById('item-image-file').addEventListener('change', async (e) 
   e.target.value = '';
 });
 
+document.getElementById('item-tax-type')?.addEventListener('change', syncTaxValueFieldState);
+
 document.getElementById('form-menu-item').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = document.getElementById('form-menu-item');
@@ -3093,6 +3179,11 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
   const price = parseFloat(document.getElementById('item-price').value);
   const discountPriceRaw = document.getElementById('item-discount-price').value.trim();
   const discountPrice = discountPriceRaw === '' ? null : parseFloat(discountPriceRaw);
+  const takeawayPriceRaw = document.getElementById('item-takeaway-price')?.value.trim() ?? '';
+  const takeawayPrice = takeawayPriceRaw === '' ? null : parseFloat(takeawayPriceRaw);
+  const taxType = String(document.getElementById('item-tax-type')?.value || 'none');
+  const taxValueRaw = document.getElementById('item-tax-value')?.value.trim() ?? '0';
+  const taxValue = taxType === 'none' ? 0 : parseFloat(taxValueRaw || '0');
   const description = document.getElementById('item-description').value.trim() || null;
   const categoryId = document.getElementById('item-category').value;
   const imageUrl = document.getElementById('item-image-url').value.trim() || null;
@@ -3102,6 +3193,8 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
   const isEditMode = form?.getAttribute('data-mode') === 'edit' && !!editItemId;
   if (!name || isNaN(price) || price < 0 || !categoryId) return;
   if (discountPrice !== null && (Number.isNaN(discountPrice) || discountPrice < 0)) return;
+  if (takeawayPrice !== null && (Number.isNaN(takeawayPrice) || takeawayPrice < 0)) return;
+  if (taxType !== 'none' && (Number.isNaN(taxValue) || taxValue < 0)) return;
   if (imageFile && !imageUrl) {
     await dialogAlert('Please wait for image upload to finish.', 'error', 'Upload In Progress');
     return;
@@ -3114,6 +3207,9 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
         name,
         price,
         discount_price: discountPrice,
+        takeaway_price: takeawayPrice,
+        tax_type: taxType,
+        tax_value: taxValue,
         category_id: parseInt(categoryId, 10),
         description,
         image_url: imageUrl,
@@ -3127,6 +3223,9 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
           name,
           price,
           discount_price: discountPrice,
+          takeaway_price: takeawayPrice,
+          tax_type: taxType,
+          tax_value: taxValue,
           category_id: parseInt(categoryId, 10),
           description,
           image_url: imageUrl,
@@ -3182,15 +3281,23 @@ function connectCounterWebSocket() {
     try {
       const msg = JSON.parse(event.data);
       if (msg.event === 'new_order_batch' && msg.data) {
-        // A new batch was submitted (new order or add-on). Refresh the tables list.
         loadUnpaidOrders();
-        // If we are currently viewing this table, refresh the receipt too.
         const data = msg.data;
         const tableRef = data.table_id || data.table_number;
-        if (selectedOrderId != null && data.order_id === selectedOrderId && tableRef) {
-          fetchActiveOrderByTable(tableRef)
-            .then((order) => selectOrder(order))
-            .catch(() => {});
+        const isTakeawayBatch = String(data.order_type || '').toLowerCase() === 'takeaway' || (!tableRef && data.order_id);
+        if (selectedOrderId != null && data.order_id === selectedOrderId && (tableRef || isTakeawayBatch)) {
+          if (isTakeawayBatch && !tableRef) {
+            fetch(`${API_BASE}/api/orders/${data.order_id}/details`, {
+              headers: { ...window.auth.getAuthHeaders() },
+            })
+              .then((res) => (res.ok ? res.json() : null))
+              .then((order) => order && selectOrder(order))
+              .catch(() => {});
+          } else {
+            fetchActiveOrderByTable(tableRef)
+              .then((order) => selectOrder(order))
+              .catch(() => {});
+          }
         }
       }
       if (msg.event === 'order_updated' && msg.data && msg.data.status) {
@@ -3201,11 +3308,19 @@ function connectCounterWebSocket() {
           loadUnpaidOrders();
         }
       }
+      if (msg.event === 'order_cancelled' && msg.data) {
+        handleRemoteOrderClosed(msg.data);
+      }
       if (msg.event === 'order_completed' && msg.data) {
         handleRemoteOrderClosed(msg.data);
       }
       if (msg.event === 'takeaways_updated') {
-        handleRemoteOrderClosed(msg.data || {});
+        const status = String(msg.data?.status || '').toLowerCase();
+        if (status === 'cancelled' || status === 'paid') {
+          handleRemoteOrderClosed(msg.data || {});
+        } else {
+          loadUnpaidOrders();
+        }
       }
       if (msg.event === 'table_grid_updated' || msg.event === 'table_status_changed') {
         loadUnpaidOrders();
@@ -3235,6 +3350,7 @@ function connectCounterWebSocket() {
 }
 
 // Initial load only when authenticated and role-allowed.
+bindCategoryEditModal();
 if (
   window.auth &&
   window.auth.getToken() &&

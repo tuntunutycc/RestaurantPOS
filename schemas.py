@@ -54,6 +54,7 @@ PrinterRenderModeLiteral = Literal["text", "image"]
 TableStatusLiteral = Literal["available", "occupied"]
 OrderItemStatusLiteral = Literal["pending", "cooking", "served", "cancelled"]
 OrderStatusLiteral = Literal["pending", "open", "dining", "completed", "paid", "cancelled"]
+MenuTaxTypeLiteral = Literal["none", "percentage", "fixed"]
 
 
 class UserCreateRequest(BaseModel):
@@ -298,6 +299,9 @@ class MenuItemCreate(BaseModel):
     name: str
     price: float
     discount_price: float | None = None
+    takeaway_price: float | None = None
+    tax_type: MenuTaxTypeLiteral = "none"
+    tax_value: float = 0.0
     category_id: int
     description: str | None = None
     image_url: str | None = None
@@ -315,6 +319,9 @@ class MenuItemResponse(BaseModel):
     name: str
     price: float
     discount_price: float | None = None
+    takeaway_price: float | None = None
+    tax_type: MenuTaxTypeLiteral = "none"
+    tax_value: float = 0.0
     category_id: int
     description: str | None = None
     image_url: str | None = None
@@ -335,6 +342,9 @@ class MenuItemUpdate(BaseModel):
     name: str | None = None
     price: float | None = None
     discount_price: float | None = None
+    takeaway_price: float | None = None
+    tax_type: MenuTaxTypeLiteral | None = None
+    tax_value: float | None = None
     category_id: int | None = None
     description: str | None = None
     image_url: str | None = None
@@ -348,6 +358,7 @@ class OrderItemCreate(BaseModel):
 
     menu_item_id: int
     quantity: int
+    is_takeaway: bool = False
     selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
     note: str | None = None
     special_instructions: str | None = None
@@ -379,6 +390,7 @@ class OrderCreate(BaseModel):
 class OrderSubmitRequest(BaseModel):
     """Schema for submit order (create new or add to existing). table_id = table number."""
 
+    order_id: int | None = None
     table_id: int | None = None
     order_type: Literal["dine_in", "takeaway"] = "dine_in"
     customer_name: str | None = None
@@ -417,6 +429,7 @@ class OrderItemDetail(BaseModel):
     menu_item_name: str
     quantity: int
     subtotal: float
+    unit_tax_at_sale: float | None = 0.0
     batch_number: int = 1
     item_status: OrderItemStatusLiteral | None = None
     menu_item_image_url: str | None = None
@@ -433,7 +446,10 @@ class OrderItemDetailsResponse(BaseModel):
     menu_item_name: str
     quantity: int
     subtotal: float
+    unit_price_at_sale: float | None = None
+    unit_tax_at_sale: float | None = 0.0
     item_status: OrderItemStatusLiteral
+    is_takeaway: bool = False
     waiter_name: str | None = None
     selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
     note: str | None = None
@@ -470,6 +486,9 @@ class OrderDetailsResponse(BaseModel):
     discount_value: float | None = 0.0
     created_at: datetime
     items: List[OrderItemDetailsResponse]
+    breakdown_subtotal: float = 0.0
+    breakdown_tax_total: float = 0.0
+    breakdown_grand_total: float = 0.0
 
 
 class OrderResponseDetail(BaseModel):
@@ -539,6 +558,7 @@ class OrderResponseDetail(BaseModel):
                     ),
                     quantity=oi.quantity,
                     subtotal=float(oi.subtotal),
+                    unit_tax_at_sale=float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0),
                     batch_number=getattr(oi, "batch_number", 1),
                     item_status=getattr(oi, "item_status", getattr(oi, "status", "pending")),
                     menu_item_image_url=getattr(oi.menu_item, "image_url", None),
@@ -683,3 +703,6 @@ class ActiveTakeawayOrderResponse(BaseModel):
     total_amount: float
     created_at: datetime
     items: List[OrderItemDetailsResponse]
+    breakdown_subtotal: float = 0.0
+    breakdown_tax_total: float = 0.0
+    breakdown_grand_total: float = 0.0

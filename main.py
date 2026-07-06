@@ -228,7 +228,52 @@ async def lifespan(app: FastAPI):
     try:
         from sqlalchemy import text
         with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE order_items "
+                    "ADD COLUMN is_takeaway BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
             conn.execute(text("ALTER TABLE menu_items ADD COLUMN discount_price FLOAT"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE menu_items ADD COLUMN takeaway_price FLOAT"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE menu_items "
+                    "ADD COLUMN tax_type VARCHAR(32) NOT NULL DEFAULT 'none'"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE menu_items "
+                    "ADD COLUMN tax_value FLOAT NOT NULL DEFAULT 0.0"
+                )
+            )
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE order_items ADD COLUMN unit_tax_at_sale FLOAT"))
     except Exception:
         pass
     try:

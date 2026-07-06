@@ -63,6 +63,14 @@ async function fetchTableGrid() {
   return fetchJson(`${API_BASE}/api/tables/grid`);
 }
 
+async function fetchActiveTakeawayOrders() {
+  return fetchJson(`${API_BASE}/api/orders/active-takeaways`);
+}
+
+function formatTakeawayOrderLabel(orderId) {
+  return `🛍️ ${t('takeaway', 'Takeaway')} #${orderId}`;
+}
+
 async function fetchOrderDetails(orderId) {
   return fetchJson(`${API_BASE}/api/orders/${orderId}/details`);
 }
@@ -194,6 +202,62 @@ async function openOrderSidebar(orderId, tableName) {
   await renderOrderDetails(orderId);
 }
 
+async function openTakeawayOrderSidebar(orderId) {
+  const subtitle = document.getElementById('sidebar-subtitle');
+  if (subtitle) subtitle.textContent = formatTakeawayOrderLabel(orderId);
+  selectedTableLabel = formatTakeawayOrderLabel(orderId);
+  openSidebar();
+  await renderOrderDetails(orderId);
+}
+
+function renderTakeawayOrdersGrid(orders) {
+  const container = document.getElementById('takeaway-orders-grid');
+  if (!container) return;
+  const list = Array.isArray(orders) ? orders : [];
+  if (!list.length) {
+    container.innerHTML = '<p class="col-span-full text-slate-500 text-sm">No active walk-in takeaway orders.</p>';
+    return;
+  }
+  container.innerHTML = list
+    .map((order) => {
+      const orderId = Number(order.id);
+      const customer = String(order.customer_name || '').trim() || t('walk_in', 'Walk-in');
+      const items = Array.isArray(order.items) ? order.items : [];
+      const pending = items.filter((i) => String(i.item_status || '').toLowerCase() !== 'served').length;
+      return `
+        <button
+          type="button"
+          data-takeaway-order-id="${orderId}"
+          class="takeaway-card border-2 border-orange-300 rounded-lg p-3 text-left bg-orange-50 hover:bg-orange-100 hover:shadow"
+        >
+          <div class="text-sm font-semibold text-orange-900">${escapeHtml(formatTakeawayOrderLabel(orderId))}</div>
+          <div class="text-xs text-orange-800 mt-1">${escapeHtml(customer)}</div>
+          <div class="text-xs text-slate-600 mt-1">${escapeHtml(t('pending', 'Pending'))}: ${pending}</div>
+        </button>
+      `;
+    })
+    .join('');
+  container.querySelectorAll('.takeaway-card').forEach((card) => {
+    card.addEventListener('click', async () => {
+      const orderId = Number(card.dataset.takeawayOrderId);
+      if (!orderId) return;
+      selectedOrderId = orderId;
+      await openTakeawayOrderSidebar(orderId);
+    });
+  });
+}
+
+async function refreshTakeawayOrders() {
+  try {
+    const orders = await fetchActiveTakeawayOrders();
+    renderTakeawayOrdersGrid(orders || []);
+  } catch (err) {
+    console.error(err);
+    const container = document.getElementById('takeaway-orders-grid');
+    if (container) container.innerHTML = `<p class="col-span-full text-red-600 text-sm">${escapeHtml(err.message || 'Failed to load takeaway orders')}</p>`;
+  }
+}
+
 function statusButtons(item) {
   const statuses = ['pending', 'cooking', 'served'];
   const current = String(item.item_status || 'pending');
@@ -276,6 +340,7 @@ async function refreshGrid() {
   }
   renderZoneTabs();
   renderTablesGrid();
+  await refreshTakeawayOrders();
 }
 
 function connectWebSocket() {
@@ -288,7 +353,8 @@ function connectWebSocket() {
         msg.event === 'table_grid_updated' ||
         msg.event === 'table_status_changed' ||
         msg.event === 'new_order_batch' ||
-        msg.event === 'order_updated'
+        msg.event === 'order_updated' ||
+        msg.event === 'takeaways_updated'
       ) {
         await refreshGrid();
         if (selectedOrderId) {

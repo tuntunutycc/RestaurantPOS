@@ -82,10 +82,42 @@ function modifiersTotal(selectedModifiers) {
   return normalizeSelectedModifiers(selectedModifiers).reduce((sum, m) => sum + toNumber(m.price, 0), 0);
 }
 
-function getEffectiveBasePrice(menuItem) {
+function getEffectiveBasePrice(menuItem, isTakeaway = false) {
+  if (isTakeaway && menuItem?.takeaway_price != null) {
+    return toNumber(menuItem.takeaway_price, 0);
+  }
   const discount = toNumber(menuItem?.discount_price, 0);
   if (discount > 0) return discount;
   return toNumber(menuItem?.price, 0);
+}
+
+function defaultCartLineTakeaway() {
+  if (!activeOrderContext) return false;
+  if (activeOrderContext.walk_in === true) return true;
+  if (activeOrderContext.append_mode === true) return true;
+  return activeOrderContext.type === 'takeaway';
+}
+
+function formatTakeawayOrderLabel(orderId) {
+  return `🛍️ ${t('takeaway', 'Takeaway')} #${orderId}`;
+}
+
+function roundMoney(value) {
+  const safe = Number.isFinite(value) ? value : 0;
+  return Math.round(safe * 100) / 100;
+}
+
+function computeUnitTax(menuItem, isTakeaway = false) {
+  const base = getEffectiveBasePrice(menuItem, isTakeaway);
+  const taxType = String(menuItem?.tax_type || 'none').toLowerCase();
+  const taxValue = toNumber(menuItem?.tax_value, 0);
+  if (taxType === 'percentage' && taxValue > 0) return roundMoney(base * (taxValue / 100));
+  if (taxType === 'fixed' && taxValue > 0) return roundMoney(taxValue);
+  return 0;
+}
+
+function computeLineUnitPrice(menuItem, selectedModifiers, isTakeaway = false) {
+  return getEffectiveBasePrice(menuItem, isTakeaway) + computeUnitTax(menuItem, isTakeaway) + modifiersTotal(selectedModifiers);
 }
 
 function getMenuPriceHtml(menuItem) {
@@ -102,12 +134,12 @@ function getMenuPriceHtml(menuItem) {
   return `<span class="text-sm text-slate-600 block">${formatMoney(normal)}</span>`;
 }
 
-function buildCartLineKey(menuItemId, selectedModifiers, specialInstructions) {
+function buildCartLineKey(menuItemId, selectedModifiers, specialInstructions, isTakeaway = false) {
   const normalized = normalizeSelectedModifiers(selectedModifiers)
     .map((m) => ({ name: m.name, price: Number(m.price.toFixed(2)), group: m.group || null }))
     .sort((a, b) => `${a.group || ''}|${a.name}`.localeCompare(`${b.group || ''}|${b.name}`));
   const note = String(specialInstructions || '').trim();
-  return `${menuItemId}::${JSON.stringify(normalized)}::${note}`;
+  return `${menuItemId}::${JSON.stringify(normalized)}::${note}::${isTakeaway ? '1' : '0'}`;
 }
 
 function getMenuItemById(id) {
@@ -505,8 +537,21 @@ function renderSelectedTableLabel() {
     return;
   }
   if (activeOrderContext.type === 'takeaway') {
-    const customer = String(activeOrderContext.customer_name || '').trim() || t('guest', 'Guest');
-    label.innerHTML = `${escapeHtml(t('selected', 'Selected'))}: <span class="inline-flex items-center px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">${escapeHtml(t('takeaway', 'Takeaway'))} - ${escapeHtml(t('customer', 'Customer'))}: ${escapeHtml(customer)}</span>`;
+    if (activeOrderContext.append_mode && activeOrderContext.source_order_id) {
+      const customer = String(activeOrderContext.customer_name || '').trim() || t('walk_in', 'Walk-in');
+      label.innerHTML = `${escapeHtml(t('selected', 'Selected'))}: <span class="inline-flex items-center px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">${escapeHtml(t('adding_to_takeaway', 'Adding to Takeaway'))}: ${escapeHtml(customer)}</span>`;
+      return;
+    }
+    if (activeOrderContext.walk_in) {
+      label.innerHTML = `${escapeHtml(t('selected', 'Selected'))}: <span class="inline-flex items-center px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">🛍️ ${escapeHtml(t('walk_in_takeaway', 'Walk-in Takeaway'))}</span>`;
+      return;
+    }
+    const customer = String(activeOrderContext.customer_name || '').trim() || t('walk_in', 'Walk-in');
+    const orderId = activeOrderContext.source_order_id;
+    const contextLabel = orderId
+      ? formatTakeawayOrderLabel(orderId)
+      : `${t('takeaway', 'Takeaway')} - ${t('customer', 'Customer')}: ${customer}`;
+    label.innerHTML = `${escapeHtml(t('selected', 'Selected'))}: <span class="inline-flex items-center px-2 py-1 rounded bg-orange-100 text-orange-700 font-medium">${escapeHtml(contextLabel)}</span>`;
     return;
   }
   const selected = zones.flatMap((z) => z.tables || []).find((t) => t.id === activeOrderContext.table_id);
@@ -655,12 +700,10 @@ function renderTakeawayOrdersList(orders) {
       const orderId = Number(orderBtn.getAttribute('data-takeaway-order-id'));
       const order = takeawayOrdersById.get(orderId);
       if (!order) return;
-      const customer = String(order.customer_name || '').trim() || t('walk_in', 'Walk-in');
       openOrderDetails({
-        orderId: order.id,
+        orderId,
         orderType: 'takeaway',
-        customerName: customer,
-        initialOrderData: order,
+        customerName: order.customer_name || '',
       }).catch((err) => {
         console.error(err);
         showError(err.message || t('load_failed', 'Load Failed'));
@@ -709,8 +752,11 @@ function renderTakeawayOrdersList(orders) {
     if (card.dataset.signature !== signature) {
       card.dataset.signature = signature;
       card.innerHTML = `
-        <div class="font-semibold text-slate-800">${escapeHtml(t('takeaway', 'Takeaway'))} - ${escapeHtml(customer)}</div>
-        <div class="text-xs text-slate-600 mt-1">Order #${orderId}</div>
+        <div class="mb-1">
+          <span class="inline-flex items-center px-2 py-0.5 rounded bg-orange-200 text-orange-900 text-[11px] font-semibold">${escapeHtml(formatTakeawayOrderLabel(orderId))}</span>
+        </div>
+        <div class="font-semibold text-slate-800">${escapeHtml(customer)}</div>
+        <div class="text-xs text-orange-700 mt-1">${escapeHtml(t('tap_to_view_order', 'Tap to view order'))}</div>
         <div class="text-sm font-medium text-orange-700 mt-1">${formatMoney(toNumber(order.total_amount, 0))}</div>
         <div class="mt-2 flex gap-1 flex-wrap">
           <span class="text-[11px] px-2 py-0.5 rounded bg-amber-100 text-amber-800">${escapeHtml(t('pending', 'Pending'))}: ${pending}</span>
@@ -740,21 +786,47 @@ function renderTakeawayOrdersList(orders) {
   }
 }
 
-function setTakeawayContext(customerName = 'Guest') {
+function setTakeawayContext(customerName = 'Guest', options = {}) {
   const normalizedName = String(customerName || '').trim() || t('guest', 'Guest');
+  const walkIn = options.walk_in === true;
+  const displayName = walkIn
+    ? (normalizedName === t('guest', 'Guest') ? t('walk_in', 'Walk-in') : normalizedName)
+    : normalizedName;
   setActiveOrderContext({
     type: 'takeaway',
     table_id: null,
-    customer_name: normalizedName,
-    title: `Takeaway: ${normalizedName}`,
+    walk_in: walkIn,
+    customer_name: displayName,
+    title: walkIn
+      ? `${t('walk_in_takeaway', 'Walk-in Takeaway')}: ${displayName}`
+      : `Takeaway: ${displayName}`,
   });
-  currentView = 'takeaway';
+  currentView = walkIn ? 'tables' : 'takeaway';
+  selectedTableId = null;
   renderZoneTabs();
   updateOrderSourceView();
   renderSelectedTableLabel();
   renderCart();
   focusCartSidebar();
-  if (window.toast?.info) window.toast.info(t('takeaway_mode_enabled', 'Takeaway order mode enabled.'));
+  if (window.toast?.info) {
+    window.toast.info(walkIn ? t('walk_in_takeaway_enabled', 'Walk-in takeaway mode enabled.') : t('takeaway_mode_enabled', 'Takeaway order mode enabled.'));
+  }
+}
+
+function startWalkInTakeaway() {
+  closeDetailsSidebar();
+  (async () => {
+    const name = await promptForCustomerName({
+      title: t('new_takeaway_order', 'New Walk-in Takeaway'),
+      message: t('enter_customer_name_optional', 'Enter customer name (optional)'),
+      defaultValue: t('walk_in', 'Walk-in'),
+    });
+    if (name === null) return;
+    setTakeawayContext(name || t('walk_in', 'Walk-in'), { walk_in: true });
+  })().catch((err) => {
+    console.error(err);
+    showError(err.message || t('load_failed', 'Load Failed'));
+  });
 }
 
 function openTakeawayModal(initialName = 'Guest') {
@@ -829,32 +901,46 @@ function normalizePromptResult(result) {
   return String(result);
 }
 
+async function promptForCustomerName(options = {}) {
+  const {
+    title = t('new_takeaway_order', 'New Walk-in Takeaway'),
+    message = t('enter_customer_name_optional', 'Enter customer name (optional)'),
+    defaultValue = t('walk_in', 'Walk-in'),
+  } = options;
+  if (window.CustomDialog?.prompt) {
+    const result = await window.CustomDialog.prompt(title, message, defaultValue);
+    return normalizePromptResult(result);
+  }
+  if (document.getElementById('takeaway-modal-backdrop')) {
+    return openTakeawayModal(defaultValue);
+  }
+  const raw = window.prompt(message, defaultValue);
+  if (raw === null) return null;
+  const trimmed = String(raw).trim();
+  return trimmed || defaultValue;
+}
+
 async function startTakeawayOrder() {
   const defaultName = activeOrderContext?.type === 'takeaway'
     ? (activeOrderContext.customer_name || t('guest', 'Guest'))
     : t('guest', 'Guest');
-  let name = null;
-  if (window.CustomDialog?.prompt) {
-    const result = await window.CustomDialog.prompt(
-      t('new_takeaway_order', 'New Takeaway Order'),
-      t('enter_customer_name_optional', 'Enter customer name (optional)'),
-      t('guest', 'Guest'),
-    );
-    name = normalizePromptResult(result);
-  } else {
-    name = await openTakeawayModal(defaultName);
-  }
+  const name = await promptForCustomerName({
+    title: t('new_takeaway_order', 'New Takeaway Order'),
+    message: t('enter_customer_name_optional', 'Enter customer name (optional)'),
+    defaultValue: defaultName,
+  });
   if (name === null) return;
-  setTakeawayContext(name);
+  setTakeawayContext(name || t('guest', 'Guest'));
 }
 
-function addToCart(menuItem, selectedModifiers = [], specialInstructions = '') {
+function addToCart(menuItem, selectedModifiers = [], specialInstructions = '', isTakeaway = defaultCartLineTakeaway()) {
   const id = Number(menuItem?.id);
   if (!id) return;
   const normalizedModifiers = normalizeSelectedModifiers(selectedModifiers);
   const note = String(specialInstructions || '').trim();
-  const unitPrice = getEffectiveBasePrice(menuItem) + modifiersTotal(normalizedModifiers);
-  const key = buildCartLineKey(id, normalizedModifiers, note);
+  const takeawayFlag = !!isTakeaway;
+  const unitPrice = computeLineUnitPrice(menuItem, normalizedModifiers, takeawayFlag);
+  const key = buildCartLineKey(id, normalizedModifiers, note, takeawayFlag);
   const existing = cart.get(key);
   if (existing) {
     existing.quantity += 1;
@@ -865,12 +951,37 @@ function addToCart(menuItem, selectedModifiers = [], specialInstructions = '') {
         name: menuItem.name,
         price: toNumber(menuItem.price, 0),
         discount_price: toNumber(menuItem.discount_price, 0) > 0 ? toNumber(menuItem.discount_price, 0) : null,
+        takeaway_price: menuItem.takeaway_price != null ? toNumber(menuItem.takeaway_price, 0) : null,
       },
       selected_modifiers: normalizedModifiers,
       special_instructions: note || null,
       unit_price: unitPrice,
+      is_takeaway: takeawayFlag,
       quantity: 1,
     });
+  }
+  renderCart();
+}
+
+function toggleCartLineTakeaway(lineKey, checked) {
+  const item = cart.get(lineKey);
+  if (!item) return;
+  const nextTakeaway = !!checked;
+  if (item.is_takeaway === nextTakeaway) return;
+  cart.delete(lineKey);
+  item.is_takeaway = nextTakeaway;
+  item.unit_price = computeLineUnitPrice(item.menu_item, item.selected_modifiers, nextTakeaway);
+  const newKey = buildCartLineKey(
+    item.menu_item.id,
+    item.selected_modifiers,
+    item.special_instructions,
+    nextTakeaway
+  );
+  const existing = cart.get(newKey);
+  if (existing && newKey !== lineKey) {
+    existing.quantity += item.quantity;
+  } else {
+    cart.set(newKey, item);
   }
   renderCart();
 }
@@ -891,28 +1002,106 @@ function updateCartQuantity(lineKey, delta) {
   renderCart();
 }
 
+function computeCartPriceBreakdown() {
+  let breakdownSubtotal = 0;
+  let breakdownTax = 0;
+  cart.forEach(({ menu_item, quantity, selected_modifiers, is_takeaway }) => {
+    const qty = Number(quantity) || 0;
+    const base = getEffectiveBasePrice(menu_item, is_takeaway);
+    const unitTax = computeUnitTax(menu_item, is_takeaway);
+    const mods = modifiersTotal(selected_modifiers);
+    breakdownSubtotal += (base + mods) * qty;
+    breakdownTax += unitTax * qty;
+  });
+  return {
+    breakdownSubtotal: roundMoney(breakdownSubtotal),
+    breakdownTaxTotal: roundMoney(breakdownTax),
+    breakdownGrandTotal: roundMoney(breakdownSubtotal + breakdownTax),
+  };
+}
+
+function computeOrderItemsBreakdown(orderDetails) {
+  if (orderDetails?.breakdown_grand_total != null) {
+    return {
+      breakdownSubtotal: roundMoney(Number(orderDetails.breakdown_subtotal) || 0),
+      breakdownTaxTotal: roundMoney(Number(orderDetails.breakdown_tax_total) || 0),
+      breakdownGrandTotal: roundMoney(Number(orderDetails.breakdown_grand_total) || 0),
+    };
+  }
+  let breakdownSubtotal = 0;
+  let breakdownTax = 0;
+  let breakdownGrand = 0;
+  (orderDetails?.items || []).forEach((item) => {
+    if (normalizeTrackingStatus(item.item_status) === 'cancelled') return;
+    const qty = Number(item.quantity) || 0;
+    const lineSub = Number(item.subtotal) || 0;
+    const lineTax = Number(item.unit_tax_at_sale ?? 0) * qty;
+    breakdownGrand += lineSub;
+    breakdownTax += lineTax;
+    breakdownSubtotal += lineSub - lineTax;
+  });
+  return {
+    breakdownSubtotal: roundMoney(breakdownSubtotal),
+    breakdownTaxTotal: roundMoney(breakdownTax),
+    breakdownGrandTotal: roundMoney(breakdownGrand),
+  };
+}
+
+function renderPriceBreakdownHtml(breakdown) {
+  const subtotal = breakdown?.breakdownSubtotal ?? 0;
+  const tax = breakdown?.breakdownTaxTotal ?? 0;
+  const grand = breakdown?.breakdownGrandTotal ?? 0;
+  return `
+    <div class="order-summary space-y-1 text-sm">
+      <div class="flex justify-between text-slate-700">
+        <span>${escapeHtml(t('subtotal', 'Subtotal'))}</span>
+        <span>${formatMoney(subtotal)}</span>
+      </div>
+      <div class="flex justify-between text-slate-500">
+        <span>${escapeHtml(t('tax', 'Tax'))}</span>
+        <span>+${formatMoney(tax)}</span>
+      </div>
+      <div class="flex justify-between text-base font-bold text-slate-800 pt-1 border-t border-slate-100">
+        <span>${escapeHtml(t('grand_total', 'Grand Total'))}</span>
+        <span>${formatMoney(grand)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function updateCartSummaryBreakdown() {
+  const subtotalEl = document.getElementById('cart-subtotal');
+  const taxEl = document.getElementById('cart-tax-total');
+  const grandEl = document.getElementById('cart-grand-total');
+  const breakdown = computeCartPriceBreakdown();
+  if (subtotalEl) subtotalEl.textContent = formatMoney(breakdown.breakdownSubtotal);
+  if (taxEl) taxEl.textContent = `+${formatMoney(breakdown.breakdownTaxTotal)}`;
+  if (grandEl) grandEl.textContent = formatMoney(breakdown.breakdownGrandTotal);
+}
+
 function renderCart() {
   const list = document.getElementById('cart-list');
-  const totalEl = document.getElementById('cart-total');
 
   if (cart.size === 0) {
     list.innerHTML = `<li class="text-slate-500">${escapeHtml(t('cart_empty', 'Cart is empty'))}</li>`;
-    totalEl.textContent = formatMoney(0);
+    updateCartSummaryBreakdown();
     renderSelectedTableLabel();
     updateCartUIContext();
     return;
   }
 
-  let total = 0;
   list.innerHTML = '';
-  cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions, unit_price }, lineKey) => {
+  cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions, unit_price, is_takeaway }, lineKey) => {
     const subtotal = unit_price * quantity;
-    total += subtotal;
     const discountPrice = toNumber(menu_item?.discount_price, 0);
     const normalPrice = toNumber(menu_item?.price, 0);
-    const priceHtml = discountPrice > 0
-      ? `<div class="text-xs mt-0.5"><span class="line-through text-slate-400">${formatMoney(normalPrice)}</span> <span class="text-red-500 font-semibold">${formatMoney(discountPrice)}</span></div>`
-      : '';
+    const takeawayPrice = menu_item?.takeaway_price != null ? toNumber(menu_item.takeaway_price, 0) : null;
+    let priceHtml = '';
+    if (is_takeaway && takeawayPrice != null) {
+      priceHtml = `<div class="text-xs mt-0.5"><span class="text-orange-700 font-semibold">${formatMoney(takeawayPrice)}</span> <span class="text-slate-400">(${escapeHtml(t('takeaway', 'Takeaway'))})</span></div>`;
+    } else if (discountPrice > 0) {
+      priceHtml = `<div class="text-xs mt-0.5"><span class="line-through text-slate-400">${formatMoney(normalPrice)}</span> <span class="text-red-500 font-semibold">${formatMoney(discountPrice)}</span></div>`;
+    }
     const modifiersHtml = (selected_modifiers || []).length
       ? `<div class="text-xs text-slate-500 mt-0.5">${(selected_modifiers || []).map((m) => `+ ${escapeHtml(m.name)}${toNumber(m.price, 0) ? ` (${formatMoney(toNumber(m.price, 0))})` : ''}`).join(', ')}</div>`
       : '';
@@ -927,6 +1116,10 @@ function renderCart() {
         ${priceHtml}
         ${modifiersHtml}
         ${noteHtml}
+        <label class="flex items-center gap-1.5 text-xs text-orange-800 mt-1 cursor-pointer">
+          <input type="checkbox" class="cart-takeaway-toggle rounded border-orange-300 text-orange-600 focus:ring-orange-500" data-key="${escapeAttr(lineKey)}" ${is_takeaway ? 'checked' : ''} />
+          <span>🛍️ ${escapeHtml(t('takeaway', 'Takeaway'))}</span>
+        </label>
       </div>
       <span class="font-medium">${formatMoney(subtotal)}</span>
       <div class="flex items-center gap-0">
@@ -940,8 +1133,11 @@ function renderCart() {
 
   list.querySelectorAll('.qty-btn.minus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, -1)));
   list.querySelectorAll('.qty-btn.plus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, 1)));
+  list.querySelectorAll('.cart-takeaway-toggle').forEach((input) => {
+    input.addEventListener('change', () => toggleCartLineTakeaway(input.dataset.key, input.checked));
+  });
 
-  totalEl.textContent = formatMoney(total);
+  updateCartSummaryBreakdown();
   renderSelectedTableLabel();
   updateCartUIContext();
 }
@@ -1147,12 +1343,7 @@ function updateOrderDetailsAddMoreButton() {
     btn.classList.add('hidden');
     return;
   }
-  const isTakeaway = tableDetailsOrderContext.type === 'takeaway';
-  btn.classList.toggle('hidden', isTakeaway);
-  if (isTakeaway) {
-    btn.disabled = true;
-    return;
-  }
+  btn.classList.remove('hidden');
   btn.disabled = false;
   btn.textContent = t('add_more_items', 'Add More Items');
 }
@@ -1171,8 +1362,13 @@ function closeDetailsSidebar() {
 
 function activateContextFromOrderDetails() {
   if (!tableDetailsOrderContext) return;
-  if (tableDetailsOrderContext.type === 'takeaway') return;
-  setActiveOrderContext(tableDetailsOrderContext);
+  const ctx = { ...tableDetailsOrderContext };
+  if (ctx.type === 'takeaway') {
+    const customer = String(ctx.customer_name || '').trim() || t('walk_in', 'Walk-in');
+    ctx.append_mode = true;
+    ctx.title = `${t('adding_to_takeaway', 'Adding to Takeaway')}: ${customer}`;
+  }
+  setActiveOrderContext(ctx);
   currentView = activeOrderContext.type === 'takeaway' ? 'takeaway' : 'tables';
   renderZoneTabs();
   updateOrderSourceView();
@@ -1194,8 +1390,7 @@ function renderTableDetailsItems(orderDetails) {
 
   content.innerHTML = `
     <div class="rounded-md border border-slate-200 bg-slate-50 p-3 mb-2">
-      <p class="text-sm text-slate-600">${escapeHtml(t('grand_total', 'Grand Total'))}</p>
-      <p class="text-lg font-semibold text-slate-800">${formatMoney(Number(orderDetails?.total_amount || 0))}</p>
+      ${renderPriceBreakdownHtml(computeOrderItemsBreakdown(orderDetails))}
     </div>
     ${items.map((item) => {
     const status = normalizeTrackingStatus(item.item_status);
@@ -1274,8 +1469,10 @@ function renderTableDetailsItems(orderDetails) {
         const updatedOrder = await updateOrderItemStatus(orderIdForUpdate, itemId, 'cancelled');
         if (String(updatedOrder?.status || '').toLowerCase() === 'cancelled') {
           closeDetailsSidebar();
+          cart.clear();
           setActiveOrderContext(null);
           selectedTableId = null;
+          renderCart();
           updateOrderSourceView();
           renderSelectedTableLabel();
         } else {
@@ -1329,10 +1526,11 @@ function bindSubmitOrder() {
       return;
     }
     const items = [];
-    cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions }) => {
+    cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions, is_takeaway }) => {
       items.push({
         menu_item_id: menu_item.id,
         quantity,
+        is_takeaway: !!is_takeaway,
         selected_modifiers: selected_modifiers || [],
         special_instructions: special_instructions || null,
       });
@@ -1343,6 +1541,9 @@ function bindSubmitOrder() {
       customer_name: activeOrderContext.customer_name || null,
       items,
     };
+    if (activeOrderContext.append_mode && activeOrderContext.source_order_id) {
+      payload.order_id = Number(activeOrderContext.source_order_id);
+    }
     submitBtn.disabled = true;
     try {
       const data = await submitOrder(payload);
@@ -1437,6 +1638,35 @@ function queueRefresh() {
   }, 200);
 }
 
+function dismissClosedOrderUi(data) {
+  const orderId = Number(data?.order_id ?? data?.id ?? 0);
+  if (!orderId) return;
+  const status = String(data?.status || '').toLowerCase();
+  if (status !== 'cancelled' && status !== 'paid') return;
+
+  if (tableDetailsOpen && Number(tableDetailsOrderId) === orderId) {
+    closeDetailsSidebar();
+  }
+  const contextOrderId = Number(activeOrderContext?.source_order_id ?? 0);
+  if (activeOrderContext && contextOrderId === orderId) {
+    cart.clear();
+    setActiveOrderContext(null);
+    selectedTableId = null;
+    renderCart();
+    renderSelectedTableLabel();
+    updateOrderSourceView();
+  }
+}
+
+function handleRemoteOrderClosed(data) {
+  if (!data) return;
+  dismissClosedOrderUi(data);
+  loadTakeawayOrders().catch((err) => {
+    console.error('Takeaway live refresh error:', err);
+  });
+  queueRefresh();
+}
+
 function connectWebSocket() {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${protocol}//${location.host}/ws`);
@@ -1451,6 +1681,9 @@ function connectWebSocket() {
             name: item.name,
             price: item.price,
             discount_price: item.discount_price ?? null,
+            takeaway_price: item.takeaway_price ?? null,
+            tax_type: item.tax_type || 'none',
+            tax_value: item.tax_value ?? 0,
             category_id: item.category_id,
             description: item.description ?? null,
             image_url: item.image_url ?? null,
@@ -1471,7 +1704,17 @@ function connectWebSocket() {
             ...menuItems[idx],
             ...item,
             discount_price: item.discount_price ?? null,
+            takeaway_price: item.takeaway_price ?? null,
+            tax_type: item.tax_type || 'none',
+            tax_value: item.tax_value ?? 0,
           };
+          cart.forEach((entry, key) => {
+            if (Number(entry?.menu_item?.id) !== Number(item.id)) return;
+            entry.menu_item.takeaway_price = item.takeaway_price ?? null;
+            entry.menu_item.tax_type = item.tax_type || 'none';
+            entry.menu_item.tax_value = item.tax_value ?? 0;
+            entry.unit_price = computeLineUnitPrice(entry.menu_item, entry.selected_modifiers, entry.is_takeaway);
+          });
           renderMenu();
           renderCart();
         }
@@ -1513,6 +1756,13 @@ function connectWebSocket() {
         msg.event === 'table_status_changed' ||
         msg.event === 'table_grid_updated'
       ) {
+        if (msg.event === 'order_updated' && msg.data) {
+          const status = String(msg.data.status || '').toLowerCase();
+          if (status === 'cancelled' || status === 'paid') {
+            handleRemoteOrderClosed(msg.data);
+            return;
+          }
+        }
         queueRefresh();
         if (tableDetailsOpen && tableDetailsOrderId) {
           fetchOrderDetails(tableDetailsOrderId)
@@ -1523,11 +1773,18 @@ function connectWebSocket() {
         }
         return;
       }
+      if (msg.event === 'order_cancelled' && msg.data) {
+        handleRemoteOrderClosed(msg.data);
+        return;
+      }
       if (
         msg.event === 'takeaways_updated' ||
         (msg.event === 'order_completed' && String(msg?.data?.order_type || '').toLowerCase() === 'takeaway')
       ) {
-        if (currentView === 'takeaway') {
+        const status = String(msg?.data?.status || '').toLowerCase();
+        if (status === 'cancelled' || status === 'paid') {
+          handleRemoteOrderClosed(msg.data);
+        } else {
           loadTakeawayOrders().catch((err) => {
             console.error('Takeaway live refresh error:', err);
           });
@@ -1551,6 +1808,8 @@ if (
     bindSubmitOrder();
     bindModifierModal();
     bindTakeawayModal();
+    const walkInBtn = document.getElementById('btn-walk-in-takeaway');
+    if (walkInBtn) walkInBtn.addEventListener('click', startWalkInTakeaway);
     const closeBtn = document.getElementById('waiter-table-details-close');
     const addMoreBtn = document.getElementById('waiter-table-details-add-more');
     const clearContextBtn = document.getElementById('cart-clear-context');

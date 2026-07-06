@@ -22,11 +22,11 @@
 
 **Schema note:** Order history uses `OrderItem` snapshots; soft-deleted `MenuItem` rows with orders are moved, not destroyed.
 
-## Frontend (`static/counter.js`)
+## Frontend (`static/counter.js`, `static/counter.html`)
 
-- `renderCategories()` — **Edit** / **Delete** buttons per category row.
-- Edit → `window.prompt` → `PUT` with `{ name }` → `loadMenuData()`.
-- Delete → `dialogConfirm` → `DELETE` → `window.alert` + `dialogAlert` on failure; on success refresh categories directly.
+- `renderCategories()` — **Edit** / **Delete** buttons per category row in `#categories-list`.
+- Edit → `#category-edit-modal` form → `PUT` with `{ name }` → `loadMenuData()`.
+- Delete → `dialogConfirm` → `DELETE` → `dialogAlert` on failure; on success refresh categories + menu items.
 - `loadMenuData()` uses `Promise.allSettled` so a menu-items API failure does not mask category list updates.
 
 ## Tests

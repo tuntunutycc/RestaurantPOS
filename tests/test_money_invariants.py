@@ -97,11 +97,10 @@ def test_checkout_decimal_change_amount_stable(client, db_session, auth_headers)
     )
     assert checkout.status_code == 200, checkout.text
     body = checkout.json()
-    # Option B tax rule: taxable_amount = 9.99, tax = 0.50, grand total = 10.49
-    assert body["tax_amount"] == 0.50
-    assert body["total_amount"] == 10.49
-    assert body["change_amount"] == 0.51
-    assert f"{body['tax_amount']:.2f}" == "0.50"
+    # Per-item tax: none configured; grand total equals subtotal.
+    assert body["tax_amount"] == 0.00
+    assert body["total_amount"] == 9.99
+    assert body["change_amount"] == 1.01
 
 
 def test_paid_order_item_status_update_preserves_tax_inclusive_total(client, db_session, auth_headers):
@@ -126,7 +125,7 @@ def test_paid_order_item_status_update_preserves_tax_inclusive_total(client, db_
     )
     assert checkout.status_code == 200, checkout.text
     paid_total = float(checkout.json()["total_amount"])
-    assert paid_total == 10.49
+    assert paid_total == 9.99
 
     details = client.get(
         f"/api/orders/{order_id}/details",

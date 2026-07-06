@@ -1,5 +1,180 @@
 # Changelog
 
+# Changelog
+
+## 2026-07-06 — Waiter cart price breakdown (Subtotal / Tax / Grand Total)
+
+### Summary
+Waiter cart footer and active-order sidebar show a 3-line price breakdown. Backend `GET /api/orders/{id}/details` returns `breakdown_subtotal`, `breakdown_tax_total`, `breakdown_grand_total`.
+
+### Spec
+- `specs/feature-waiter-cart-breakdown/`
+
+### Backend
+- `_order_price_breakdown()`; fields on `OrderDetailsResponse` and `ActiveTakeawayOrderResponse`
+- `unit_price_at_sale` on `OrderItemDetailsResponse`
+
+### Frontend
+- `waiter.html` / `waiter.js` — cart summary + order details sidebar breakdown; live update on takeaway toggle
+
+### Tests
+- `tests/test_waiter_cart_breakdown.py` — **1 passed**; full suite **157 passed**
+
+## 2026-07-06 — Per-item tax on menu items
+
+### Summary
+Menu items support `tax_type` (`none` / `percentage` / `fixed`) and `tax_value`. Tax is calculated on the active base price (dine-in vs takeaway) at order submit and included in line subtotals. Checkout sums per-line tax for receipt display; legacy 5% global tax replaced.
+
+### Spec
+- `specs/feature-menu-item-tax/` — requirements + validation
+- `specs/tech-stack.md` — updated checkout tax rules
+- `specs/feature-menu-pricing/` — cross-reference
+
+### Backend
+- `MenuItem.tax_type`, `MenuItem.tax_value`; `OrderItem.unit_tax_at_sale`
+- `_calculate_order_line_pricing()` in `routers/orders.py`
+- Checkout uses sum of line taxes (no global 5%)
+
+### Frontend
+- `counter.html` / `counter.js` — Tax Type + Tax Value on menu form; checkout tax from lines
+- `waiter.js` — `computeUnitTax()` in cart/display pricing
+
+### Tests
+- `tests/test_menu_item_tax.py` — **3 passed**; full suite **156 passed**
+
+## 2026-07-06 — Auto-clear empty takeaway orders (last item cancel)
+
+### Summary
+When the last active item is cancelled, the order auto-transitions to `cancelled`. Cancelled takeaways are excluded from `active-takeaways` and removed from the UI via `order_cancelled` WebSocket. Waiter cart/sidebar dismisses automatically.
+
+### Spec
+- `specs/feature-order-cancellation/` — FR-C4 auto-clear behavior
+- `specs/feature-walk-in-takeaway/` — active list removal documented
+
+### Backend
+- `_release_table_if_order_fully_cancelled` returns auto-cancel flag; broadcasts `order_cancelled` on full clear
+- `GET /api/orders/active-takeaways` excludes `cancelled` orders
+
+### Frontend
+- `waiter.js` — `handleRemoteOrderClosed`, always refresh takeaway list; dismiss cart/sidebar
+- `counter.js` — only clear checkout on cancelled/paid takeaway updates
+
+### Tests
+- `test_last_takeaway_item_cancel_auto_clears_from_active_list` — **passed**; full suite **153 passed**
+
+## 2026-07-06 — Takeaway item-level cancel parity (corrects whole-order UI)
+
+### Summary
+Walk-in takeaway now mirrors dine-in for **item-level** cancellation: clicking an active takeaway card opens the order details sidebar with per-item Cancel controls. Removed "Cancel Entire Order" buttons from waiter/cashier UI. Customer name prompt uses modal or native `prompt()` fallback.
+
+### Spec
+- `specs/feature-walk-in-takeaway/` — FR-W6/W7: view order sidebar + item cancel parity
+- `specs/feature-order-cancellation/` — reframed as item-level primary UX
+
+### Frontend
+- `waiter.js` — takeaway card → `openOrderDetails()`; `promptForCustomerName()`; removed whole-order cancel UI
+- `counter.js` / `counter.html` — removed cashier Cancel Order button
+
+### Tests
+- `tests/test_walk_in_takeaway.py::test_cancel_takeaway_order_item_without_table` — **passed**
+
+## 2026-07-06 — Walk-in customer prompt & whole-order cancellation
+
+### Summary
+Walk-in Takeaway button now prompts for optional customer name. New `POST /api/orders/{order_id}/cancel` cancels active orders, frees tables, and broadcasts realtime updates. Cancel Order buttons on waiter cart/sidebar and cashier checkout.
+
+### Spec
+- `specs/feature-walk-in-takeaway/` — FR-W4 customer name prompt
+- `specs/feature-order-cancellation/` — cancel flow requirements + validation
+
+### Backend
+- `POST /api/orders/{order_id}/cancel` — cancel items + order, release table, WebSocket (`order_updated`, `takeaways_updated`, `table_status_changed`)
+- Verified `customer_name` on `OrderCreate` / submit (unchanged)
+
+### Frontend
+- `waiter.js` — walk-in name prompt; Cancel Order in cart (append) + order details sidebar
+- `counter.js` — Cancel Order on checkout panel
+
+### Tests
+- `tests/test_order_cancellation.py` — **3 passed**; full suite **151 passed**
+
+## 2026-07-06 — Walk-in takeaway append mode
+
+### Summary
+Active walk-in takeaway orders are clickable on the waiter dashboard. Clicking opens cart **Append Mode** bound to `order_id`. `POST /api/orders/submit` accepts optional `order_id` to add batches without creating a duplicate order.
+
+### Spec
+- `specs/feature-walk-in-takeaway/` — FR-W6 append parity with occupied tables
+
+### Backend
+- `schemas.OrderSubmitRequest.order_id` optional
+- `routers/orders.py` — takeaway append lookup (`table_id IS NULL`, open/dining)
+
+### Frontend
+- `waiter.js` — `activateTakeawayAppendContext()`, submit sends `order_id`, header "Adding to Takeaway: …"
+
+### Tests
+- `tests/test_walk_in_takeaway.py` — +2 scenarios; full suite green
+
+## 2026-07-06 — Direct walk-in takeaway (`table_id = NULL`)
+
+### Summary
+Walk-in takeaway orders use no physical table. Waiter attribution via `OrderItem.created_by_id` from JWT session. UI adds **[ + Walk-in Takeaway ]** button; Cashier/kitchen display **🛍️ Takeaway #\<id\>**. Cart items default `is_takeaway=true` with dual pricing.
+
+### Spec
+- `specs/feature-walk-in-takeaway/` — requirements, plan, implementation, validation
+- Audited: no dummy-table / `is_takeaway_zone` logic in codebase
+
+### Backend
+- Verified nullable `table_id` + `created_by_id` on submit; kitchen ticket header `Takeaway #<id>`
+- `new_order_batch` WebSocket includes `order_type`
+
+### Frontend
+- `waiter.html` / `waiter.js` — walk-in button, cart defaults
+- `counter.js` — `formatTakeawayOrderLabel`, cashier takeaway list/checkout headers
+- `table-dashboard.html` / `table-dashboard.js` — active walk-in takeaway panel (kitchen board)
+
+### Tests
+- `tests/test_walk_in_takeaway.py` — **4 passed**; full suite **146 passed**
+
+## 2026-07-06 — Dual pricing (dine-in vs takeaway per line)
+
+### Summary
+Menu items can have an optional `takeaway_price`. Order lines accept `is_takeaway`; server resolves unit price (takeaway price when set, else dine-in base). Waiter cart shows a per-line 🛍️ Takeaway checkbox with live subtotal updates.
+
+### Spec
+- `specs/feature-menu-pricing/` — requirements, plan, implementation, validation
+
+### Backend
+- `models.py` — `MenuItem.takeaway_price`, `OrderItem.is_takeaway`
+- `schemas.py`, `routers/orders.py`, `routers/menu.py`, `main.py` migrations
+
+### Frontend
+- `static/counter.html`, `static/counter.js` — optional Takeaway Price on menu form
+- `static/waiter.js` — per-line takeaway toggle + dynamic pricing
+
+### Tests
+- `tests/test_menu_dual_pricing.py` — **4 passed**; full suite **142 passed**
+
+## 2026-07-06 — Counter primary nav highlighting & category edit modal
+
+### Summary
+Dashboard, Cashier/Billing, and Menu Management tabs use enhanced primary styling. Category rename uses a modal instead of `window.prompt`; Edit/Delete were already wired to backend CRUD.
+
+### Spec
+- `specs/feature-counter-ui/requirements.md` (new) — FR-N1–FR-N3 primary nav UX
+- `specs/feature-category-crud/` — FR-3/FR-4 UI modal + full CRUD matrix
+
+### Frontend
+- `static/counter.html` — `.tab-btn-primary` styles; `#category-edit-modal`
+- `static/counter.js` — `openCategoryEditModal`, `bindCategoryEditModal`
+
+### Backend
+- No API changes (`PUT`/`DELETE` `/api/categories/{id}` already in `routers/menu.py`)
+
+### Tests
+- `tests/test_category_crud.py` — **5 passed**; full suite **138 passed**
+
 ## 2026-07-06 — Strict password vs PIN login separation
 
 ### Summary

@@ -77,11 +77,13 @@ This POS system is currently built with:
   - item status changes
   - checkout
   - discount calculations
-- **Checkout tax rule (fixed 5%):** tax is calculated **after** discount is applied (tax on net amount), with backend as source of truth:
-  - `taxable_amount = max(subtotal - discount_amount, 0.0)`
-  - `tax_amount = _round_money(taxable_amount * 0.05)`
-  - `grand_total = _round_money(taxable_amount + tax_amount)`
-  - Safety constraint: if discount would make taxable amount negative, taxable amount, tax amount, and grand total are clamped safely at `0.0`.
+- **Checkout tax rule (per-item):** tax is configured on each `MenuItem` (`tax_type`, `tax_value`) and included in line subtotals at submit. At checkout:
+  - `subtotal = sum(non-cancelled line subtotals)` (tax-inclusive)
+  - `tax_amount = sum(unit_tax_at_sale × quantity)` (receipt breakdown)
+  - `discount_amount` from order-level discount on `subtotal`
+  - `grand_total = _round_money(max(subtotal - discount_amount, 0))`
+  - Items with `tax_type=none` contribute `0` tax.
+  - Legacy fixed 5% order-level tax is **replaced** by per-item tax.
 - Prefer explicit rounding rules (currently many computations round to 2 decimals; later we will move to `Decimal` + `Numeric` for stronger guarantees).
 - Always validate input constraints on the server:
   - quantity >= 1

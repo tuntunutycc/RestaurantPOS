@@ -67,35 +67,36 @@ def _order_has_non_cancelled_items(order: Order) -> bool:
     )
 
 
-def _release_table_if_order_fully_cancelled(db: Session, order: Order) -> Table | None:
+def _release_table_if_order_fully_cancelled(db: Session, order: Order) -> tuple[Table | None, bool]:
     """
     When every line item is cancelled, finalize the order and free the table.
-    Returns the table if its status was changed to available.
+    Returns (released_table, order_auto_cancelled).
     """
     if _order_has_non_cancelled_items(order):
-        return None
+        return None, False
 
     order_status = str(getattr(order, "status", "") or "").strip().lower()
     if order_status == "paid":
-        return None
+        return None, False
 
-    if order_status != "cancelled":
+    order_auto_cancelled = order_status != "cancelled"
+    if order_auto_cancelled:
         order.status = "cancelled"
     order.total_amount = _recalculate_order_total_excluding_cancelled(order)
 
     if order.table_id is None:
-        return None
+        return None, order_auto_cancelled
 
     table = db.query(Table).filter(Table.id == order.table_id).first()
     if not table:
-        return None
+        return None, order_auto_cancelled
 
     status_value = getattr(table.status, "value", table.status)
     if status_value == "available":
-        return None
+        return None, order_auto_cancelled
 
     table.status = "available"
-    return table
+    return table, order_auto_cancelled
 
 
 def _cancel_order_items_and_release_table(db: Session, order: Order) -> Table | None:
@@ -194,6 +195,82 @@ def _base_price_with_discount(menu_item: MenuItem) -> float:
     return float(menu_item.price)
 
 
+def _resolve_unit_base_price(menu_item: MenuItem, *, is_takeaway: bool = False) -> float:
+    """
+    Takeaway lines use takeaway_price when set; otherwise dine-in base (discount else price).
+    """
+    if is_takeaway:
+        raw_takeaway = getattr(menu_item, "takeaway_price", None)
+        if raw_takeaway is not None:
+            return float(raw_takeaway)
+    return _base_price_with_discount(menu_item)
+
+
+def _menu_item_tax_config(menu_item: MenuItem) -> tuple[str, float]:
+    tax_type = str(getattr(menu_item, "tax_type", "none") or "none").strip().lower()
+    tax_value = float(getattr(menu_item, "tax_value", 0.0) or 0.0)
+    if tax_type not in ("percentage", "fixed"):
+        tax_type = "none"
+    if tax_value < 0:
+        tax_value = 0.0
+    return tax_type, tax_value
+
+
+def _calculate_unit_tax_amount(base_price: float, tax_type: str, tax_value: float) -> float:
+    if tax_type == "percentage" and tax_value > 0:
+        return _round_money(base_price * (tax_value / 100.0))
+    if tax_type == "fixed" and tax_value > 0:
+        return _round_money(tax_value)
+    return 0.0
+
+
+def _calculate_order_line_pricing(
+    menu_item: MenuItem,
+    *,
+    is_takeaway: bool,
+    quantity: int,
+    selected_modifiers: list[dict],
+) -> tuple[float, float, float]:
+    """Return (base_price, unit_tax, line_subtotal) for one order line."""
+    base_price = _resolve_unit_base_price(menu_item, is_takeaway=is_takeaway)
+    tax_type, tax_value = _menu_item_tax_config(menu_item)
+    unit_tax = _calculate_unit_tax_amount(base_price, tax_type, tax_value)
+    modifiers_total = _selected_modifiers_total(selected_modifiers)
+    line_subtotal = _round_money((base_price + unit_tax + modifiers_total) * quantity)
+    return _round_money(base_price), unit_tax, line_subtotal
+
+
+def _order_lines_tax_total(order: Order) -> float:
+    total = 0.0
+    for oi in order.order_items or []:
+        if _normalized_item_status_value(getattr(oi, "item_status", None)) == "cancelled":
+            continue
+        unit_tax = float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0)
+        total += unit_tax * int(getattr(oi, "quantity", 0) or 0)
+    return _round_money(total)
+
+
+def _order_price_breakdown(order: Order) -> dict[str, float]:
+    """Pre-tax subtotal, tax total, and grand total for non-cancelled lines."""
+    breakdown_subtotal = 0.0
+    breakdown_tax_total = 0.0
+    breakdown_grand_total = 0.0
+    for oi in order.order_items or []:
+        if _normalized_item_status_value(getattr(oi, "item_status", None)) == "cancelled":
+            continue
+        qty = int(getattr(oi, "quantity", 0) or 0)
+        line_subtotal = float(getattr(oi, "subtotal", 0.0) or 0.0)
+        line_tax = float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0) * qty
+        breakdown_grand_total += line_subtotal
+        breakdown_tax_total += line_tax
+        breakdown_subtotal += line_subtotal - line_tax
+    return {
+        "breakdown_subtotal": _round_money(breakdown_subtotal),
+        "breakdown_tax_total": _round_money(breakdown_tax_total),
+        "breakdown_grand_total": _round_money(breakdown_grand_total),
+    }
+
+
 async def _broadcast_table_status_changed(request: Request, table: Table) -> None:
     manager = getattr(request.app.state, "ws_manager", None)
     if manager:
@@ -207,6 +284,48 @@ async def _broadcast_table_status_changed(request: Request, table: Table) -> Non
             },
         )
         await manager.broadcast("table_grid_updated", {"refresh": True})
+
+
+async def _broadcast_order_cancelled(
+    request: Request,
+    order: Order,
+    released_table: Table | None = None,
+) -> None:
+    if released_table:
+        await _broadcast_table_status_changed(request, released_table)
+    manager = getattr(request.app.state, "ws_manager", None)
+    if not manager:
+        return
+    payload = {
+        "id": order.id,
+        "order_id": order.id,
+        "status": order.status,
+        "table_id": order.table_id,
+        "order_type": (order.order_type or "dine_in"),
+        "total_amount": float(order.total_amount),
+    }
+    await manager.broadcast("order_updated", payload)
+    await manager.broadcast("order_cancelled", payload)
+    if (order.order_type or "").strip().lower() == "takeaway":
+        await manager.broadcast("takeaways_updated", payload)
+
+
+def _build_order_item_details_response(oi: OrderItem) -> OrderItemDetailsResponse:
+    return OrderItemDetailsResponse(
+        id=oi.id,
+        menu_item_id=oi.menu_item_id,
+        menu_item_name=_display_menu_item_name(oi),
+        quantity=oi.quantity,
+        subtotal=float(oi.subtotal),
+        unit_price_at_sale=float(getattr(oi, "unit_price_at_sale", 0.0) or 0.0),
+        unit_tax_at_sale=float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0),
+        item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
+        waiter_name=_display_waiter_name(oi),
+        selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
+        note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
+        special_instructions=getattr(oi, "special_instructions", None),
+        is_takeaway=bool(getattr(oi, "is_takeaway", False)),
+    )
 
 
 @router.post("/orders/", response_model=OrderCreateResponse)
@@ -261,9 +380,13 @@ async def create_order(
             if line.quantity < 1:
                 raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
             selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
-            modifiers_total = _selected_modifiers_total(selected_modifiers)
-            base_price = _base_price_with_discount(menu_item)
-            subtotal = _round_money((base_price + modifiers_total) * line.quantity)
+            is_takeaway = bool(getattr(line, "is_takeaway", False))
+            base_price, unit_tax, subtotal = _calculate_order_line_pricing(
+                menu_item,
+                is_takeaway=is_takeaway,
+                quantity=line.quantity,
+                selected_modifiers=selected_modifiers,
+            )
             note_value = (line.note or line.special_instructions or "").strip() or None
             existing_total = _round_money(existing_total + subtotal)
             db.add(
@@ -278,8 +401,10 @@ async def create_order(
                     note=note_value,
                     special_instructions=note_value,
                     menu_item_name_at_sale=menu_item.name,
-                    unit_price_at_sale=_round_money(base_price),
+                    unit_price_at_sale=base_price,
+                    unit_tax_at_sale=unit_tax,
                     category_name_at_sale=getattr(getattr(menu_item, "category", None), "name", None),
+                    is_takeaway=is_takeaway,
                 )
             )
             added_items_detail.append(
@@ -328,9 +453,13 @@ async def create_order(
         if line.quantity < 1:
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
         selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
-        modifiers_total = _selected_modifiers_total(selected_modifiers)
-        base_price = _base_price_with_discount(menu_item)
-        subtotal = _round_money((base_price + modifiers_total) * line.quantity)
+        is_takeaway = bool(getattr(line, "is_takeaway", False))
+        base_price, unit_tax, subtotal = _calculate_order_line_pricing(
+            menu_item,
+            is_takeaway=is_takeaway,
+            quantity=line.quantity,
+            selected_modifiers=selected_modifiers,
+        )
         note_value = (line.note or line.special_instructions or "").strip() or None
         total_amount = _round_money(total_amount + subtotal)
         order_items_data.append(
@@ -342,8 +471,10 @@ async def create_order(
                 "note": note_value,
                 "special_instructions": note_value,
                 "menu_item_name_at_sale": menu_item.name,
-                "unit_price_at_sale": _round_money(base_price),
+                "unit_price_at_sale": base_price,
+                "unit_tax_at_sale": unit_tax,
                 "category_name_at_sale": getattr(getattr(menu_item, "category", None), "name", None),
+                "is_takeaway": is_takeaway,
             }
         )
 
@@ -371,7 +502,9 @@ async def create_order(
                 special_instructions=item_data["special_instructions"],
                 menu_item_name_at_sale=item_data["menu_item_name_at_sale"],
                 unit_price_at_sale=item_data["unit_price_at_sale"],
+                unit_tax_at_sale=item_data["unit_tax_at_sale"],
                 category_name_at_sale=item_data["category_name_at_sale"],
+                is_takeaway=item_data.get("is_takeaway", False),
             )
         )
     previous_status = table.status if table else None
@@ -440,6 +573,7 @@ def list_active_takeaways(
         .filter(
             Order.order_type == "takeaway",
             Order.status != "paid",
+            Order.status != "cancelled",
         )
         .order_by(Order.created_at.desc())
         .all()
@@ -447,21 +581,8 @@ def list_active_takeaways(
 
     payload: list[ActiveTakeawayOrderResponse] = []
     for order in orders:
-        items = [
-            OrderItemDetailsResponse(
-                id=oi.id,
-                menu_item_id=oi.menu_item_id,
-                menu_item_name=_display_menu_item_name(oi),
-                quantity=oi.quantity,
-                subtotal=float(oi.subtotal),
-                item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
-                waiter_name=_display_waiter_name(oi),
-                selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
-                note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
-                special_instructions=getattr(oi, "special_instructions", None),
-            )
-            for oi in (order.order_items or [])
-        ]
+        items = [_build_order_item_details_response(oi) for oi in (order.order_items or [])]
+        breakdown = _order_price_breakdown(order)
         payload.append(
             ActiveTakeawayOrderResponse(
                 id=order.id,
@@ -469,6 +590,7 @@ def list_active_takeaways(
                 total_amount=float(order.total_amount),
                 created_at=order.created_at,
                 items=items,
+                **breakdown,
             )
         )
     return payload
@@ -594,6 +716,36 @@ async def update_order_status(
     return {"id": order.id, "status": order.status}
 
 
+@router.post("/orders/{order_id}/cancel", response_model=OrderStatusUpdateResponse)
+async def cancel_order(
+    request: Request,
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
+):
+    """Cancel an entire active order, release its table if any, and broadcast realtime updates."""
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.order_items))
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order_status = str(getattr(order, "status", "") or "").strip().lower()
+    if order_status == "paid":
+        raise HTTPException(status_code=400, detail="Cannot cancel a paid order")
+    if order_status == "cancelled":
+        raise HTTPException(status_code=400, detail="Order is already cancelled")
+
+    released_table = _cancel_order_items_and_release_table(db, order)
+    db.commit()
+    db.refresh(order)
+    await _broadcast_order_cancelled(request, order, released_table)
+    return {"id": order.id, "status": order.status}
+
+
 @router.get("/orders/{order_id}/details", response_model=OrderDetailsResponse)
 def get_order_details(
     order_id: int,
@@ -612,21 +764,8 @@ def get_order_details(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    items = [
-        OrderItemDetailsResponse(
-            id=oi.id,
-            menu_item_id=oi.menu_item_id,
-            menu_item_name=_display_menu_item_name(oi),
-            quantity=oi.quantity,
-            subtotal=float(oi.subtotal),
-            item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
-            waiter_name=_display_waiter_name(oi),
-            selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
-            note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
-            special_instructions=getattr(oi, "special_instructions", None),
-        )
-        for oi in order.order_items
-    ]
+    items = [_build_order_item_details_response(oi) for oi in order.order_items]
+    breakdown = _order_price_breakdown(order)
     return OrderDetailsResponse(
         id=order.id,
         table_id=getattr(order, "table_id", None),
@@ -640,6 +779,7 @@ def get_order_details(
         discount_value=float(getattr(order, "discount_value", 0.0) or 0.0),
         created_at=order.created_at,
         items=items,
+        **breakdown,
     )
 
 
@@ -683,8 +823,9 @@ async def update_order_item_status(
         order.total_amount = _recalculate_order_total_excluding_cancelled(order)
 
     released_table = None
+    order_auto_cancelled = False
     if normalized_status == "cancelled":
-        released_table = _release_table_if_order_fully_cancelled(db, order)
+        released_table, order_auto_cancelled = _release_table_if_order_fully_cancelled(db, order)
 
     db.commit()
     updated_order = (
@@ -699,40 +840,43 @@ async def update_order_item_status(
     if not updated_order:
         raise HTTPException(status_code=404, detail="Order not found after update")
 
-    if released_table:
-        await _broadcast_table_status_changed(request, released_table)
+    if order_auto_cancelled:
+        await _broadcast_order_cancelled(request, updated_order, released_table)
+    else:
+        if released_table:
+            await _broadcast_table_status_changed(request, released_table)
 
-    manager = getattr(request.app.state, "ws_manager", None)
-    if manager:
-        await manager.broadcast(
-            "table_grid_updated",
-            {
-                "refresh": True,
-                "order_id": order_id,
-                "item_id": item_id,
-                "table_id": updated_order.table_id,
-                "item_status": _normalized_item_status_value(getattr(oi, "item_status", None)),
-                "total_amount": float(updated_order.total_amount),
-            },
-        )
-        await manager.broadcast(
-            "order_updated",
-            {
-                "id": updated_order.id,
-                "status": updated_order.status,
-                "total_amount": float(updated_order.total_amount),
-            },
-        )
-        if (updated_order.order_type or "").strip().lower() == "takeaway":
+        manager = getattr(request.app.state, "ws_manager", None)
+        if manager:
             await manager.broadcast(
-                "takeaways_updated",
+                "table_grid_updated",
                 {
-                    "order_id": updated_order.id,
-                    "order_type": updated_order.order_type,
+                    "refresh": True,
+                    "order_id": order_id,
+                    "item_id": item_id,
+                    "table_id": updated_order.table_id,
+                    "item_status": _normalized_item_status_value(getattr(oi, "item_status", None)),
+                    "total_amount": float(updated_order.total_amount),
+                },
+            )
+            await manager.broadcast(
+                "order_updated",
+                {
+                    "id": updated_order.id,
                     "status": updated_order.status,
                     "total_amount": float(updated_order.total_amount),
                 },
             )
+            if (updated_order.order_type or "").strip().lower() == "takeaway":
+                await manager.broadcast(
+                    "takeaways_updated",
+                    {
+                        "order_id": updated_order.id,
+                        "order_type": updated_order.order_type,
+                        "status": updated_order.status,
+                        "total_amount": float(updated_order.total_amount),
+                    },
+                )
 
     return OrderResponseDetail.model_validate(updated_order)
 
@@ -760,6 +904,8 @@ async def submit_order(
     normalized_order_type = (body.order_type or "dine_in").strip().lower()
     if normalized_order_type not in ("dine_in", "takeaway"):
         raise HTTPException(status_code=400, detail="order_type must be 'dine_in' or 'takeaway'")
+    if body.order_id is not None and normalized_order_type != "takeaway":
+        raise HTTPException(status_code=400, detail="order_id is only valid for takeaway append")
 
     table = None
     table_number = None
@@ -781,6 +927,22 @@ async def submit_order(
             )
             .first()
         )
+    elif body.order_id is not None:
+        order = (
+            db.query(Order)
+            .filter(
+                Order.id == body.order_id,
+                Order.order_type == "takeaway",
+                Order.table_id.is_(None),
+                Order.status.in_(OPEN_ORDER_STATUSES),
+            )
+            .first()
+        )
+        if not order:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Active takeaway order id {body.order_id} not found",
+            )
 
     is_new_order = order is None
 
@@ -823,9 +985,13 @@ async def submit_order(
         if line.quantity < 1:
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
         selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
-        modifiers_total = _selected_modifiers_total(selected_modifiers)
-        base_price = _base_price_with_discount(menu_item)
-        subtotal = _round_money((base_price + modifiers_total) * line.quantity)
+        is_takeaway = bool(getattr(line, "is_takeaway", False))
+        base_price, unit_tax, subtotal = _calculate_order_line_pricing(
+            menu_item,
+            is_takeaway=is_takeaway,
+            quantity=line.quantity,
+            selected_modifiers=selected_modifiers,
+        )
         note_value = (line.note or line.special_instructions or "").strip() or None
         batch_total = _round_money(batch_total + subtotal)
         db.add(
@@ -841,8 +1007,10 @@ async def submit_order(
                 note=note_value,
                 special_instructions=note_value,
                 menu_item_name_at_sale=menu_item.name,
-                unit_price_at_sale=_round_money(base_price),
+                unit_price_at_sale=base_price,
+                unit_tax_at_sale=unit_tax,
                 category_name_at_sale=getattr(getattr(menu_item, "category", None), "name", None),
+                is_takeaway=is_takeaway,
             )
         )
         batch_items_detail.append(
@@ -889,6 +1057,7 @@ async def submit_order(
             "new_order_batch",
             {
                 "order_id": order.id,
+                "order_type": normalized_order_type,
                 "table_id": table.id if table else None,
                 "table_number": table_number,
                 "batch_number": new_batch_number,
@@ -985,9 +1154,8 @@ async def checkout_order(
         discount_amount = discount_value
     discount_amount = _round_money(discount_amount)
 
-    taxable_amount = _round_money(max(subtotal - discount_amount, 0.0))
-    tax_amount = _round_money(taxable_amount * 0.05)
-    final_total = _round_money(taxable_amount + tax_amount)
+    tax_amount = _order_lines_tax_total(order)
+    final_total = _round_money(max(subtotal - discount_amount, 0.0))
 
     tendered = float(body.amount_tendered)
     if tendered < final_total:

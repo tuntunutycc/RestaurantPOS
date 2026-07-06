@@ -25,6 +25,7 @@ def build_ticket_text(
         header_block = (
             "=================================\n"
             "  [ *** TAKEAWAY / ပါဆယ် *** ]\n"
+            f"  Takeaway #{order_id}\n"
             f"  Customer: {customer}\n"
             "=================================\n"
         )

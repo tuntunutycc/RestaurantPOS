@@ -29,11 +29,12 @@ Validated together with `specs/feature-menu-items/validation.md` — menu soft d
 
 ## Manual — Counter UI (optional sign-off)
 
+- [ ] Primary tabs (Dashboard, Cashier / Billing, Menu Management) visually stand out vs secondary tabs
+- [ ] Active primary tab shows bold label and blue highlight
 - [ ] Menu Management → category row shows **Edit** and **Delete**
-- [ ] Edit opens prompt; rename refreshes list
-- [ ] Delete with items shows server error message in dialog
+- [ ] Edit opens modal; rename refreshes list
+- [ ] Delete with active items shows server error message in dialog
 - [ ] Delete empty category removes row after confirm
-
 - [ ] Delete category after soft-deleting all its menu items succeeds
 
 ---

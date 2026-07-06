@@ -64,7 +64,6 @@ def test_checkout_excludes_cancelled_items_from_total(client, db_session, auth_h
     order = _seed_order_with_cancelled_item(db_session)
 
     # Cancelled item subtotal (5.0) must NOT be charged.
-    # Tax-on-net rule then applies 5% tax on the remaining 10.0.
     res = client.put(
         f"/api/orders/{order.id}/checkout",
         headers=auth_headers("cashier"),
@@ -77,8 +76,8 @@ def test_checkout_excludes_cancelled_items_from_total(client, db_session, auth_h
     )
     assert res.status_code == 200, res.text
     body = res.json()
-    assert float(body["tax_amount"]) == 0.5
-    assert float(body["total_amount"]) == 10.5
+    assert float(body["tax_amount"]) == 0.0
+    assert float(body["total_amount"]) == 10.0
 
 
 def test_waiter_cannot_checkout_forbidden(client, db_session, auth_headers):

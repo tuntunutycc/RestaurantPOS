@@ -11,6 +11,9 @@ Allow admin-panel users to remove menu items from active ordering without destro
 
 `OrderItem` stores snapshots: `menu_item_name_at_sale`, `unit_price_at_sale`, `category_name_at_sale`.
 
+## Related: dual pricing
+See `specs/feature-menu-pricing/requirements.md` for optional `MenuItem.takeaway_price` and per-line `OrderItem.is_takeaway`.
+
 ## FR-1: Soft delete API
 - `DELETE /api/menu-items/{id}` sets `is_deleted=true`, `deleted_at=now`, `is_available=false`.
 - **No hard delete** of `menu_items` rows when order history exists.

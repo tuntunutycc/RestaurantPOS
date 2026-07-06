@@ -34,8 +34,18 @@ Allow admin-panel users to rename and remove menu categories from Counter → Me
 
 ### FR-3: Counter UI
 - Each category row shows **Edit** and **Delete** actions beside printer route controls.
-- **Edit:** `prompt()` for new name → `PUT` → refresh list.
-- **Delete:** `dialogConfirm` → `DELETE` → on `400` show API `detail` in `dialogAlert`; on success refresh list.
+- **Edit:** opens `#category-edit-modal` (name input + Save/Cancel) → `PUT` → refresh list. Must not use blocking `window.prompt` in production UI.
+- **Delete:** `dialogConfirm` → `DELETE` → on `400` show API `detail` in `dialogAlert`; on success refresh categories and menu item list.
+- Category list section: Menu Management → **Categories** (`#categories-list`).
+
+### FR-4: Full category CRUD from UI
+| Action | UI control | API |
+|--------|------------|-----|
+| Create | Add Category form (`#form-category`) | `POST /api/categories/` |
+| Read | Categories list | `GET /api/categories/` |
+| Update name | Edit → modal | `PUT /api/categories/{id}` `{ name }` |
+| Update printer route | Route select + Save | `PUT /api/categories/{id}` `{ printer_route }` |
+| Delete | Delete → confirm | `DELETE /api/categories/{id}` |
 
 ## Authorization
 - `ADMIN_PANEL_ROLES` (`root`, `admin`) — same as category create and menu item CRUD.
