@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-07-06 — Strict password vs PIN login separation
+
+### Summary
+Password roles (`root`, `admin`) and PIN roles (`account`, `cashier`, `waiter`) are enforced at login endpoints with explicit **403** responses when the wrong auth method is used.
+
+### Backend
+- `routers/auth.py` — `/login` rejects PIN roles; `/login-pin` rejects password roles
+
+### Frontend
+- `static/login.js`, `static/pin-login.js` — surface 403 detail messages
+- `static/auth.js` — Change Password hidden for PIN roles; export `PIN_ROLES`
+- `static/counter.js` — staff form PIN field toggled by role
+
+### Tests
+- `tests/test_rbac_security_gaps.py`, `tests/test_rbac.py` — strict login rejection cases
+- `tests/test_integrity.py` — fix isolated-run summary assertion
+- Full suite: **138 passed** (`PYTHONPATH=. python -m pytest -q`)
+
 ## 2026-07-06 — Account role PIN-only authentication (SDD alignment)
 
 ### Summary

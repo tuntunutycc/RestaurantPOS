@@ -21,6 +21,7 @@
   };
 
   const PASSWORD_ROLES = ["root", "admin"];
+  const PIN_ROLES = ["account", "cashier", "waiter"];
 
   function t(key, fallback) {
     return window.i18n?.t?.(key) || fallback || key;
@@ -209,7 +210,7 @@
     const role = (user && user.role) || "";
     const lang = window.i18n?.currentLang || "en";
     const langLabel = lang === "my" ? "မြန်မာ" : "EN";
-    const showChangePassword = PASSWORD_ROLES.indexOf(role) !== -1;
+    const showChangePassword = PASSWORD_ROLES.indexOf(role) !== -1 && PIN_ROLES.indexOf(role) === -1;
     const showTakeOrders = role === "cashier" || role === "waiter";
     const changePasswordBtn = showChangePassword
       ? '<button type="button" id="pos-change-password-btn" data-i18n="change_password" class="px-3 py-1.5 bg-amber-600 text-white text-sm font-medium rounded hover:bg-amber-700">Change Password</button>'
@@ -292,6 +293,7 @@
     checkUnauthorized,
     openChangePasswordModal,
     PASSWORD_ROLES,
+    PIN_ROLES,
     ROLE_DEFAULT_PAGE,
   };
 })();

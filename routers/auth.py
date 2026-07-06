@@ -18,6 +18,9 @@ from services.sessions import create_session
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+_MSG_USE_PIN_LOGIN = "This role must use PIN login."
+_MSG_USE_PASSWORD_LOGIN = "This role must use Password login."
+
 
 def _device_id(raw: str | None) -> str:
     value = (raw or "").strip()
@@ -32,6 +35,11 @@ def login_pin(body: LoginPinRequest, db: Session = Depends(get_db)):
         .filter(User.pin_code == body.pin_code, User.is_deleted.is_(False))
         .first()
     )
+    if user and user.role in PASSWORD_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_MSG_USE_PASSWORD_LOGIN,
+        )
     if not user or user.role not in PIN_ROLES:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -58,6 +66,11 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         .filter(User.username == body.username.strip().lower(), User.is_deleted.is_(False))
         .first()
     )
+    if user and user.role in PIN_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_MSG_USE_PIN_LOGIN,
+        )
     if not user or user.role not in PASSWORD_ROLES:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

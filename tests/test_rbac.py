@@ -58,7 +58,7 @@ def test_root_creates_admin_and_lists(client, auth_headers):
 
 
 def test_password_roles_cannot_login_with_pin(client, db_session, seed_users):
-    """Root/admin must use /api/auth/login, not PIN."""
+    """Root/admin must use /api/auth/login, not PIN — 403 with explicit message."""
     seed_users["admin"].pin_code = "9876"
     seed_users["root"].pin_code = "9999"
     db_session.commit()
@@ -68,7 +68,19 @@ def test_password_roles_cannot_login_with_pin(client, db_session, seed_users):
             "/api/auth/login-pin",
             json={"pin_code": pin, "device_id": "pytest-pin-blocked"},
         )
-        assert res.status_code == 401, f"password role must not PIN-login with {pin}"
+        assert res.status_code == 403, res.text
+        assert res.json()["detail"] == "This role must use Password login."
+
+
+def test_pin_roles_cannot_login_with_password(client, seed_users):
+    """Account/cashier/waiter must use PIN login — 403 with explicit message."""
+    for username in ("account1", "cashier1", "waiter1"):
+        res = client.post(
+            "/api/auth/login",
+            json={"username": username, "password": "any-password", "device_id": "pytest-pw-blocked"},
+        )
+        assert res.status_code == 403, res.text
+        assert res.json()["detail"] == "This role must use PIN login."
 
 
 def test_account_staff_rejects_password(client, auth_headers):

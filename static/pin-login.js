@@ -59,6 +59,18 @@
           showError();
           return null;
         }
+        if (res.status === 403) {
+          return res.json().then((body) => {
+            clearPin();
+            const msg = body?.detail || "This role must use Password login.";
+            if (errorEl) {
+              errorEl.textContent = msg;
+              errorEl.classList.remove("hidden");
+            }
+            if (window.toast && window.toast.error) window.toast.error(msg);
+            return null;
+          });
+        }
         if (!res.ok) return res.json().then(() => null);
         return res.json();
       })

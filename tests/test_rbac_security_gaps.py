@@ -250,6 +250,34 @@ def test_change_password_succeeds_for_password_roles(
     )
 
 
+# --- Strict login endpoint separation (password vs PIN roles) ---
+
+
+@pytest.mark.parametrize("role,pin", [("admin", "9876"), ("root", "9999")])
+def test_password_roles_rejected_by_pin_login(client, db_session, seed_users, role, pin):
+    seed_users[role].pin_code = pin
+    db_session.commit()
+    res = client.post(
+        "/api/auth/login-pin",
+        json={"pin_code": pin, "device_id": "pytest-strict-pin"},
+    )
+    assert res.status_code == 403, res.text
+    assert res.json()["detail"] == "This role must use Password login."
+
+
+@pytest.mark.parametrize(
+    "username",
+    ["account1", "cashier1", "waiter1"],
+)
+def test_pin_roles_rejected_by_password_login(client, seed_users, username):
+    res = client.post(
+        "/api/auth/login",
+        json={"username": username, "password": "wrong-or-right", "device_id": "pytest-strict-pw"},
+    )
+    assert res.status_code == 403, res.text
+    assert res.json()["detail"] == "This role must use PIN login."
+
+
 def test_change_password_rejects_wrong_current_password(client, auth_headers):
     token = auth_headers("admin")["Authorization"].split(" ", 1)[1]
     res = client.post(

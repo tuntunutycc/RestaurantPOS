@@ -80,10 +80,10 @@ def test_table_delete_preserves_order_history_and_sales_summary(client, db_sessi
     assert persisted_items[0].id == order_item.id
     assert float(persisted_items[0].subtotal) == 10.00
 
-    # Daily summary should still include detached paid order.
+    # Daily summary (admin sees all store sales) should still include detached paid order.
     summary_res = client.get(
         "/api/reports/summary/today",
-        headers=auth_headers("cashier"),
+        headers=auth_headers("admin"),
     )
     assert summary_res.status_code == 200, summary_res.text
     summary = summary_res.json()

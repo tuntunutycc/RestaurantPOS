@@ -58,7 +58,10 @@
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const msg = data.detail || "Login failed.";
+        const msg =
+          res.status === 403
+            ? data.detail || "This role must use PIN login."
+            : data.detail || "Login failed.";
         if (errorEl) {
           errorEl.textContent = typeof msg === "string" ? msg : "Login failed.";
           errorEl.classList.remove("hidden");

@@ -1875,8 +1875,14 @@ if (btnApplyAuditFilters) {
 }
 
 function syncStaffRoleFields() {
+  const roleEl = document.getElementById('user-role');
+  const pinWrap = document.getElementById('user-pin-wrap');
   const pinEl = document.getElementById('user-pin');
-  if (pinEl) pinEl.required = true;
+  if (!roleEl) return;
+  const PIN_ROLES = ['account', 'cashier', 'waiter'];
+  const isPinRole = PIN_ROLES.includes(roleEl.value);
+  if (pinWrap) pinWrap.classList.toggle('hidden', !isPinRole);
+  if (pinEl) pinEl.required = isPinRole;
 }
 
 async function loadUsers() {
