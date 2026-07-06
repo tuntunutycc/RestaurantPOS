@@ -9,7 +9,9 @@ Support optional **takeaway-specific pricing** on menu items (e.g. packaging cos
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `price` | `float` | yes | Standard dine-in base price |
-| `discount_price` | `float \| null` | no | Existing dine-in promo price when `> 0` |
+| `discount_price` | `float \| null` | no | **Legacy** sale price; migrated to `discount_type`/`discount_value` at runtime when unset |
+| `discount_type` | `none` \| `percentage` \| `fixed` | `none` | Per-item discount mode (see `specs/feature-menu-item-discount/`) |
+| `discount_value` | `float` | `0.0` | Discount percent or fixed amount |
 | `takeaway_price` | `float \| null` | no | Optional takeaway-only base price |
 
 ### `OrderItem`
@@ -25,14 +27,14 @@ For each order line at create/submit time:
 
 ```
 if line.is_takeaway and menu_item.takeaway_price is not None:
-    base_unit = menu_item.takeaway_price
+    effective_base = menu_item.takeaway_price
 else:
-    base_unit = discount_price if discount_price > 0 else menu_item.price
+    effective_base = menu_item.price
 ```
 
-Then: `subtotal = round((base_unit + modifiers_total) × quantity, 2)`.
+Then apply discount → tax → modifiers (see `specs/feature-menu-item-discount/` and `specs/feature-menu-item-tax/`).
 
-**Fallback:** When `takeaway_price` is `null`, takeaway lines use the same dine-in base resolution (`discount_price` else `price`).
+**Fallback:** When `takeaway_price` is `null`, takeaway lines use `menu_item.price` as effective base.
 
 ## FR-P2: Menu CRUD
 - `POST /api/menu-items/` and `PUT /api/menu-items/{id}` accept optional `takeaway_price`.

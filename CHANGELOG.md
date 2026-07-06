@@ -1,6 +1,25 @@
 # Changelog
 
-# Changelog
+## 2026-07-06 — Per-item menu discount + tax-after-discount pricing
+
+### Summary
+Menu items support `discount_type` (`none` / `percentage` / `fixed`) and `discount_value`. Standard POS math: tax is applied on the **discounted** price. Waiter cart shows per-item breakdown (Base | Disc | Tax) and footer includes Total Discount.
+
+### Spec
+- `specs/feature-menu-item-discount/` — new requirements
+- `specs/feature-menu-pricing/`, `specs/feature-menu-item-tax/`, `specs/feature-waiter-cart-breakdown/` — updated formulas
+
+### Backend
+- `MenuItem.discount_type`, `MenuItem.discount_value`; `OrderItem.unit_discount_at_sale`
+- `_calculate_order_line_pricing()` — discount then tax; legacy `discount_price` migrated at runtime
+- `breakdown_discount_total` on order details / active takeaways; per-item `unit_discount_at_sale` in responses
+
+### Frontend
+- `waiter.html` / `waiter.js` — item-level breakdown rows, Total Discount footer row, sidebar item pricing
+
+### Tests
+- `tests/test_menu_item_discount.py` — 10% discount + 5% tax on discounted price; grand total formula
+- Full suite **160 passed**
 
 ## 2026-07-06 — Waiter cart price breakdown (Subtotal / Tax / Grand Total)
 

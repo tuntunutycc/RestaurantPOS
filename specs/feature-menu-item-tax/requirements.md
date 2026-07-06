@@ -18,26 +18,28 @@ Allow admins to configure **item-level tax** on menu items. Tax is included in l
 
 Line `subtotal` stores **(base + unit_tax + modifiers) × quantity** (rounded per line).
 
-## FR-T1: Active price for tax base
+## FR-T1: Tax base (after discount — CRITICAL)
 
 ```
-base = takeaway_price when line.is_takeaway and takeaway_price is set
-     else discount_price when discount_price > 0
-     else price
+effective_base = takeaway_price when line.is_takeaway and takeaway_price is set
+               else price
+
+unit_discount = discount_formula(effective_base, discount_type, discount_value)
+discounted_price = effective_base - unit_discount
 ```
 
-Tax is calculated on **`base` only** (not modifiers).
+Tax is calculated on **`discounted_price` only** (not modifiers, not pre-discount base). See `specs/feature-menu-item-discount/`.
 
 ## FR-T2: Tax formulas (per unit, before modifiers)
 
 | `tax_type` | Formula |
 |------------|---------|
 | `none` | `unit_tax = 0` |
-| `percentage` | `unit_tax = round(base × (tax_value / 100), 2)` |
+| `percentage` | `unit_tax = round(discounted_price × (tax_value / 100), 2)` |
 | `fixed` | `unit_tax = round(tax_value, 2)` |
 
 ```
-line_subtotal = round((base + unit_tax + modifiers_total) × quantity, 2)
+line_subtotal = round((discounted_price + unit_tax + modifiers_total) × quantity, 2)
 ```
 
 ## FR-T3: Order submit / create

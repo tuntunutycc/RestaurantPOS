@@ -184,7 +184,8 @@ def _display_waiter_name(order_item: OrderItem) -> str | None:
 
 def _base_price_with_discount(menu_item: MenuItem) -> float:
     """
-    Use discount price when it exists and is > 0, otherwise use standard price.
+    Legacy helper: returns discount_price when set, else standard price.
+    Prefer _resolve_unit_base_price + _menu_item_discount_config for new pricing.
     """
     try:
         discount = float(getattr(menu_item, "discount_price", 0) or 0)
@@ -196,14 +197,40 @@ def _base_price_with_discount(menu_item: MenuItem) -> float:
 
 
 def _resolve_unit_base_price(menu_item: MenuItem, *, is_takeaway: bool = False) -> float:
-    """
-    Takeaway lines use takeaway_price when set; otherwise dine-in base (discount else price).
-    """
+    """Effective base before discount/tax (takeaway_price or catalog price)."""
     if is_takeaway:
         raw_takeaway = getattr(menu_item, "takeaway_price", None)
         if raw_takeaway is not None:
             return float(raw_takeaway)
-    return _base_price_with_discount(menu_item)
+    return float(menu_item.price)
+
+
+def _menu_item_discount_config(menu_item: MenuItem, effective_base: float) -> tuple[str, float]:
+    discount_type = str(getattr(menu_item, "discount_type", "none") or "none").strip().lower()
+    discount_value = float(getattr(menu_item, "discount_value", 0.0) or 0.0)
+    if discount_type not in ("percentage", "fixed"):
+        discount_type = "none"
+    if discount_value < 0:
+        discount_value = 0.0
+    if discount_type == "none":
+        try:
+            legacy_sale = float(getattr(menu_item, "discount_price", 0) or 0)
+        except Exception:
+            legacy_sale = 0.0
+        if legacy_sale > 0 and effective_base > legacy_sale:
+            discount_type = "fixed"
+            discount_value = _round_money(effective_base - legacy_sale)
+    return discount_type, discount_value
+
+
+def _calculate_unit_discount_amount(
+    base_price: float, discount_type: str, discount_value: float
+) -> float:
+    if discount_type == "percentage" and discount_value > 0:
+        return _round_money(base_price * (discount_value / 100.0))
+    if discount_type == "fixed" and discount_value > 0:
+        return _round_money(min(discount_value, base_price))
+    return 0.0
 
 
 def _menu_item_tax_config(menu_item: MenuItem) -> tuple[str, float]:
@@ -230,14 +257,17 @@ def _calculate_order_line_pricing(
     is_takeaway: bool,
     quantity: int,
     selected_modifiers: list[dict],
-) -> tuple[float, float, float]:
-    """Return (base_price, unit_tax, line_subtotal) for one order line."""
+) -> tuple[float, float, float, float]:
+    """Return (base_price, unit_discount, unit_tax, line_subtotal) for one order line."""
     base_price = _resolve_unit_base_price(menu_item, is_takeaway=is_takeaway)
+    disc_type, disc_val = _menu_item_discount_config(menu_item, base_price)
+    unit_discount = _calculate_unit_discount_amount(base_price, disc_type, disc_val)
+    discounted_price = _round_money(base_price - unit_discount)
     tax_type, tax_value = _menu_item_tax_config(menu_item)
-    unit_tax = _calculate_unit_tax_amount(base_price, tax_type, tax_value)
+    unit_tax = _calculate_unit_tax_amount(discounted_price, tax_type, tax_value)
     modifiers_total = _selected_modifiers_total(selected_modifiers)
-    line_subtotal = _round_money((base_price + unit_tax + modifiers_total) * quantity)
-    return _round_money(base_price), unit_tax, line_subtotal
+    line_subtotal = _round_money((discounted_price + unit_tax + modifiers_total) * quantity)
+    return _round_money(base_price), unit_discount, unit_tax, line_subtotal
 
 
 def _order_lines_tax_total(order: Order) -> float:
@@ -251,21 +281,26 @@ def _order_lines_tax_total(order: Order) -> float:
 
 
 def _order_price_breakdown(order: Order) -> dict[str, float]:
-    """Pre-tax subtotal, tax total, and grand total for non-cancelled lines."""
+    """Subtotal, discount, tax, and grand total for non-cancelled lines."""
     breakdown_subtotal = 0.0
+    breakdown_discount_total = 0.0
     breakdown_tax_total = 0.0
     breakdown_grand_total = 0.0
     for oi in order.order_items or []:
         if _normalized_item_status_value(getattr(oi, "item_status", None)) == "cancelled":
             continue
         qty = int(getattr(oi, "quantity", 0) or 0)
-        line_subtotal = float(getattr(oi, "subtotal", 0.0) or 0.0)
-        line_tax = float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0) * qty
-        breakdown_grand_total += line_subtotal
-        breakdown_tax_total += line_tax
-        breakdown_subtotal += line_subtotal - line_tax
+        base = float(getattr(oi, "unit_price_at_sale", 0.0) or 0.0)
+        unit_discount = float(getattr(oi, "unit_discount_at_sale", 0.0) or 0.0)
+        unit_tax = float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0)
+        modifiers_total = _selected_modifiers_total(getattr(oi, "selected_modifiers", []) or [])
+        breakdown_subtotal += (base + modifiers_total) * qty
+        breakdown_discount_total += unit_discount * qty
+        breakdown_tax_total += unit_tax * qty
+        breakdown_grand_total += float(getattr(oi, "subtotal", 0.0) or 0.0)
     return {
         "breakdown_subtotal": _round_money(breakdown_subtotal),
+        "breakdown_discount_total": _round_money(breakdown_discount_total),
         "breakdown_tax_total": _round_money(breakdown_tax_total),
         "breakdown_grand_total": _round_money(breakdown_grand_total),
     }
@@ -318,6 +353,7 @@ def _build_order_item_details_response(oi: OrderItem) -> OrderItemDetailsRespons
         quantity=oi.quantity,
         subtotal=float(oi.subtotal),
         unit_price_at_sale=float(getattr(oi, "unit_price_at_sale", 0.0) or 0.0),
+        unit_discount_at_sale=float(getattr(oi, "unit_discount_at_sale", 0.0) or 0.0),
         unit_tax_at_sale=float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0),
         item_status=getattr(getattr(oi, "item_status", None), "value", getattr(oi, "item_status", "pending")),
         waiter_name=_display_waiter_name(oi),
@@ -381,7 +417,7 @@ async def create_order(
                 raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
             selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
             is_takeaway = bool(getattr(line, "is_takeaway", False))
-            base_price, unit_tax, subtotal = _calculate_order_line_pricing(
+            base_price, unit_discount, unit_tax, subtotal = _calculate_order_line_pricing(
                 menu_item,
                 is_takeaway=is_takeaway,
                 quantity=line.quantity,
@@ -402,6 +438,7 @@ async def create_order(
                     special_instructions=note_value,
                     menu_item_name_at_sale=menu_item.name,
                     unit_price_at_sale=base_price,
+                    unit_discount_at_sale=unit_discount,
                     unit_tax_at_sale=unit_tax,
                     category_name_at_sale=getattr(getattr(menu_item, "category", None), "name", None),
                     is_takeaway=is_takeaway,
@@ -454,7 +491,7 @@ async def create_order(
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
         selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
         is_takeaway = bool(getattr(line, "is_takeaway", False))
-        base_price, unit_tax, subtotal = _calculate_order_line_pricing(
+        base_price, unit_discount, unit_tax, subtotal = _calculate_order_line_pricing(
             menu_item,
             is_takeaway=is_takeaway,
             quantity=line.quantity,
@@ -472,6 +509,7 @@ async def create_order(
                 "special_instructions": note_value,
                 "menu_item_name_at_sale": menu_item.name,
                 "unit_price_at_sale": base_price,
+                "unit_discount_at_sale": unit_discount,
                 "unit_tax_at_sale": unit_tax,
                 "category_name_at_sale": getattr(getattr(menu_item, "category", None), "name", None),
                 "is_takeaway": is_takeaway,
@@ -502,6 +540,7 @@ async def create_order(
                 special_instructions=item_data["special_instructions"],
                 menu_item_name_at_sale=item_data["menu_item_name_at_sale"],
                 unit_price_at_sale=item_data["unit_price_at_sale"],
+                unit_discount_at_sale=item_data["unit_discount_at_sale"],
                 unit_tax_at_sale=item_data["unit_tax_at_sale"],
                 category_name_at_sale=item_data["category_name_at_sale"],
                 is_takeaway=item_data.get("is_takeaway", False),
@@ -986,7 +1025,7 @@ async def submit_order(
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
         selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
         is_takeaway = bool(getattr(line, "is_takeaway", False))
-        base_price, unit_tax, subtotal = _calculate_order_line_pricing(
+        base_price, unit_discount, unit_tax, subtotal = _calculate_order_line_pricing(
             menu_item,
             is_takeaway=is_takeaway,
             quantity=line.quantity,
@@ -1008,6 +1047,7 @@ async def submit_order(
                 special_instructions=note_value,
                 menu_item_name_at_sale=menu_item.name,
                 unit_price_at_sale=base_price,
+                unit_discount_at_sale=unit_discount,
                 unit_tax_at_sale=unit_tax,
                 category_name_at_sale=getattr(getattr(menu_item, "category", None), "name", None),
                 is_takeaway=is_takeaway,

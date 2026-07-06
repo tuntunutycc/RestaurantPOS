@@ -82,13 +82,37 @@ function modifiersTotal(selectedModifiers) {
   return normalizeSelectedModifiers(selectedModifiers).reduce((sum, m) => sum + toNumber(m.price, 0), 0);
 }
 
-function getEffectiveBasePrice(menuItem, isTakeaway = false) {
+function getRawBasePrice(menuItem, isTakeaway = false) {
   if (isTakeaway && menuItem?.takeaway_price != null) {
     return toNumber(menuItem.takeaway_price, 0);
   }
-  const discount = toNumber(menuItem?.discount_price, 0);
-  if (discount > 0) return discount;
   return toNumber(menuItem?.price, 0);
+}
+
+function resolveMenuDiscountConfig(menuItem, effectiveBase) {
+  let discountType = String(menuItem?.discount_type || 'none').toLowerCase();
+  let discountValue = toNumber(menuItem?.discount_value, 0);
+  if (discountType !== 'percentage' && discountType !== 'fixed') discountType = 'none';
+  if (discountType === 'none') {
+    const legacySale = toNumber(menuItem?.discount_price, 0);
+    if (legacySale > 0 && effectiveBase > legacySale) {
+      discountType = 'fixed';
+      discountValue = roundMoney(effectiveBase - legacySale);
+    }
+  }
+  return { discountType, discountValue };
+}
+
+function computeUnitDiscount(menuItem, isTakeaway = false) {
+  const base = getRawBasePrice(menuItem, isTakeaway);
+  const { discountType, discountValue } = resolveMenuDiscountConfig(menuItem, base);
+  if (discountType === 'percentage' && discountValue > 0) return roundMoney(base * (discountValue / 100));
+  if (discountType === 'fixed' && discountValue > 0) return roundMoney(Math.min(discountValue, base));
+  return 0;
+}
+
+function getEffectiveBasePrice(menuItem, isTakeaway = false) {
+  return getRawBasePrice(menuItem, isTakeaway);
 }
 
 function defaultCartLineTakeaway() {
@@ -108,26 +132,60 @@ function roundMoney(value) {
 }
 
 function computeUnitTax(menuItem, isTakeaway = false) {
-  const base = getEffectiveBasePrice(menuItem, isTakeaway);
+  const base = getRawBasePrice(menuItem, isTakeaway);
+  const unitDiscount = computeUnitDiscount(menuItem, isTakeaway);
+  const discounted = roundMoney(base - unitDiscount);
   const taxType = String(menuItem?.tax_type || 'none').toLowerCase();
   const taxValue = toNumber(menuItem?.tax_value, 0);
-  if (taxType === 'percentage' && taxValue > 0) return roundMoney(base * (taxValue / 100));
+  if (taxType === 'percentage' && taxValue > 0) return roundMoney(discounted * (taxValue / 100));
   if (taxType === 'fixed' && taxValue > 0) return roundMoney(taxValue);
   return 0;
 }
 
 function computeLineUnitPrice(menuItem, selectedModifiers, isTakeaway = false) {
-  return getEffectiveBasePrice(menuItem, isTakeaway) + computeUnitTax(menuItem, isTakeaway) + modifiersTotal(selectedModifiers);
+  const base = getRawBasePrice(menuItem, isTakeaway);
+  const unitDiscount = computeUnitDiscount(menuItem, isTakeaway);
+  const discounted = roundMoney(base - unitDiscount);
+  const unitTax = computeUnitTax(menuItem, isTakeaway);
+  return roundMoney(discounted + unitTax + modifiersTotal(selectedModifiers));
+}
+
+function computeLinePricingBreakdown(menuItem, selectedModifiers, isTakeaway = false) {
+  const base = getRawBasePrice(menuItem, isTakeaway);
+  const unitDiscount = computeUnitDiscount(menuItem, isTakeaway);
+  const unitTax = computeUnitTax(menuItem, isTakeaway);
+  const mods = modifiersTotal(selectedModifiers);
+  const finalUnit = roundMoney(base - unitDiscount + unitTax + mods);
+  return { base, unitDiscount, unitTax, mods, finalUnit };
+}
+
+function renderItemBreakdownHtml(breakdown) {
+  const { base, unitDiscount, unitTax } = breakdown;
+  if (unitDiscount <= 0 && unitTax <= 0) return '';
+  const parts = [`${t('base', 'Base')}: ${formatMoney(base)}`];
+  if (unitDiscount > 0) parts.push(`${t('disc', 'Disc')}: -${formatMoney(unitDiscount)}`);
+  if (unitTax > 0) parts.push(`${t('tax', 'Tax')}: +${formatMoney(unitTax)}`);
+  return `<div class="text-xs text-slate-500 mt-0.5">${parts.join(' | ')}</div>`;
 }
 
 function getMenuPriceHtml(menuItem) {
   const normal = toNumber(menuItem?.price, 0);
-  const discount = toNumber(menuItem?.discount_price, 0);
-  if (discount > 0) {
+  const unitDiscount = computeUnitDiscount(menuItem, false);
+  const discounted = roundMoney(normal - unitDiscount);
+  if (unitDiscount > 0) {
     return `
       <div class="flex items-center gap-2 mt-0.5">
         <span class="line-through text-gray-500 text-xs">${formatMoney(normal)}</span>
-        <span class="text-red-500 font-bold text-sm">${formatMoney(discount)}</span>
+        <span class="text-red-500 font-bold text-sm">${formatMoney(discounted)}</span>
+      </div>
+    `;
+  }
+  const legacySale = toNumber(menuItem?.discount_price, 0);
+  if (legacySale > 0 && normal > legacySale) {
+    return `
+      <div class="flex items-center gap-2 mt-0.5">
+        <span class="line-through text-gray-500 text-xs">${formatMoney(normal)}</span>
+        <span class="text-red-500 font-bold text-sm">${formatMoney(legacySale)}</span>
       </div>
     `;
   }
@@ -951,7 +1009,11 @@ function addToCart(menuItem, selectedModifiers = [], specialInstructions = '', i
         name: menuItem.name,
         price: toNumber(menuItem.price, 0),
         discount_price: toNumber(menuItem.discount_price, 0) > 0 ? toNumber(menuItem.discount_price, 0) : null,
+        discount_type: menuItem.discount_type || 'none',
+        discount_value: toNumber(menuItem.discount_value, 0),
         takeaway_price: menuItem.takeaway_price != null ? toNumber(menuItem.takeaway_price, 0) : null,
+        tax_type: menuItem.tax_type || 'none',
+        tax_value: toNumber(menuItem.tax_value, 0),
       },
       selected_modifiers: normalizedModifiers,
       special_instructions: note || null,
@@ -1004,19 +1066,21 @@ function updateCartQuantity(lineKey, delta) {
 
 function computeCartPriceBreakdown() {
   let breakdownSubtotal = 0;
+  let breakdownDiscount = 0;
   let breakdownTax = 0;
   cart.forEach(({ menu_item, quantity, selected_modifiers, is_takeaway }) => {
     const qty = Number(quantity) || 0;
-    const base = getEffectiveBasePrice(menu_item, is_takeaway);
-    const unitTax = computeUnitTax(menu_item, is_takeaway);
-    const mods = modifiersTotal(selected_modifiers);
+    const { base, unitDiscount, unitTax, mods } = computeLinePricingBreakdown(menu_item, selected_modifiers, is_takeaway);
     breakdownSubtotal += (base + mods) * qty;
+    breakdownDiscount += unitDiscount * qty;
     breakdownTax += unitTax * qty;
   });
+  const breakdownGrandTotal = roundMoney(breakdownSubtotal - breakdownDiscount + breakdownTax);
   return {
     breakdownSubtotal: roundMoney(breakdownSubtotal),
+    breakdownDiscountTotal: roundMoney(breakdownDiscount),
     breakdownTaxTotal: roundMoney(breakdownTax),
-    breakdownGrandTotal: roundMoney(breakdownSubtotal + breakdownTax),
+    breakdownGrandTotal,
   };
 }
 
@@ -1024,24 +1088,30 @@ function computeOrderItemsBreakdown(orderDetails) {
   if (orderDetails?.breakdown_grand_total != null) {
     return {
       breakdownSubtotal: roundMoney(Number(orderDetails.breakdown_subtotal) || 0),
+      breakdownDiscountTotal: roundMoney(Number(orderDetails.breakdown_discount_total) || 0),
       breakdownTaxTotal: roundMoney(Number(orderDetails.breakdown_tax_total) || 0),
       breakdownGrandTotal: roundMoney(Number(orderDetails.breakdown_grand_total) || 0),
     };
   }
   let breakdownSubtotal = 0;
+  let breakdownDiscount = 0;
   let breakdownTax = 0;
   let breakdownGrand = 0;
   (orderDetails?.items || []).forEach((item) => {
     if (normalizeTrackingStatus(item.item_status) === 'cancelled') return;
     const qty = Number(item.quantity) || 0;
-    const lineSub = Number(item.subtotal) || 0;
-    const lineTax = Number(item.unit_tax_at_sale ?? 0) * qty;
-    breakdownGrand += lineSub;
-    breakdownTax += lineTax;
-    breakdownSubtotal += lineSub - lineTax;
+    const base = Number(item.unit_price_at_sale ?? 0);
+    const unitDiscount = Number(item.unit_discount_at_sale ?? 0);
+    const unitTax = Number(item.unit_tax_at_sale ?? 0);
+    const mods = modifiersTotal(item.selected_modifiers);
+    breakdownSubtotal += (base + mods) * qty;
+    breakdownDiscount += unitDiscount * qty;
+    breakdownTax += unitTax * qty;
+    breakdownGrand += Number(item.subtotal) || 0;
   });
   return {
     breakdownSubtotal: roundMoney(breakdownSubtotal),
+    breakdownDiscountTotal: roundMoney(breakdownDiscount),
     breakdownTaxTotal: roundMoney(breakdownTax),
     breakdownGrandTotal: roundMoney(breakdownGrand),
   };
@@ -1049,14 +1119,22 @@ function computeOrderItemsBreakdown(orderDetails) {
 
 function renderPriceBreakdownHtml(breakdown) {
   const subtotal = breakdown?.breakdownSubtotal ?? 0;
+  const discount = breakdown?.breakdownDiscountTotal ?? 0;
   const tax = breakdown?.breakdownTaxTotal ?? 0;
   const grand = breakdown?.breakdownGrandTotal ?? 0;
+  const discountRow = discount > 0
+    ? `<div class="flex justify-between text-emerald-600">
+        <span>${escapeHtml(t('total_discount', 'Total Discount'))}</span>
+        <span>-${formatMoney(discount)}</span>
+      </div>`
+    : '';
   return `
     <div class="order-summary space-y-1 text-sm">
       <div class="flex justify-between text-slate-700">
         <span>${escapeHtml(t('subtotal', 'Subtotal'))}</span>
         <span>${formatMoney(subtotal)}</span>
       </div>
+      ${discountRow}
       <div class="flex justify-between text-slate-500">
         <span>${escapeHtml(t('tax', 'Tax'))}</span>
         <span>+${formatMoney(tax)}</span>
@@ -1071,10 +1149,20 @@ function renderPriceBreakdownHtml(breakdown) {
 
 function updateCartSummaryBreakdown() {
   const subtotalEl = document.getElementById('cart-subtotal');
+  const discountRowEl = document.getElementById('cart-discount-row');
+  const discountEl = document.getElementById('cart-discount-total');
   const taxEl = document.getElementById('cart-tax-total');
   const grandEl = document.getElementById('cart-grand-total');
   const breakdown = computeCartPriceBreakdown();
   if (subtotalEl) subtotalEl.textContent = formatMoney(breakdown.breakdownSubtotal);
+  if (discountRowEl && discountEl) {
+    if (breakdown.breakdownDiscountTotal > 0) {
+      discountRowEl.classList.remove('hidden');
+      discountEl.textContent = `-${formatMoney(breakdown.breakdownDiscountTotal)}`;
+    } else {
+      discountRowEl.classList.add('hidden');
+    }
+  }
   if (taxEl) taxEl.textContent = `+${formatMoney(breakdown.breakdownTaxTotal)}`;
   if (grandEl) grandEl.textContent = formatMoney(breakdown.breakdownGrandTotal);
 }
@@ -1092,16 +1180,14 @@ function renderCart() {
 
   list.innerHTML = '';
   cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions, unit_price, is_takeaway }, lineKey) => {
-    const subtotal = unit_price * quantity;
-    const discountPrice = toNumber(menu_item?.discount_price, 0);
-    const normalPrice = toNumber(menu_item?.price, 0);
+    const lineBreakdown = computeLinePricingBreakdown(menu_item, selected_modifiers, is_takeaway);
+    const subtotal = lineBreakdown.finalUnit * quantity;
     const takeawayPrice = menu_item?.takeaway_price != null ? toNumber(menu_item.takeaway_price, 0) : null;
     let priceHtml = '';
     if (is_takeaway && takeawayPrice != null) {
       priceHtml = `<div class="text-xs mt-0.5"><span class="text-orange-700 font-semibold">${formatMoney(takeawayPrice)}</span> <span class="text-slate-400">(${escapeHtml(t('takeaway', 'Takeaway'))})</span></div>`;
-    } else if (discountPrice > 0) {
-      priceHtml = `<div class="text-xs mt-0.5"><span class="line-through text-slate-400">${formatMoney(normalPrice)}</span> <span class="text-red-500 font-semibold">${formatMoney(discountPrice)}</span></div>`;
     }
+    const breakdownHtml = renderItemBreakdownHtml(lineBreakdown);
     const modifiersHtml = (selected_modifiers || []).length
       ? `<div class="text-xs text-slate-500 mt-0.5">${(selected_modifiers || []).map((m) => `+ ${escapeHtml(m.name)}${toNumber(m.price, 0) ? ` (${formatMoney(toNumber(m.price, 0))})` : ''}`).join(', ')}</div>`
       : '';
@@ -1114,6 +1200,7 @@ function renderCart() {
       <div class="flex-1 min-w-0">
         <span class="truncate block">${escapeHtml(menu_item.name)} x ${quantity}</span>
         ${priceHtml}
+        ${breakdownHtml}
         ${modifiersHtml}
         ${noteHtml}
         <label class="flex items-center gap-1.5 text-xs text-orange-800 mt-1 cursor-pointer">
@@ -1397,14 +1484,25 @@ function renderTableDetailsItems(orderDetails) {
     const isCancelled = status === 'cancelled';
     const textClass = isCancelled ? 'line-through text-gray-400' : 'text-slate-800';
     const waiterClass = isCancelled ? 'line-through text-gray-400' : 'text-slate-500';
+    const base = Number(item.unit_price_at_sale ?? 0);
+    const unitDiscount = Number(item.unit_discount_at_sale ?? 0);
+    const unitTax = Number(item.unit_tax_at_sale ?? 0);
+    const itemBreakdownHtml = (!isCancelled && (unitDiscount > 0 || unitTax > 0))
+      ? renderItemBreakdownHtml({ base, unitDiscount, unitTax })
+      : '';
+    const lineFinal = Number(item.subtotal) || 0;
     return `
       <div class="border border-slate-200 rounded-md p-3" data-order-item-id="${item.id}">
         <div class="flex items-center justify-between gap-2 mb-2">
           <div>
             <p class="font-medium ${textClass}">${escapeHtml(item.menu_item_name)} x ${item.quantity}</p>
+            ${itemBreakdownHtml}
             <p class="text-xs ${waiterClass}">${escapeHtml(t('waiter', 'Waiter'))}: ${escapeHtml(displayOrderWaiterLine(item.waiter_name))}</p>
           </div>
-          <span data-item-status-badge>${statusBadgeHtml(status)}</span>
+          <div class="text-right">
+            <span class="font-medium ${textClass}">${formatMoney(lineFinal)}</span>
+            <span data-item-status-badge class="block mt-1">${statusBadgeHtml(status)}</span>
+          </div>
         </div>
         <div data-item-status-action class="flex flex-wrap gap-2">
           ${statusToggleButtonHtml(item.id, status)}
@@ -1681,6 +1779,8 @@ function connectWebSocket() {
             name: item.name,
             price: item.price,
             discount_price: item.discount_price ?? null,
+            discount_type: item.discount_type || 'none',
+            discount_value: item.discount_value ?? 0,
             takeaway_price: item.takeaway_price ?? null,
             tax_type: item.tax_type || 'none',
             tax_value: item.tax_value ?? 0,
@@ -1704,12 +1804,17 @@ function connectWebSocket() {
             ...menuItems[idx],
             ...item,
             discount_price: item.discount_price ?? null,
+            discount_type: item.discount_type || 'none',
+            discount_value: item.discount_value ?? 0,
             takeaway_price: item.takeaway_price ?? null,
             tax_type: item.tax_type || 'none',
             tax_value: item.tax_value ?? 0,
           };
           cart.forEach((entry, key) => {
             if (Number(entry?.menu_item?.id) !== Number(item.id)) return;
+            entry.menu_item.discount_price = item.discount_price ?? null;
+            entry.menu_item.discount_type = item.discount_type || 'none';
+            entry.menu_item.discount_value = item.discount_value ?? 0;
             entry.menu_item.takeaway_price = item.takeaway_price ?? null;
             entry.menu_item.tax_type = item.tax_type || 'none';
             entry.menu_item.tax_value = item.tax_value ?? 0;

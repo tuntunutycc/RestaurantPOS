@@ -64,6 +64,8 @@ class MenuItem(Base):
     name = Column(String(255), nullable=False, index=True)
     price = Column(Float, nullable=False)
     discount_price = Column(Float, nullable=True, default=None)
+    discount_type = Column(String(32), nullable=False, default="none")
+    discount_value = Column(Float, nullable=False, default=0.0)
     takeaway_price = Column(Float, nullable=True, default=None)
     tax_type = Column(String(32), nullable=False, default="none")
     tax_value = Column(Float, nullable=False, default=0.0)
@@ -219,6 +221,7 @@ class OrderItem(Base):
     # Historical snapshots to preserve reporting even if related records change/delete.
     menu_item_name_at_sale = Column(String(255), nullable=True)
     unit_price_at_sale = Column(Float, nullable=True)
+    unit_discount_at_sale = Column(Float, nullable=True)
     unit_tax_at_sale = Column(Float, nullable=True)
     category_name_at_sale = Column(String(255), nullable=True)
     is_takeaway = Column(Boolean, nullable=False, default=False, index=True)

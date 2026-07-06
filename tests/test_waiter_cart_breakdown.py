@@ -61,6 +61,7 @@ def test_order_details_includes_price_breakdown(client, db_session, auth_headers
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["breakdown_subtotal"] == 1000.0
+    assert body["breakdown_discount_total"] == 0.0
     assert body["breakdown_tax_total"] == 50.0
     assert body["breakdown_grand_total"] == 1050.0
     assert body["items"][0]["unit_price_at_sale"] == 1000.0

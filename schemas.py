@@ -55,6 +55,7 @@ TableStatusLiteral = Literal["available", "occupied"]
 OrderItemStatusLiteral = Literal["pending", "cooking", "served", "cancelled"]
 OrderStatusLiteral = Literal["pending", "open", "dining", "completed", "paid", "cancelled"]
 MenuTaxTypeLiteral = Literal["none", "percentage", "fixed"]
+MenuDiscountTypeLiteral = Literal["none", "percentage", "fixed"]
 
 
 class UserCreateRequest(BaseModel):
@@ -299,6 +300,8 @@ class MenuItemCreate(BaseModel):
     name: str
     price: float
     discount_price: float | None = None
+    discount_type: MenuDiscountTypeLiteral = "none"
+    discount_value: float = 0.0
     takeaway_price: float | None = None
     tax_type: MenuTaxTypeLiteral = "none"
     tax_value: float = 0.0
@@ -319,6 +322,8 @@ class MenuItemResponse(BaseModel):
     name: str
     price: float
     discount_price: float | None = None
+    discount_type: MenuDiscountTypeLiteral = "none"
+    discount_value: float = 0.0
     takeaway_price: float | None = None
     tax_type: MenuTaxTypeLiteral = "none"
     tax_value: float = 0.0
@@ -342,6 +347,8 @@ class MenuItemUpdate(BaseModel):
     name: str | None = None
     price: float | None = None
     discount_price: float | None = None
+    discount_type: MenuDiscountTypeLiteral | None = None
+    discount_value: float | None = None
     takeaway_price: float | None = None
     tax_type: MenuTaxTypeLiteral | None = None
     tax_value: float | None = None
@@ -447,6 +454,7 @@ class OrderItemDetailsResponse(BaseModel):
     quantity: int
     subtotal: float
     unit_price_at_sale: float | None = None
+    unit_discount_at_sale: float | None = 0.0
     unit_tax_at_sale: float | None = 0.0
     item_status: OrderItemStatusLiteral
     is_takeaway: bool = False
@@ -487,6 +495,7 @@ class OrderDetailsResponse(BaseModel):
     created_at: datetime
     items: List[OrderItemDetailsResponse]
     breakdown_subtotal: float = 0.0
+    breakdown_discount_total: float = 0.0
     breakdown_tax_total: float = 0.0
     breakdown_grand_total: float = 0.0
 
@@ -704,5 +713,6 @@ class ActiveTakeawayOrderResponse(BaseModel):
     created_at: datetime
     items: List[OrderItemDetailsResponse]
     breakdown_subtotal: float = 0.0
+    breakdown_discount_total: float = 0.0
     breakdown_tax_total: float = 0.0
     breakdown_grand_total: float = 0.0
