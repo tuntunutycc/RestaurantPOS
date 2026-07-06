@@ -89,6 +89,22 @@ Counter Dashboard → Staff Performance now supports **daily and monthly** per-c
 ### Validation
 - `PYTHONPATH=. venv/bin/python -m pytest -q` → **72 passed**
 
+## 2026-07-04 — Menu soft delete, category CRUD, and counter UI (`feat/ui-updates` merged)
+
+### Menu item soft delete
+- `DELETE /api/menu-items/{id}` sets `is_deleted=true`; blocks when item is on an active unpaid order (`400`).
+- Waiter/counter lists use `GET /api/menu-items/` (`is_deleted=false` only).
+- Tests: `tests/test_menu_item_soft_delete.py`, `tests/test_sales_integrity.py`
+
+### Category delete fix
+- Category delete counts only active menu items (`is_deleted=false`).
+- Category with only soft-deleted items can be deleted.
+- Tests: `tests/test_category_crud.py`
+
+### Counter UI
+- Main navigation active tab state (`setActiveMainTab` in `counter.js`).
+- Docs: `specs/feature-menu-items/`, `specs/feature-category-crud/`, `specs/feature-counter-ui/`
+
 ## 2026-07-04 - feat(rbac): complete feature delivery (Phases 1–4b)
 
 ### Summary

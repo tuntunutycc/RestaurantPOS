@@ -5,11 +5,13 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from sqlalchemy import exists
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from auth import get_current_user, require_roles
 from database import get_db
-from models import Category, MenuItem, OrderItem, User
+from models import Category, MenuItem, Order, OrderItem, User
 from rbac import ADMIN_PANEL_ROLES
 from schemas import (
     CategoryCreate,
@@ -23,6 +25,26 @@ from schemas import (
 router = APIRouter(prefix="/api")
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+
+FINALIZED_ORDER_STATUSES = ("paid", "cancelled")
+MENU_ITEM_DELETE_ACTIVE_ORDER_MSG = (
+    "Cannot delete menu item. It is currently part of an active order."
+)
+
+
+def _menu_item_in_active_order(db: Session, menu_item_id: int) -> bool:
+    """True if item appears on a non-finalized order line (excluding cancelled lines)."""
+    row = (
+        db.query(OrderItem.id)
+        .join(Order, OrderItem.order_id == Order.id)
+        .filter(
+            OrderItem.menu_item_id == menu_item_id,
+            Order.status.notin_(FINALIZED_ORDER_STATUSES),
+            OrderItem.item_status != "cancelled",
+        )
+        .first()
+    )
+    return row is not None
 
 
 @router.post("/categories/", response_model=CategoryResponse)
@@ -69,13 +91,89 @@ def update_category(
     return db_category
 
 
+ARCHIVED_CATEGORY_NAME = "__system_archived__"
+_CATEGORY_DELETE_BLOCKED_MSG = (
+    "Cannot delete category. Please delete all menu items under this category first."
+)
+
+
+def _get_or_create_archived_category(db: Session) -> Category:
+    """Hidden bucket for soft-deleted menu items that still have order history."""
+    cat = db.query(Category).filter(Category.name == ARCHIVED_CATEGORY_NAME).first()
+    if not cat:
+        cat = Category(name=ARCHIVED_CATEGORY_NAME, printer_route="food")
+        db.add(cat)
+        db.flush()
+    return cat
+
+
+@router.delete("/categories/{category_id}")
+def delete_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
+):
+    """Delete a category when it has no active menu items. Admin only."""
+    db_category = db.query(Category).filter(Category.id == category_id).first()
+    if not db_category:
+        raise HTTPException(status_code=404, detail=f"Category id {category_id} not found")
+
+    active_item_count = (
+        db.query(MenuItem)
+        .filter(MenuItem.category_id == category_id, MenuItem.is_deleted.is_(False))
+        .count()
+    )
+    if active_item_count > 0:
+        raise HTTPException(status_code=400, detail=_CATEGORY_DELETE_BLOCKED_MSG)
+
+    archived_category = _get_or_create_archived_category(db)
+
+    # Remove soft-deleted items with no order lines (safe to hard-delete).
+    soft_deleted_ids = [
+        row[0]
+        for row in db.query(MenuItem.id)
+        .filter(
+            MenuItem.category_id == category_id,
+            MenuItem.is_deleted.is_(True),
+            ~exists().where(OrderItem.menu_item_id == MenuItem.id),
+        )
+        .all()
+    ]
+    if soft_deleted_ids:
+        db.query(MenuItem).filter(MenuItem.id.in_(soft_deleted_ids)).delete(
+            synchronize_session=False
+        )
+
+    # Keep soft-deleted items that have order history; move them off this category.
+    db.query(MenuItem).filter(
+        MenuItem.category_id == category_id,
+        MenuItem.is_deleted.is_(True),
+    ).update(
+        {MenuItem.category_id: archived_category.id},
+        synchronize_session=False,
+    )
+
+    try:
+        db.delete(db_category)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=_CATEGORY_DELETE_BLOCKED_MSG) from None
+
+    return {"deleted": True, "category_id": category_id}
+
+
 @router.get("/categories/", response_model=list[CategoryResponse])
 def list_categories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Retrieve all categories. Requires authentication."""
-    return db.query(Category).all()
+    return (
+        db.query(Category)
+        .filter(Category.name != ARCHIVED_CATEGORY_NAME)
+        .all()
+    )
 
 
 @router.post("/menu-items/", response_model=MenuItemResponse)
@@ -289,6 +387,10 @@ async def delete_menu_item(
     )
     if not db_item:
         raise HTTPException(status_code=404, detail="Menu item not found")
+
+    if _menu_item_in_active_order(db, item_id):
+        raise HTTPException(status_code=400, detail=MENU_ITEM_DELETE_ACTIVE_ORDER_MSG)
+
     db_item.is_deleted = True
     db_item.deleted_at = datetime.utcnow()
     db_item.is_available = False

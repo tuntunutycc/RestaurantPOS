@@ -26,6 +26,15 @@ const panelTables = document.getElementById('panel-tables');
 let hasInitializedDefaultPanel = false;
 let activeDashboardTab = 'overview';
 
+function setActiveMainTab(panel) {
+  document.querySelectorAll('.tab-btn[data-target-panel]').forEach((btn) => {
+    btn.classList.remove('active');
+  });
+  if (!panel || !panel.id) return;
+  const activeBtn = document.querySelector(`.tab-btn[data-target-panel="${panel.id}"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+}
+
 function showPanel(panel) {
   if (!panel) return;
   if (panelDashboard) panelDashboard.classList.add('hidden');
@@ -36,54 +45,22 @@ function showPanel(panel) {
   if (panelAuditLogs) panelAuditLogs.classList.add('hidden');
   if (panelTables) panelTables.classList.add('hidden');
 
-  if (tabDashboard) {
-    tabDashboard.classList.remove('border-blue-600', 'text-blue-600');
-    tabDashboard.classList.add('border-transparent', 'text-slate-600');
-  }
-  tabCashier.classList.remove('border-blue-600', 'text-blue-600');
-  tabCashier.classList.add('border-transparent', 'text-slate-600');
-  tabMenu.classList.remove('border-blue-600', 'text-blue-600');
-  tabMenu.classList.add('border-transparent', 'text-slate-600');
-
-  if (tabUsers) {
-    tabUsers.classList.remove('border-blue-600', 'text-blue-600');
-    tabUsers.classList.add('border-transparent', 'text-slate-600');
-  }
-  if (tabAdmins) {
-    tabAdmins.classList.remove('border-blue-600', 'text-blue-600');
-    tabAdmins.classList.add('border-transparent', 'text-slate-600');
-  }
-  if (tabAuditLogs) {
-    tabAuditLogs.classList.remove('border-blue-600', 'text-blue-600');
-    tabAuditLogs.classList.add('border-transparent', 'text-slate-600');
-  }
-  if (tabTables) {
-    tabTables.classList.remove('border-blue-600', 'text-blue-600');
-    tabTables.classList.add('border-transparent', 'text-slate-600');
-  }
-
   panel.classList.remove('hidden');
+  setActiveMainTab(panel);
 
   if (panelDashboard && panel === panelDashboard) {
-    if (tabDashboard) tabDashboard.classList.add('border-blue-600', 'text-blue-600');
     loadDashboardSummary();
   } else if (panel === panelCashier) {
-    tabCashier.classList.add('border-blue-600', 'text-blue-600');
     loadUnpaidOrders();
   } else if (panel === panelMenu) {
-    tabMenu.classList.add('border-blue-600', 'text-blue-600');
     loadMenuData();
   } else if (panelUsers && panel === panelUsers) {
-    if (tabUsers) tabUsers.classList.add('border-blue-600', 'text-blue-600');
     loadUsers();
   } else if (panelAdmins && panel === panelAdmins) {
-    if (tabAdmins) tabAdmins.classList.add('border-blue-600', 'text-blue-600');
     loadRootAdmins();
   } else if (panelAuditLogs && panel === panelAuditLogs) {
-    if (tabAuditLogs) tabAuditLogs.classList.add('border-blue-600', 'text-blue-600');
     loadAuditLogs();
   } else if (panelTables && panel === panelTables) {
-    if (tabTables) tabTables.classList.add('border-blue-600', 'text-blue-600');
     loadTableManagementData();
   }
 }
@@ -2495,6 +2472,20 @@ if (kanbanBoard) {
   });
 }
 
+async function parseApiDetail(res) {
+  try {
+    const data = await res.json();
+    if (typeof data.detail === 'string') return data.detail;
+    if (Array.isArray(data.detail)) {
+      return data.detail.map((entry) => entry.msg || JSON.stringify(entry)).join('; ');
+    }
+    if (data.detail != null) return String(data.detail);
+    return 'Request failed';
+  } catch {
+    return res.statusText || 'Request failed';
+  }
+}
+
 async function fetchCategories() {
   const res = await fetch(`${API_BASE}/api/categories/`, {
     headers: { ...window.auth.getAuthHeaders() },
@@ -2549,8 +2540,11 @@ async function deleteMenuItem(itemId) {
     headers: { ...window.auth.getAuthHeaders() },
   });
   if (window.auth && window.auth.checkUnauthorized(res)) return null;
+  if (!res.ok) {
+    const detail = await parseApiDetail(res);
+    throw new Error(detail);
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || 'Failed to delete menu item');
   if (window.toast) window.toast.success('Menu item deleted.');
   return data;
 }
@@ -2646,7 +2640,9 @@ function renderCategories(categories) {
             <span class="font-medium text-slate-800">${escapeHtml(c.name)}</span>
             <span class="ml-2 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${escapeHtml(printerRouteLabel(currentRoute))}</span>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" data-edit-category-id="${c.id}" data-category-name="${escapeAttr(c.name)}" class="text-xs px-2 py-1 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50" title="Edit category name">Edit</button>
+            <button type="button" data-delete-category-id="${c.id}" data-category-name="${escapeAttr(c.name)}" class="text-xs px-2 py-1 border border-red-200 text-red-700 rounded-md hover:bg-red-50" title="Delete category">Delete</button>
             <select data-category-route-id="${c.id}" class="text-sm px-2 py-1 border border-slate-300 rounded-md">
               <option value="" ${currentRoute === '' ? 'selected' : ''}>Default (Food)</option>
               <option value="food" ${currentRoute === 'food' ? 'selected' : ''}>Food counter</option>
@@ -2683,6 +2679,86 @@ function renderCategories(categories) {
       } catch (err) {
         console.error(err);
         await dialogAlert('Failed to update printer route', 'error', 'Category Printer');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  el.querySelectorAll('[data-edit-category-id]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const categoryId = Number(btn.getAttribute('data-edit-category-id'));
+      const currentName = btn.getAttribute('data-category-name') || '';
+      if (!categoryId) return;
+      const newName = window.prompt('Enter new category name:', currentName);
+      if (newName === null) return;
+      const trimmed = String(newName).trim();
+      if (!trimmed) {
+        await dialogAlert('Category name cannot be empty.', 'error', 'Edit Category');
+        return;
+      }
+      if (trimmed === currentName) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/api/categories/${encodeURIComponent(categoryId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+          body: JSON.stringify({ name: trimmed }),
+        });
+        if (window.auth && window.auth.checkUnauthorized(res)) return;
+        const err = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const detail = typeof err.detail === 'string' ? err.detail : 'Failed to update category';
+          await dialogAlert(detail, 'error', 'Edit Category');
+          return;
+        }
+        await loadMenuData();
+      } catch (err) {
+        console.error(err);
+        await dialogAlert('Failed to update category', 'error', 'Edit Category');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  el.querySelectorAll('[data-delete-category-id]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const categoryId = Number(btn.getAttribute('data-delete-category-id'));
+      const categoryName = btn.getAttribute('data-category-name') || 'this category';
+      if (!categoryId) return;
+      const ok = await dialogConfirm(
+        `Are you sure you want to delete "${categoryName}"?`,
+        'Delete Category'
+      );
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${API_BASE}/api/categories/${encodeURIComponent(categoryId)}`, {
+          method: 'DELETE',
+          headers: { ...window.auth.getAuthHeaders() },
+        });
+        if (window.auth && window.auth.checkUnauthorized(res)) return;
+        if (!res.ok) {
+          const detail = await parseApiDetail(res);
+          window.alert(detail);
+          await dialogAlert(detail, 'error', 'Delete Category');
+          return;
+        }
+        await res.json().catch(() => ({}));
+        const categories = await fetchCategories();
+        renderCategories(categories);
+        populateCategorySelect(categories);
+        try {
+          const menuItems = await fetchMenuItems();
+          menuItemsCache = menuItems || [];
+          renderMenuItems(menuItems);
+        } catch (menuErr) {
+          console.error('Menu items refresh failed after category delete:', menuErr);
+        }
+      } catch (err) {
+        console.error(err);
+        await dialogAlert('Failed to delete category', 'error', 'Delete Category');
       } finally {
         btn.disabled = false;
       }
@@ -2806,7 +2882,10 @@ function renderMenuItems(items) {
     btn.addEventListener('click', async () => {
       const itemId = Number(btn.getAttribute('data-delete-menu-item-id'));
       if (!itemId) return;
-      const confirmed = await dialogConfirm('Delete this menu item permanently?', 'Delete Menu Item');
+      const confirmed = await dialogConfirm(
+        'Remove this menu item from ordering? Past orders and reports are kept.',
+        'Delete Menu Item'
+      );
       if (!confirmed) return;
       btn.disabled = true;
       try {
@@ -2814,7 +2893,9 @@ function renderMenuItems(items) {
         await loadMenuData();
       } catch (err) {
         console.error(err);
-        await dialogAlert(err.message || 'Failed to delete menu item', 'error', 'Delete Menu Item');
+        const message = err.message || 'Failed to delete menu item';
+        window.alert(message);
+        await dialogAlert(message, 'error', 'Delete Menu Item');
         btn.disabled = false;
       }
     });
@@ -2916,15 +2997,31 @@ async function loadKitchenPrinterSettings() {
 async function loadMenuData() {
   try {
     await loadKitchenPrinterSettings();
-    const [categories, menuItems] = await Promise.all([fetchCategories(), fetchMenuItems()]);
-    menuItemsCache = menuItems || [];
-    renderCategories(categories);
-    renderMenuItems(menuItems);
-    populateCategorySelect(categories);
   } catch (e) {
-    console.error(e);
-    document.getElementById('categories-list').innerHTML = '<li class="text-red-600">Error loading categories.</li>';
-    document.getElementById('menu-items-list').innerHTML = '<li class="text-red-600">Error loading menu items.</li>';
+    console.error('Kitchen printer settings failed:', e);
+  }
+
+  const [categoriesResult, menuItemsResult] = await Promise.allSettled([
+    fetchCategories(),
+    fetchMenuItems(),
+  ]);
+
+  if (categoriesResult.status === 'fulfilled') {
+    renderCategories(categoriesResult.value);
+    populateCategorySelect(categoriesResult.value);
+  } else {
+    console.error(categoriesResult.reason);
+    document.getElementById('categories-list').innerHTML =
+      '<li class="text-red-600">Error loading categories.</li>';
+  }
+
+  if (menuItemsResult.status === 'fulfilled') {
+    menuItemsCache = menuItemsResult.value || [];
+    renderMenuItems(menuItemsCache);
+  } else {
+    console.error(menuItemsResult.reason);
+    document.getElementById('menu-items-list').innerHTML =
+      '<li class="text-red-600">Error loading menu items.</li>';
   }
 }
 
