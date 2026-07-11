@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-07-06 — Spec/code baseline audit (SDD sync)
+
+### Summary
+Synchronized `specs/` with the current working codebase. Added canonical `database-schema.md` and `api-reference.md`. No new product features.
+
+### Spec updates
+- `tech-stack.md`, `mission.md`, `roadmap.md` — pricing, roles, router list, test count (160)
+- Feature specs: menu discount/tax, waiter breakdown, walk-in takeaway, RBAC validation (90-day cap)
+- New: `feature-menu-item-discount/implementation.md`, `validation.md`; `feature-waiter-cart-breakdown/implementation.md`
+
+### Code cleanup
+- Removed unused `_base_price_with_discount()` from `routers/orders.py`
+
 ## 2026-07-06 — Per-item menu discount + tax-after-discount pricing
 
 ### Summary

@@ -103,13 +103,13 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 ## Phase 4 — Dashboards & Reporting
 
 ### Automated — report authorization
-- [x] `account` request with range > 93 days → `400` — `test_account_report_range_capped`
+- [x] `account` request with range > 90 days → `400` — `test_account_report_range_capped`
 - [x] `account` cannot access `by-order-staff` (waiter breakdown) — denied in report router; promoted report `403` in `test_promoted_items_full_flow`
 - [x] `waiter` cannot `POST /api/orders/checkout` → `403` — `test_waiter_cannot_checkout_but_can_submit`
 - [x] `account` cannot `POST /api/orders/submit` → `403` — `test_account_cannot_submit_orders`
 - [x] `admin` and `root` can access full store + both breakdown endpoints — `test_per_cashier_and_waiter_reports`
-- [ ] `account` can read store summary within 93-day window — partial via monthly/daily tests
-- [ ] `account` cannot read data older than 93 days → `400` — not isolated
+- [ ] `account` can read store summary within 90-day window — partial via monthly/daily tests
+- [ ] `account` cannot read data older than 90 days → `400` — not isolated
 - [x] `waiter` sees self only on `by-order-staff` — `test_waiter_order_staff_scoped_to_self`
 - [ ] `waiter` cannot access `by-cashier` → `403` — not isolated
 - [x] `cashier` cannot access `by-cashier` → `403` — `test_cashier_cannot_view_by_cashier_breakdown`
@@ -131,7 +131,7 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 ### Manual — dashboard UI
 - [x] **Root:** today total + Staff Performance cashier/waiter charts (date range + Today/This Month) + Sales History daily/monthly
 - [x] **Admin:** today total + Staff Performance charts (date range) + Sales History
-- [x] **Account:** `/account` daily + monthly views with date-range picker (≤ 93 days) — manual sign-off on live UI
+- [x] **Account:** `/account` daily + monthly views with date-range picker (≤ 90 days) — manual sign-off on live UI
 - [x] **Cashier:** today own checkout KPI only; **no** Staff Performance tab; no monthly store widget
 - [x] **Cashier:** nav **Take Orders** → `/waiter` (`auth.js`, cashier/waiter only)
 - [ ] **Waiter:** own daily total on waiter screen (minimal; optional)

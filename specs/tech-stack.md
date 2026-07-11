@@ -17,11 +17,14 @@ This POS system is currently built with:
 ### Backend (FastAPI)
 - Entry point: `main.py`
 - API routers: `routers/*`
-  - `routers/auth.py`: login/token issuance
-  - `routers/orders.py`: order lifecycle, checkout, kitchen ticket dispatch (category-routed LAN/file)
+  - `routers/setup.py`: first-root bootstrap status
+  - `routers/auth.py`: login/token issuance (password + PIN)
+  - `routers/root_users.py`: root admin account governance + audit logs
+  - `routers/users.py`: admin staff CRUD
+  - `routers/orders.py`: order lifecycle, checkout, kitchen ticket dispatch
   - `routers/menu.py`: categories + menu item CRUD
   - `routers/tables.py`: zones/tables management
-  - `routers/users.py`: admin staff management
+  - `routers/kitchen_printers.py`: kitchen printer settings
   - `routers/reports.py`: analytics endpoints
 - Realtime: WebSocket broadcaster in `websocket_manager.py`
 - Data access: SQLAlchemy session from `database.py`
@@ -30,6 +33,8 @@ This POS system is currently built with:
 
 ### Database (Schema)
 - ORM entities are defined in `models.py`
+- **Canonical schema doc:** `specs/database-schema.md`
+- **API catalog:** `specs/api-reference.md`
 - Startup bootstrapping and “ad-hoc” schema evolution happens in `main.py` (runtime `ALTER TABLE` / SQLite repair patterns)
 - For production-grade evolution, we will later adopt proper migrations (e.g., Alembic) when moving fully to PostgreSQL.
 
@@ -77,13 +82,18 @@ This POS system is currently built with:
   - item status changes
   - checkout
   - discount calculations
-- **Checkout tax rule (per-item):** tax is configured on each `MenuItem` (`tax_type`, `tax_value`) and included in line subtotals at submit. At checkout:
+- **Checkout tax rule (per-item, tax after discount):** each `MenuItem` has `discount_type`/`discount_value` and `tax_type`/`tax_value`. At submit:
+  - `effective_base` = `takeaway_price` (if line takeaway) else `price`
+  - `unit_discount` from discount config (legacy `discount_price` migrated at runtime)
+  - `unit_tax` calculated on **discounted** price
+  - line `subtotal` = `(discounted + unit_tax + modifiers) × quantity`
+- At checkout:
   - `subtotal = sum(non-cancelled line subtotals)` (tax-inclusive)
   - `tax_amount = sum(unit_tax_at_sale × quantity)` (receipt breakdown)
-  - `discount_amount` from order-level discount on `subtotal`
+  - `discount_amount` from **order-level** discount on `subtotal`
   - `grand_total = _round_money(max(subtotal - discount_amount, 0))`
-  - Items with `tax_type=none` contribute `0` tax.
   - Legacy fixed 5% order-level tax is **replaced** by per-item tax.
+- **Waiter breakdown fields** on `GET /api/orders/{id}/details`: `breakdown_subtotal`, `breakdown_discount_total`, `breakdown_tax_total`, `breakdown_grand_total`
 - Prefer explicit rounding rules (currently many computations round to 2 decimals; later we will move to `Decimal` + `Numeric` for stronger guarantees).
 - Always validate input constraints on the server:
   - quantity >= 1
@@ -107,7 +117,7 @@ This POS system is currently built with:
     - deleted table link -> `[Deleted Table]` (or existing detached table fallback)
 - **Frontend null-safety contract:** UI rendering must tolerate missing related objects (`null` foreign references) without throwing, and must display explicit fallback labels.
 - **Soft-delete policy (default for audit-heavy entities):**
-  - apply soft delete to `users` and `menu_items` (at minimum), using `is_deleted`, `deleted_at`, and optional `deleted_by_id`.
+  - apply soft delete to `users` and `menu_items` (at minimum), using `is_deleted`, `deleted_at`.
   - hidden from default active lists, but preserved for historical joins/reports/admin audit views.
 - **Report stability invariant:** Daily/monthly/category/cancellation reports must remain queryable and correct even when referenced user/menu/table records are deleted or soft-deleted.
 - **Test gate for deletion changes:** any deletion behavior change requires invariant tests proving:
@@ -129,7 +139,7 @@ This POS system is currently built with:
 
 ## Test Strategy (required for SDD merge gate)
 - Introduce automated tests with a backend test runner (e.g., `pytest`) for each feature.
-- Current suite (2026-07-04): **52 passed** — includes RBAC, kitchen printing, table management, money invariants, contracts.
+- Current suite (2026-07-06): **160 passed** — RBAC, kitchen printing, table management, walk-in takeaway, per-item tax/discount, waiter breakdown, money invariants, contracts.
 - Feature specs must maintain `validation.md` with honest automated vs manual checklist separation.
 
 ## RBAC (current)

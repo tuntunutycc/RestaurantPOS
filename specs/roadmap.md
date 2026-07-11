@@ -158,17 +158,10 @@ All planned remediation steps are now implemented and test-backed:
 - Step 5: Rounding determinism completed
   - money values rounded to 2 decimals before save/response in key order flows
   - invariant tests cover decimal-sensitive scenarios (e.g., `3.33 × 3 = 9.99`) and stable checkout change calculations
-- Step 6: Sales tax on net amount (completed)
-  - Introduce fixed 5% tax at checkout using Option B (tax on net amount after discount).
-  - Formula:
-    - `taxable_amount = max(subtotal - discount_amount, 0.0)`
-    - `tax_amount = _round_money(taxable_amount * 0.05)`
-    - `grand_total = _round_money(taxable_amount + tax_amount)`
-  - Contract/UI impact:
-    - include `tax_amount` in checkout/order response contracts
-    - show `Tax (5%)` in checkout modal, receipt view, and printable receipt
-  - Test impact:
-    - add invariant tests for rounding determinism and negative-safe tax/grand-total clamping
+- Step 6: Sales tax on net amount (**superseded — 2026-07-06**)
+  - **Replaced** by per-item tax on discounted price (`specs/feature-menu-item-tax/`, `specs/feature-menu-item-discount/`).
+  - Checkout sums `unit_tax_at_sale × quantity`; no global 5% multiplier.
+  - Historical note: early Phase 2 documented fixed 5% checkout tax; that model is obsolete.
 - Step 7: Table management enhancements (mostly complete — validation gaps remain)
   - Add admin table edit UX (rename + zone reassignment).
   - Table mutations enforced for `ADMIN_PANEL_ROLES` (`root`, `admin`).

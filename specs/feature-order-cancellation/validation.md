@@ -23,4 +23,4 @@ PYTHONPATH=. pytest -q
 | Date | Suite | Result |
 |------|-------|--------|
 | 2026-07-06 | Takeaway item cancel test | See `test_cancel_takeaway_order_item_without_table` |
-| 2026-07-06 | Full `pytest -q` | **152 passed** |
+| 2026-07-06 | Full `pytest -q` | **160 passed** |

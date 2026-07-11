@@ -58,9 +58,16 @@ line_subtotal = round(item_final_unit × quantity, 2)
 | `breakdown_tax_total` | Σ `unit_tax_at_sale × qty` |
 | `breakdown_grand_total` | Σ line `subtotal` (= Subtotal − Discount + Tax) |
 
-## FR-D5: Admin menu UI
-- Discount Type dropdown: None / Percentage % / Fixed Amount
-- Discount Value input (hidden/disabled when None)
+## FR-D5: Admin menu UI (current vs planned)
+
+| Capability | Status |
+|------------|--------|
+| API accepts `discount_type`, `discount_value` on create/update | **Implemented** |
+| Server pricing + snapshots | **Implemented** |
+| Waiter cart breakdown | **Implemented** |
+| Counter admin form: Discount Type + Value dropdowns | **Not yet** — uses legacy `#item-discount-price` (`discount_price`) only |
+
+Until admin UI is updated, operators may set discounts via API or legacy sale price (auto-migrated to fixed discount at submit).
 
 ## Authorization
 - Menu write — `ADMIN_PANEL_ROLES`

@@ -18,7 +18,7 @@ Each cart row shows an item-level breakdown when discount or tax applies: `Base 
 Updates **in real time** when quantity changes or the 🛍️ Takeaway checkbox toggles (base/tax may change).
 
 ## FR-WB2: Active order sidebar
-When viewing an occupied table or active takeaway order (`GET /api/orders/{id}/details`), the summary shows the same 3-line breakdown using **server-calculated** fields:
+When viewing an occupied table or active takeaway order (`GET /api/orders/{id}/details`), the summary shows the same **4-line** breakdown using **server-calculated** fields:
 
 | Response field | Meaning |
 |----------------|---------|

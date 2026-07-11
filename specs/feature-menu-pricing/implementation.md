@@ -4,12 +4,15 @@
 
 ```python
 def _resolve_unit_base_price(menu_item: MenuItem, *, is_takeaway: bool = False) -> float:
+    """Effective base before discount/tax."""
     if is_takeaway:
         raw = getattr(menu_item, "takeaway_price", None)
         if raw is not None:
             return float(raw)
-    return _base_price_with_discount(menu_item)
+    return float(menu_item.price)
 ```
+
+Discount and tax are applied in `_calculate_order_line_pricing()` (see `specs/feature-menu-item-discount/`).
 
 ## Migrations (`main.py`)
 - `ALTER TABLE menu_items ADD COLUMN takeaway_price FLOAT`

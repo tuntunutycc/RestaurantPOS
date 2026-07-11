@@ -36,13 +36,15 @@ When `table_id` is null and `order_type=takeaway`.
 - Prominent **`[ + Walk-in Takeaway ]`** control near the table grid.
 - **MUST prompt** for optional `customer_name` (modal or `prompt`) before opening cart; default display **Walk-in** if empty.
 - Opens cart context with **no table** selected.
-- Cart lines default `is_takeaway=true` (dual pricing per `specs/feature-menu-pricing/`).
+- Cart lines default `is_takeaway=true` (dual pricing per `specs/feature-menu-pricing/`). **UI:** waiter sets via `defaultCartLineTakeaway()`; server defaults `false` if omitted — client must send `is_takeaway` on submit.
 
 ## FR-W5: Incentive / staff reports
 - `GET /api/reports/sales/promoted-by-waiter` and `GET /api/reports/sales/by-order-staff` include lines from `table_id IS NULL` takeaway orders when `OrderItem.created_by_id` matches.
 
 ## FR-W6: Active takeaway parity with occupied tables
-Active walk-in takeaway orders (`table_id IS NULL`, `order_type=takeaway`, status `open`/`dining`) behave like **occupied dine-in tables** for waiters:
+Active walk-in takeaway orders (`order_type=takeaway`, status not `paid`/`cancelled`) appear in `GET /api/orders/active-takeaways` and behave like **occupied dine-in tables** for waiters:
+
+**List filter (current implementation):** `order_type == 'takeaway'` AND `status NOT IN ('paid', 'cancelled')`. Walk-in orders are expected to have `table_id IS NULL`; the list endpoint does not additionally filter on `table_id`.
 
 | Action | Behavior |
 |--------|----------|
@@ -68,7 +70,7 @@ Walk-in takeaway orders **must** support item-by-item cancellation for unserved 
 - No separate "Cancel Entire Order" button on waiter or cashier UI; staff cancel lines individually.
 
 ## FR-W8: Cart price breakdown
-Waiter cart and active-order sidebar show **Subtotal**, **Tax**, and **Grand Total** (see `specs/feature-waiter-cart-breakdown/`).
+Waiter cart and active-order sidebar show **Subtotal**, **Total Discount**, **Tax**, and **Grand Total** (see `specs/feature-waiter-cart-breakdown/`).
 
 ## Authorization
 - Submit — `POS_ORDER_ROLES` (`waiter`, `cashier`, `admin`, `root`)

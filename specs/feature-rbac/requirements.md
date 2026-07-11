@@ -230,7 +230,7 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 
 - **Server enforcement:** UI role guards are convenience only; every mutation and report endpoint validates role.
 - **Data integrity:** User soft-delete must not break historical reports; use fallback labels for deleted users.
-- **Security:** Password hashes and PINs never returned in API responses; audit `detail_json` must not leak credentials in plain text (mask PIN snapshots).
+- **Security:** Password hashes never returned in API responses. Admin staff CRUD (`UserAdminResponse`) returns plaintext `pin_code` for operational PIN management; audit `detail_json` must not leak credentials in plain text (mask PIN snapshots as `[REDACTED]`).
 - **Test gate:** Automated tests for role matrix, session revoke, account date cap, checkout/waiter attribution.
 
 ## 11. Explicit Out of Scope (follow-on / future)

@@ -182,20 +182,6 @@ def _display_waiter_name(order_item: OrderItem) -> str | None:
     return None
 
 
-def _base_price_with_discount(menu_item: MenuItem) -> float:
-    """
-    Legacy helper: returns discount_price when set, else standard price.
-    Prefer _resolve_unit_base_price + _menu_item_discount_config for new pricing.
-    """
-    try:
-        discount = float(getattr(menu_item, "discount_price", 0) or 0)
-    except Exception:
-        discount = 0.0
-    if discount > 0:
-        return discount
-    return float(menu_item.price)
-
-
 def _resolve_unit_base_price(menu_item: MenuItem, *, is_takeaway: bool = False) -> float:
     """Effective base before discount/tax (takeaway_price or catalog price)."""
     if is_takeaway:

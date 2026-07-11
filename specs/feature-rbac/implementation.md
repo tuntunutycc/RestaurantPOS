@@ -19,7 +19,7 @@ Records the **current** RBAC implementation as of 2026-07-04. Use with `requirem
 | `CHECKOUT_ROLES` | `root`, `admin`, `cashier` |
 | `FULL_REPORT_ROLES` | `root`, `admin`, `account` |
 | `ADMIN_MANAGEABLE_ROLES` | `cashier`, `waiter`, `account` |
-| `ACCOUNT_MAX_REPORT_DAYS` | `90` (align from `93` on next implementation pass) |
+| `ACCOUNT_MAX_REPORT_DAYS` | `90` |
 
 Legacy `kitchen` login role is removed from schemas and login allowlists. Existing `kitchen` DB rows cannot authenticate.
 
@@ -126,7 +126,7 @@ PYTHONPATH=. python scripts/seed_root.py --username root
 |------|-------|--------|
 | `/setup` | Public (needs_setup) | `setup.html`, `setup.js` |
 | `/login` | Password roles | `login.js` → redirects to `/setup` if needed |
-| `/pin-login` | cashier, waiter | `pin-login.js` |
+| `/pin-login` | cashier, waiter, **account** | `pin-login.js` |
 | `/counter` | cashier, admin, root | `counter.js` |
 | `/waiter` | waiter, admin, root, cashier | `waiter.js` |
 | `/account` | account | `account.js` |
@@ -153,7 +153,7 @@ PYTHONPATH=. python scripts/seed_root.py --username root
 
 - **Tabs:** Today's Overview | Sales History.
 - **Overview:** today KPIs + cashier breakdown (today).
-- **History:** date-range filter (≤ 93 days, client + server validation), daily sales chart, monthly sales chart (year selector), cashier breakdown for range.
+- **History:** date-range filter (≤ **90** days, client + server validation), daily sales chart, monthly sales chart (year selector), cashier breakdown for range.
 - **APIs:** `/api/reports/summary/today`, `/api/reports/daily-sales`, `/api/reports/monthly-sales`, `/api/reports/sales/by-cashier`.
 
 ### Counter dashboard — Phase 4 complete
