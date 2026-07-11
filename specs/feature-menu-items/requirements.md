@@ -41,4 +41,5 @@ If blocked → **`400`** with:
 - After all items in a category are soft-deleted, category deletion must be allowed (see `specs/feature-category-crud/requirements.md` FR-2).
 
 ## Authorization
-- `DELETE /api/menu-items/{id}` — `ADMIN_PANEL_ROLES` (`root`, `admin`).
+- `POST /api/menu-items/`, `PUT /api/menu-items/{id}`, `DELETE /api/menu-items/{id}` — `ADMIN_PANEL_ROLES` (`root`, `admin`) only.
+- `PATCH /api/menu-items/{id}/availability` — `root`, `admin`, `cashier` (availability toggle only). See `specs/feature-menu-rbac/requirements.md`.

@@ -161,9 +161,12 @@ class Order(Base):
     discount_value = Column(Float, nullable=True, default=0.0)
     # Cashier who finalized payment (for per-cashier sales reporting).
     checked_out_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # Staff who opened / took the order (waiter or cashier at first submit).
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     table = relationship("Table", back_populates="orders")
     checked_out_by = relationship("User", foreign_keys=[checked_out_by_id], back_populates="checked_out_orders")
+    created_by = relationship("User", foreign_keys=[created_by_id], back_populates="created_orders")
     order_items = relationship(
         "OrderItem",
         back_populates="order",
@@ -250,6 +253,11 @@ class User(Base):
     is_deleted = Column(Boolean, nullable=False, default=False, index=True)
     deleted_at = Column(DateTime, nullable=True)
     created_order_items = relationship("OrderItem", back_populates="created_by")
+    created_orders = relationship(
+        "Order",
+        foreign_keys="Order.created_by_id",
+        back_populates="created_by",
+    )
     checked_out_orders = relationship(
         "Order",
         foreign_keys="Order.checked_out_by_id",

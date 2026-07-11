@@ -67,7 +67,7 @@ line_subtotal = round(item_final_unit × quantity, 2)
 | Waiter cart breakdown | **Implemented** |
 | Counter admin form: Discount Type + Value dropdowns | **Not yet** — uses legacy `#item-discount-price` (`discount_price`) only |
 
-Until admin UI is updated, operators may set discounts via API or legacy sale price (auto-migrated to fixed discount at submit).
+**Counter UI (`static/counter.js`, 2026-07):** create/update sends `discount_type: "none"`, `discount_value: 0`, plus optional `discount_price`. Server legacy rule (FR-D2) still applies at order time when `discount_price` is set.
 
 ## Authorization
 - Menu write — `ADMIN_PANEL_ROLES`

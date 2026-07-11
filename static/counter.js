@@ -25,6 +25,16 @@ const panelAuditLogs = document.getElementById('panel-audit-logs');
 const panelTables = document.getElementById('panel-tables');
 let hasInitializedDefaultPanel = false;
 let activeDashboardTab = 'overview';
+let usersState = [];
+let selectedUserId = null;
+let rootAdminsState = [];
+let selectedAdminId = null;
+let zonesState = [];
+let addTableZoneId = null;
+let editTableId = null;
+let menuItemsCache = [];
+let categoriesCache = [];
+let activeMenuCategoryId = null;
 
 function setActiveMainTab(panel) {
   document.querySelectorAll('.tab-btn[data-target-panel]').forEach((btn) => {
@@ -142,6 +152,8 @@ if (tabDashboard && panelDashboard) tabDashboard.addEventListener('click', () =>
 tabCashier.addEventListener('click', () => showPanel(panelCashier));
 tabMenu.addEventListener('click', () => showPanel(panelMenu));
 if (tabUsers && panelUsers) tabUsers.addEventListener('click', () => showPanel(panelUsers));
+if (tabAdmins && panelAdmins) tabAdmins.addEventListener('click', () => showPanel(panelAdmins));
+if (tabAuditLogs && panelAuditLogs) tabAuditLogs.addEventListener('click', () => showPanel(panelAuditLogs));
 if (tabTables && panelTables) tabTables.addEventListener('click', () => showPanel(panelTables));
 window.addEventListener('DOMContentLoaded', () => {
   setSalesHistoryDefaultDates();
@@ -191,7 +203,8 @@ function applyAdminOnlyTabVisibility(role) {
   if (tabAdmins) tabAdmins.classList.toggle('hidden', !isRoot);
   if (tabAuditLogs) tabAuditLogs.classList.toggle('hidden', !isRoot);
   if (tabTables) tabTables.classList.toggle('hidden', !isAdminPanel);
-  if (tabMenu) tabMenu.classList.toggle('hidden', normalizedRole === 'cashier');
+  if (tabMenu) tabMenu.classList.remove('hidden');
+  applyMenuPanelRoleVisibility(normalizedRole);
   if (!isAdminPanel && panelDashboard && !panelDashboard.classList.contains('hidden')) {
     showPanel(panelCashier);
   }
@@ -250,7 +263,6 @@ let selectedOrderSubtotal = 0;
 let selectedOrderVisibleItems = [];
 let cashierZones = [];
 let cashierActiveZoneId = null;
-let menuItemsCache = [];
 let hourlyChart = null;
 let topItemsChart = null;
 let dailySalesChart = null;
@@ -267,6 +279,34 @@ let hasLoadedIncentivesTab = false;
 
 function getCounterUserRole() {
   return String(window.auth?.getUser?.()?.role || '').toLowerCase();
+}
+
+function isMenuAdminPanelRole(role) {
+  const normalized = String(role || getCounterUserRole()).toLowerCase();
+  return normalized === 'admin' || normalized === 'root';
+}
+
+function applyMenuPanelRoleVisibility(role) {
+  const normalized = String(role || getCounterUserRole()).toLowerCase();
+  const isAdminPanel = isMenuAdminPanelRole(normalized);
+  document.querySelectorAll('[data-menu-admin-only]').forEach((el) => {
+    el.classList.toggle('hidden', !isAdminPanel);
+  });
+  const menuItemsSection = document.getElementById('menu-items-section');
+  if (menuItemsSection) {
+    menuItemsSection.classList.toggle('md:col-span-2', !isAdminPanel);
+  }
+  const cashierHint = document.getElementById('menu-items-cashier-hint');
+  if (cashierHint) {
+    cashierHint.classList.toggle('hidden', isAdminPanel);
+  }
+  const menuTitle = document.getElementById('menu-items-section-title');
+  if (menuTitle) {
+    menuTitle.textContent = isAdminPanel ? 'Menu Items' : 'Stock Availability';
+  }
+  if (menuItemsCache && menuItemsCache.length) {
+    refreshMenuItemsView();
+  }
 }
 
 function applyDashboardRoleVisibility(role) {
@@ -952,6 +992,89 @@ async function loadHourlyTrendChart() {
   });
 }
 
+function formatApiDetail(data, fallback = 'Request failed') {
+  if (!data) return fallback;
+  if (typeof data.detail === 'string') return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map((entry) => entry.msg || JSON.stringify(entry)).join('; ');
+  }
+  if (data.detail != null) return String(data.detail);
+  return fallback;
+}
+
+async function apiJsonRequest(url, options = {}) {
+  const {
+    method = 'GET',
+    body,
+    fallbackMessage = 'Request failed',
+    auth = true,
+  } = options;
+  const headers = {};
+  if (body != null) headers['Content-Type'] = 'application/json';
+  if (auth && window.auth?.getAuthHeaders) {
+    Object.assign(headers, window.auth.getAuthHeaders());
+  }
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (window.auth?.checkUnauthorized?.(res)) {
+    throw new Error('Session expired. Please log in again.');
+  }
+  if (!res.ok) {
+    throw new Error(formatApiDetail(data, fallbackMessage));
+  }
+  return data;
+}
+
+function buildMenuItemPayloadFromForm() {
+  const name = document.getElementById('item-name')?.value.trim() || '';
+  const price = parseFloat(document.getElementById('item-price')?.value);
+  const discountPriceRaw = document.getElementById('item-discount-price')?.value.trim() ?? '';
+  const discountPrice = discountPriceRaw === '' ? null : parseFloat(discountPriceRaw);
+  const takeawayPriceRaw = document.getElementById('item-takeaway-price')?.value.trim() ?? '';
+  const takeawayPrice = takeawayPriceRaw === '' ? null : parseFloat(takeawayPriceRaw);
+  const taxType = String(document.getElementById('item-tax-type')?.value || 'none');
+  const taxValueRaw = document.getElementById('item-tax-value')?.value.trim() ?? '0';
+  const taxValue = taxType === 'none' ? 0 : parseFloat(taxValueRaw || '0');
+  const description = document.getElementById('item-description')?.value.trim() || null;
+  const categoryId = parseInt(document.getElementById('item-category')?.value, 10);
+  const imageUrl = document.getElementById('item-image-url')?.value.trim() || null;
+  const isPromoted = !!document.getElementById('item-is-promoted')?.checked;
+
+  if (!name) throw new Error('Item name is required.');
+  if (Number.isNaN(price) || price < 0) throw new Error('Enter a valid price (0 or greater).');
+  if (!categoryId || Number.isNaN(categoryId)) throw new Error('Select a category.');
+  if (discountPrice !== null && (Number.isNaN(discountPrice) || discountPrice < 0)) {
+    throw new Error('Discount price must be a valid number (0 or greater).');
+  }
+  if (takeawayPrice !== null && (Number.isNaN(takeawayPrice) || takeawayPrice < 0)) {
+    throw new Error('Takeaway price must be a valid number (0 or greater).');
+  }
+  if (taxType !== 'none' && (Number.isNaN(taxValue) || taxValue < 0)) {
+    throw new Error('Tax value must be a valid number (0 or greater).');
+  }
+
+  return {
+    name,
+    price,
+    discount_price: discountPrice,
+    discount_type: 'none',
+    discount_value: 0,
+    takeaway_price: takeawayPrice,
+    tax_type: taxType,
+    tax_value: taxValue,
+    category_id: categoryId,
+    description,
+    image_url: imageUrl,
+    is_available: true,
+    is_promoted: isPromoted,
+    modifiers_config: [],
+  };
+}
+
 async function dialogAlert(message, type = 'error', _title = 'Notice') {
   const title = type === 'success' ? t('success', 'Success') : type === 'info' ? t('info', 'Info') : t('error', 'Error');
   if (window.CustomDialog?.alert) {
@@ -1156,7 +1279,11 @@ async function fetchActiveOrderByTable(tableId) {
 }
 
 function cashierTableName(table) {
-  return table?.name || table?.name_or_number || `#${table?.id ?? ''}`;
+  if (window.tableDisplay?.displayTableName) {
+    return window.tableDisplay.displayTableName(table);
+  }
+  const raw = table?.name || table?.name_or_number || `#${table?.id ?? ''}`;
+  return String(raw).replace(/^table\s+/i, '').trim() || raw;
 }
 
 function renderCashierZoneTabs() {
@@ -1166,7 +1293,19 @@ function renderCashierZoneTabs() {
     tabs.innerHTML = '<span class="text-slate-500 text-sm">No zones</span>';
     return;
   }
-  tabs.innerHTML = cashierZones
+  const allTab = `
+      <button
+        type="button"
+        data-cashier-zone-id=""
+        class="cashier-zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${
+          cashierActiveZoneId == null
+            ? 'bg-blue-600 text-white'
+            : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+        }"
+      >
+        ${escapeHtml(t('all', 'All'))}
+      </button>`;
+  tabs.innerHTML = allTab + cashierZones
     .map((zone) => `
       <button
         type="button"
@@ -1183,7 +1322,8 @@ function renderCashierZoneTabs() {
     .join('');
   tabs.querySelectorAll('.cashier-zone-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
-      cashierActiveZoneId = parseInt(btn.dataset.cashierZoneId, 10);
+      const zoneAttr = btn.getAttribute('data-cashier-zone-id');
+      cashierActiveZoneId = zoneAttr === '' || zoneAttr == null ? null : parseInt(zoneAttr, 10);
       renderCashierZoneTabs();
       renderCashierTablesGrid();
     });
@@ -1191,6 +1331,9 @@ function renderCashierZoneTabs() {
 }
 
 function getCashierActiveZoneTables() {
+  if (cashierActiveZoneId == null) {
+    return cashierZones.flatMap((z) => z.tables || []);
+  }
   const zone = cashierZones.find((z) => z.id === cashierActiveZoneId);
   return zone?.tables || [];
 }
@@ -1217,7 +1360,7 @@ function renderCashierTablesGrid() {
           data-cashier-table-status="${escapeHtml(table.status)}"
           class="cashier-table-card border-2 rounded-md p-2 text-left ${color} hover:shadow"
         >
-          <div class="font-medium text-slate-800 text-sm">Table ${escapeHtml(cashierTableName(table))}</div>
+          <div class="font-medium text-slate-800 text-sm">${escapeHtml(cashierTableName(table))}</div>
           <div class="text-[11px] uppercase tracking-wide text-slate-700">${escapeHtml(table.status)}</div>
         </button>
       `;
@@ -1266,7 +1409,7 @@ function renderTakeawayOrders(orders) {
         class="w-full text-left border border-orange-200 rounded-md p-2 bg-orange-50 hover:bg-orange-100"
       >
         <div class="flex items-center justify-between gap-2">
-          <span class="text-sm font-medium text-orange-800">${escapeHtml(formatTakeawayOrderLabel(o.id))}</span>
+          <span class="text-sm font-medium text-orange-800">${escapeHtml(cashierOrderDisplayLabel(o))}</span>
           <span class="text-xs text-orange-700">${escapeHtml(t('total', 'Total'))}: ${formatMoney(Number(o.total_amount || 0))}</span>
         </div>
         <div class="text-xs text-orange-700 mt-0.5">${escapeHtml(t('customer', 'Customer'))}: ${escapeHtml(customer)}</div>
@@ -1306,8 +1449,8 @@ function loadUnpaidOrders() {
     .then(([zones, takeawayOrders]) => {
       cashierZones = zones || [];
       if (cashierZones.length) {
-        if (!cashierActiveZoneId || !cashierZones.some((z) => z.id === cashierActiveZoneId)) {
-          cashierActiveZoneId = cashierZones[0].id;
+        if (cashierActiveZoneId != null && !cashierZones.some((z) => z.id === cashierActiveZoneId)) {
+          cashierActiveZoneId = null;
         }
       } else {
         cashierActiveZoneId = null;
@@ -1358,13 +1501,9 @@ function selectOrder(order) {
   document.getElementById('receipt-placeholder').classList.add('hidden');
   const container = document.getElementById('receipt-container');
   container.classList.remove('hidden');
-  const isTakeaway = String(order.order_type || '').toLowerCase() === 'takeaway';
   const checkoutHeaderEl = document.getElementById('checkout-header');
-  const customer = String(order.customer_name || '').trim() || t('walk_in', 'Walk-in');
   if (checkoutHeaderEl) {
-    checkoutHeaderEl.textContent = isTakeaway
-      ? `${t('checkout', 'Checkout')} - ${formatTakeawayOrderLabel(order.id)} (${t('customer', 'Customer')}: ${customer})`
-      : `${t('checkout', 'Checkout')} - ${t('table', 'Table')} ${orderTableLabel(order)}`;
+    checkoutHeaderEl.textContent = `${t('checkout', 'Checkout')} - ${cashierOrderDisplayLabel(order)}`;
   }
   const itemsRows = visibleItems
     .map(
@@ -1379,7 +1518,7 @@ function selectOrder(order) {
     </table>
   `;
   const servedByEl = document.getElementById('receipt-served-by');
-  if (servedByEl) servedByEl.textContent = order.served_by_name || '—';
+  if (servedByEl) servedByEl.textContent = orderServedByLabel(order);
   // Reset payment inputs for this order
   const amountInput = document.getElementById('amount-tendered');
   const changeSpan = document.getElementById('change-amount');
@@ -1411,11 +1550,8 @@ function renderReceiptForPrint(order) {
     const rpTendered = document.getElementById('rp-tendered');
     const rpChange = document.getElementById('rp-change');
 
-    const isTakeaway = String(order.order_type || '').toLowerCase() === 'takeaway';
-    if (rpTable) rpTable.textContent = isTakeaway
-      ? `TAKEAWAY - ${String(order.customer_name || '').trim() || 'Walk-in'}`
-      : `${orderTableLabel(order)}`;
-    if (rpServedBy) rpServedBy.textContent = order.served_by_name || '—';
+    if (rpTable) rpTable.textContent = cashierOrderDisplayLabel(order);
+    if (rpServedBy) rpServedBy.textContent = orderServedByLabel(order);
     if (rpDatetime) rpDatetime.textContent = order.created_at ? new Date(order.created_at).toLocaleString() : '';
     if (rpMethod) rpMethod.textContent = order.payment_method || '';
     if (rpTendered) rpTendered.textContent = order.amount_tendered != null ? formatMoney(Number(order.amount_tendered)) : formatMoney(0);
@@ -1537,19 +1673,16 @@ function escapeHtml(text) {
 }
 
 // —— Admin User Management ——
-let usersState = [];
-let selectedUserId = null;
 
 async function fetchUsers() {
-  const res = await fetch(`${API_BASE}/api/admin/users`, {
-    headers: { ...window.auth.getAuthHeaders() },
+  return apiJsonRequest(`${API_BASE}/api/admin/users`, {
+    fallbackMessage: 'Failed to fetch users',
+  }).then((data) => {
+    if (!Array.isArray(data)) {
+      throw new Error('Invalid users response from server');
+    }
+    return data;
   });
-  if (window.auth && window.auth.checkUnauthorized(res)) return [];
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || 'Failed to fetch users');
-  }
-  return res.json();
 }
 
 function formatUserSaveError(detail) {
@@ -1562,14 +1695,19 @@ function formatUserSaveError(detail) {
 }
 
 function renderUsers(users) {
-  usersState = users || [];
+  const list = Array.isArray(users) ? users : [];
+  usersState = list;
   const tbody = document.getElementById('users-table-body');
   if (!tbody) return;
-  if (!usersState.length) {
+  const staffRoles = new Set(['cashier', 'waiter', 'account']);
+  const visibleUsers = list.filter((u) =>
+    staffRoles.has(String(u?.role || '').toLowerCase())
+  );
+  if (!visibleUsers.length) {
     tbody.innerHTML = '<tr><td colspan="4" class="py-3 text-slate-500">No users</td></tr>';
     return;
   }
-  tbody.innerHTML = usersState
+  tbody.innerHTML = visibleUsers
     .map((u) => {
       const isActive = u.is_active !== false;
       const pin = u.pin_code || (isActive ? '' : '—');
@@ -1656,19 +1794,11 @@ function renderUserPinValidationState() {
 }
 
 // —— Root Admin Account Management ——
-let rootAdminsState = [];
-let selectedAdminId = null;
-
 async function fetchRootAdmins() {
-  const res = await fetch(`${API_BASE}/api/root/admins`, {
-    headers: { ...window.auth.getAuthHeaders() },
+  const data = await apiJsonRequest(`${API_BASE}/api/root/admins`, {
+    fallbackMessage: 'Failed to fetch admin accounts',
   });
-  if (window.auth && window.auth.checkUnauthorized(res)) return [];
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    throw new Error(data.detail || 'Failed to fetch admin accounts');
-  }
-  return res.json();
+  return Array.isArray(data) ? data : [];
 }
 
 function renderRootAdmins(admins) {
@@ -1726,12 +1856,17 @@ function syncAdminFormMode(isEdit) {
 function resetAdminForm() {
   selectedAdminId = null;
   const idEl = document.getElementById('admin-id');
+  const titleEl = document.getElementById('admin-form-title');
+  const usernameEl = document.getElementById('admin-username');
+  const passwordEl = document.getElementById('admin-password');
+  const deleteBtn = document.getElementById('btn-delete-admin');
+  const resetPwBtn = document.getElementById('btn-reset-admin-password');
   if (idEl) idEl.value = '';
-  document.getElementById('admin-form-title').textContent = 'Create Admin';
-  document.getElementById('admin-username').value = '';
-  document.getElementById('admin-password').value = '';
-  document.getElementById('btn-delete-admin').classList.add('hidden');
-  document.getElementById('btn-reset-admin-password').classList.add('hidden');
+  if (titleEl) titleEl.textContent = 'Create Admin';
+  if (usernameEl) usernameEl.value = '';
+  if (passwordEl) passwordEl.value = '';
+  if (deleteBtn) deleteBtn.classList.add('hidden');
+  if (resetPwBtn) resetPwBtn.classList.add('hidden');
   syncAdminFormMode(false);
 }
 
@@ -1742,7 +1877,8 @@ async function loadRootAdmins() {
   } catch (e) {
     console.error(e);
     const tbody = document.getElementById('admins-table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="2" class="py-3 text-red-600">Error loading admins.</td></tr>';
+    const message = e?.message || 'Error loading admins.';
+    if (tbody) tbody.innerHTML = `<tr><td colspan="2" class="py-3 text-red-600">${escapeHtml(message)}</td></tr>`;
   }
 }
 
@@ -1916,7 +2052,10 @@ async function loadUsers() {
   } catch (e) {
     console.error(e);
     const tbody = document.getElementById('users-table-body');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="py-3 text-red-600">Error loading users.</td></tr>';
+    const message = e?.message || 'Error loading users.';
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="4" class="py-3 text-red-600">${escapeHtml(message)}</td></tr>`;
+    }
   }
 }
 
@@ -1964,23 +2103,17 @@ if (userForm) {
     const payload = { username, role, pin_code: pin };
 
     try {
-      const res = await fetch(url, {
+      await apiJsonRequest(url, {
         method,
-        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-        body: JSON.stringify(payload),
+        body: payload,
+        fallbackMessage: 'Failed to save user',
       });
-      if (window.auth && window.auth.checkUnauthorized(res)) return;
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        await dialogAlert(formatUserSaveError(data.detail), 'error', 'Save User');
-        return;
-      }
       if (window.toast) window.toast.success('User saved successfully.');
       resetUserForm();
       await loadUsers();
     } catch (err) {
       console.error(err);
-      await dialogAlert('Failed to save user', 'error', 'Save User');
+      await dialogAlert(formatUserSaveError(err.message) || 'Failed to save user', 'error', 'Save User');
     }
   });
 }
@@ -2043,25 +2176,17 @@ if (adminForm) {
     const payload = { username, password: password || '' };
 
     try {
-      const res = await fetch(url, {
+      await apiJsonRequest(url, {
         method,
-        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-        body: JSON.stringify(payload),
+        body: payload,
+        fallbackMessage: 'Failed to save admin',
       });
-      if (window.auth && window.auth.checkUnauthorized(res)) return;
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detail = data.detail;
-        const msg = typeof detail === 'string' ? detail : 'Failed to save admin';
-        await dialogAlert(msg, 'error', 'Save Admin');
-        return;
-      }
       if (window.toast) window.toast.success('Admin saved successfully.');
       resetAdminForm();
       await loadRootAdmins();
     } catch (err) {
       console.error(err);
-      await dialogAlert('Failed to save admin', 'error', 'Save Admin');
+      await dialogAlert(err.message || 'Failed to save admin', 'error', 'Save Admin');
     }
   });
 }
@@ -2133,19 +2258,46 @@ if (btnResetAdminForm) {
 syncAdminFormMode(false);
 
 // —— Admin Table Management (Zones + Tables) ——
-let zonesState = [];
-let addTableZoneId = null;
-let editTableId = null;
-
 async function fetchTableGrid() {
   const res = await fetch(`${API_BASE}/api/tables/grid?_ts=${Date.now()}`, {
     cache: 'no-store',
     headers: { ...window.auth.getAuthHeaders() },
   });
-  if (window.auth && window.auth.checkUnauthorized(res)) return [];
+  if (window.auth?.checkUnauthorized?.(res)) {
+    throw new Error('Session expired. Please log in again.');
+  }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || 'Failed to fetch table grid');
+  if (!res.ok) {
+    throw new Error(formatApiDetail(data, 'Failed to fetch table grid'));
+  }
+  if (!Array.isArray(data)) {
+    throw new Error('Invalid table grid response');
+  }
   return data;
+}
+
+async function createZoneByName(zoneName) {
+  return apiJsonRequest(`${API_BASE}/api/zones`, {
+    method: 'POST',
+    body: { name: zoneName },
+    fallbackMessage: 'Failed to create zone',
+  });
+}
+
+async function createTableInZone(zoneId, tableName) {
+  const parsedZoneId = Number(zoneId);
+  if (!Number.isInteger(parsedZoneId) || parsedZoneId <= 0) {
+    throw new Error('Invalid zone. Please reload and try again.');
+  }
+  const name = String(tableName || '').trim();
+  if (!name) {
+    throw new Error('Please enter a table name.');
+  }
+  return apiJsonRequest(`${API_BASE}/api/tables`, {
+    method: 'POST',
+    body: { name, zone_id: parsedZoneId, status: 'available' },
+    fallbackMessage: 'Failed to create table',
+  });
 }
 
 async function deleteTableById(tableId) {
@@ -2163,22 +2315,49 @@ async function deleteTableById(tableId) {
 }
 
 function tableDisplayName(t) {
-  return t.name || t.name_or_number || `#${t.id}`;
+  if (window.tableDisplay?.displayTableName) {
+    return window.tableDisplay.displayTableName(t);
+  }
+  const raw = t?.name || t?.name_or_number || `#${t?.id}`;
+  return String(raw).replace(/^table\s+/i, '').trim() || raw;
+}
+
+function tableRawName(t) {
+  return t?.name || t?.name_or_number || '';
 }
 
 function formatTakeawayOrderLabel(orderId) {
   return `🛍️ ${t('takeaway', 'Takeaway')} #${orderId}`;
 }
 
-function orderTableLabel(order) {
-  const isTakeaway = String(order?.order_type || '').toLowerCase() === 'takeaway';
-  if (isTakeaway || (order?.table_id == null && order?.id != null)) {
-    if (order?.id != null) return formatTakeawayOrderLabel(order.id);
-    return t('takeaway', 'Takeaway');
+function isTakeawayOrder(order) {
+  if (!order) return false;
+  if (String(order.order_type || '').toLowerCase() === 'takeaway') return true;
+  return order.table_id == null && order.table_number == null;
+}
+
+function cashierOrderDisplayLabel(order) {
+  if (order?.table?.name) {
+    return String(order.table.name).replace(/^table\s+/i, '').trim();
   }
-  if (order?.table_id == null && order?.table_number == null) return t('deleted_table', '[Deleted Table]');
-  if (order?.table_number != null) return order.table_number;
-  return t('unknown', 'Unknown');
+  if (!isTakeawayOrder(order) && order?.table_number != null) {
+    if (window.tableDisplay?.displayTableName) {
+      return window.tableDisplay.displayTableName(order.table_number);
+    }
+    return String(order.table_number).replace(/^table\s+/i, '').trim() || String(order.table_number);
+  }
+  const customer = String(order?.customer_name || '').trim();
+  if (customer) return `🛍️ ${customer}`;
+  if (order?.id != null) return `Takeaway #${order.id}`;
+  return t('takeaway', 'Takeaway');
+}
+
+function orderServedByLabel(order) {
+  return order?.waiter_name || order?.served_by_name || t('unknown', 'Unknown');
+}
+
+function orderTableLabel(order) {
+  return cashierOrderDisplayLabel(order);
 }
 
 function renderTableKanbanBoard(zones) {
@@ -2214,7 +2393,7 @@ function renderTableKanbanBoard(zones) {
                   <input
                     type="text"
                     data-edit-table-input-id="${table.id}"
-                    value="${escapeAttr(tableDisplayName(table))}"
+                    value="${escapeAttr(tableRawName(table))}"
                     class="w-full px-2 py-1.5 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                   <select
@@ -2281,26 +2460,35 @@ if (kanbanZoneForm) {
   kanbanZoneForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const zoneNameInput = document.getElementById('kanban-zone-name');
+    const submitBtn = kanbanZoneForm.querySelector('button[type="submit"]');
     const zoneName = (zoneNameInput && zoneNameInput.value || '').trim();
-    if (!zoneName) return;
+    if (!zoneName) {
+      if (window.toast) window.toast.error('Enter a zone name.');
+      return;
+    }
+    if (submitBtn) submitBtn.disabled = true;
     try {
-      const res = await fetch(`${API_BASE}/api/zones`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-        body: JSON.stringify({ name: zoneName }),
-      });
-      if (window.auth && window.auth.checkUnauthorized(res)) return;
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        await dialogAlert(data.detail || 'Failed to create zone', 'error', 'Create Zone');
-        return;
+      const created = await createZoneByName(zoneName);
+      if (created && created.id != null) {
+        const exists = (zonesState || []).some((z) => Number(z.id) === Number(created.id));
+        if (!exists) {
+          zonesState = [...(zonesState || []), { id: created.id, name: created.name, tables: [] }];
+          renderTableKanbanBoard(zonesState);
+        }
       }
       if (window.toast) window.toast.success('Zone created.');
-      zoneNameInput.value = '';
-      await loadTableManagementData();
+      if (zoneNameInput) zoneNameInput.value = '';
+      try {
+        await loadTableManagementData();
+      } catch (refreshErr) {
+        console.error(refreshErr);
+        if (window.toast) window.toast.error('Zone saved, but refresh failed. Please reload.');
+      }
     } catch (err) {
       console.error(err);
-      await dialogAlert('Failed to create zone', 'error', 'Create Zone');
+      await dialogAlert(err.message || 'Failed to create zone', 'error', 'Create Zone');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 }
@@ -2453,29 +2641,16 @@ if (kanbanBoard) {
       const zoneId = Number(saveTableBtn.getAttribute('data-save-table-zone-id'));
       const input = document.querySelector(`[data-add-table-input-id="${zoneId}"]`);
       const tableName = (input && input.value || '').trim();
-      if (!tableName) {
-        if (window.toast) window.toast.error('Please enter table name.');
-        return;
-      }
       try {
-        const res = await fetch(`${API_BASE}/api/tables`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-          body: JSON.stringify({ name: tableName, zone_id: zoneId }),
-        });
-        if (window.auth && window.auth.checkUnauthorized(res)) return;
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          await dialogAlert(data.detail || 'Failed to create table', 'error', 'Create Table');
-          return;
-        }
+        await createTableInZone(zoneId, tableName);
         if (window.toast) window.toast.success('Table created.');
         addTableZoneId = null;
         await loadTableManagementData();
       } catch (err) {
         console.error(err);
-        await dialogAlert('Failed to create table', 'error', 'Create Table');
+        await dialogAlert(err.message || 'Failed to create table', 'error', 'Create Table');
       }
+      return;
     }
   });
 
@@ -2486,25 +2661,14 @@ if (kanbanBoard) {
     e.preventDefault();
     const zoneId = Number(input.getAttribute('data-add-table-input-id'));
     const tableName = (input.value || '').trim();
-    if (!tableName) return;
     try {
-      const res = await fetch(`${API_BASE}/api/tables`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-        body: JSON.stringify({ name: tableName, zone_id: zoneId }),
-      });
-      if (window.auth && window.auth.checkUnauthorized(res)) return;
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        await dialogAlert(data.detail || 'Failed to create table', 'error', 'Create Table');
-        return;
-      }
+      await createTableInZone(zoneId, tableName);
       if (window.toast) window.toast.success('Table created.');
       addTableZoneId = null;
       await loadTableManagementData();
     } catch (err) {
       console.error(err);
-      await dialogAlert('Failed to create table', 'error', 'Create Table');
+      await dialogAlert(err.message || 'Failed to create table', 'error', 'Create Table');
     }
   });
 }
@@ -2555,10 +2719,11 @@ async function toggleMenuItemPromoted(itemId) {
   return data;
 }
 
-async function toggleMenuItemAvailability(itemId) {
-  const res = await fetch(`${API_BASE}/api/menu-items/${itemId}/toggle-availability`, {
-    method: 'PUT',
-    headers: { ...window.auth.getAuthHeaders() },
+async function setMenuItemAvailability(itemId, isAvailable) {
+  const res = await fetch(`${API_BASE}/api/menu-items/${itemId}/availability`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+    body: JSON.stringify({ is_available: Boolean(isAvailable) }),
   });
   if (window.auth && window.auth.checkUnauthorized(res)) return null;
   const data = await res.json().catch(() => ({}));
@@ -2569,6 +2734,12 @@ async function toggleMenuItemAvailability(itemId) {
     );
   }
   return data;
+}
+
+async function toggleMenuItemAvailability(itemId) {
+  const item = (menuItemsCache || []).find((m) => Number(m.id) === Number(itemId));
+  const nextAvailable = item ? item.is_available === false : true;
+  return setMenuItemAvailability(itemId, nextAvailable);
 }
 
 async function deleteMenuItem(itemId) {
@@ -2587,22 +2758,14 @@ async function deleteMenuItem(itemId) {
 }
 
 async function updateMenuItem(itemId, payload) {
-  const res = await fetch(`${API_BASE}/api/menu-items/${itemId}`, {
+  return apiJsonRequest(`${API_BASE}/api/menu-items/${itemId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-    body: JSON.stringify(payload),
+    body: payload,
+    fallbackMessage: 'Failed to update menu item',
+  }).then((data) => {
+    if (window.toast) window.toast.success('Menu item updated.');
+    return data;
   });
-  if (window.auth && window.auth.checkUnauthorized(res)) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(
-      Array.isArray(data.detail)
-        ? data.detail.map((x) => x.msg || x).join(', ')
-        : (data.detail || 'Failed to update menu item')
-    );
-  }
-  if (window.toast) window.toast.success('Menu item updated.');
-  return data;
 }
 
 function resetMenuItemFormMode() {
@@ -2619,11 +2782,23 @@ function resetMenuItemFormMode() {
   btn.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
   cancelBtn.classList.add('hidden');
   editId.value = '';
+  const nameInput = document.getElementById('item-name');
+  const priceInput = document.getElementById('item-price');
+  const descriptionInput = document.getElementById('item-description');
+  const categoryInput = document.getElementById('item-category');
+  const imageUrlInput = document.getElementById('item-image-url');
+  const imageFileInput = document.getElementById('item-image-file');
   const discountInput = document.getElementById('item-discount-price');
   const takeawayInput = document.getElementById('item-takeaway-price');
   const taxTypeInput = document.getElementById('item-tax-type');
   const taxValueInput = document.getElementById('item-tax-value');
   const promotedInput = document.getElementById('item-is-promoted');
+  if (nameInput) nameInput.value = '';
+  if (priceInput) priceInput.value = '';
+  if (descriptionInput) descriptionInput.value = '';
+  if (categoryInput) categoryInput.value = '';
+  if (imageUrlInput) imageUrlInput.value = '';
+  if (imageFileInput) imageFileInput.value = '';
   if (discountInput) discountInput.value = '';
   if (takeawayInput) takeawayInput.value = '';
   if (taxTypeInput) taxTypeInput.value = 'none';
@@ -2842,7 +3017,7 @@ function renderCategories(categories) {
         try {
           const menuItems = await fetchMenuItems();
           menuItemsCache = menuItems || [];
-          renderMenuItems(menuItems);
+          refreshMenuItemsView();
         } catch (menuErr) {
           console.error('Menu items refresh failed after category delete:', menuErr);
         }
@@ -2856,8 +3031,78 @@ function renderCategories(categories) {
   });
 }
 
+function getCategoriesWithMenuItems() {
+  const ids = new Set(menuItemsCache.map((m) => m.category_id));
+  return categoriesCache.filter((c) => ids.has(c.id));
+}
+
+function renderMenuCategoryTabs() {
+  const container = document.getElementById('menu-category-tabs');
+  if (!container) return;
+  if (
+    activeMenuCategoryId != null
+    && !categoriesCache.some((c) => c.id === activeMenuCategoryId)
+  ) {
+    activeMenuCategoryId = null;
+  }
+  const withItems = getCategoriesWithMenuItems();
+  container.innerHTML = [
+    `<button type="button" data-menu-category-key="ALL" class="menu-category-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${activeMenuCategoryId === null ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">ALL</button>`,
+    ...withItems.map(
+      (c) =>
+        `<button type="button" data-menu-category-key="${c.id}" class="menu-category-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${activeMenuCategoryId === c.id ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${escapeHtml(c.name)}</button>`
+    ),
+  ].join('');
+  container.querySelectorAll('.menu-category-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      filterMenu(btn.getAttribute('data-menu-category-key'));
+    });
+  });
+}
+
+function filterMenu(categoryKey) {
+  if (categoryKey === 'ALL' || categoryKey === '' || categoryKey == null) {
+    activeMenuCategoryId = null;
+  } else {
+    activeMenuCategoryId = Number(categoryKey);
+  }
+  renderMenuCategoryTabs();
+  applyMenuCategoryFilter();
+}
+
+function applyMenuCategoryFilter() {
+  const list = document.getElementById('menu-items-list');
+  if (!list) return;
+  list.querySelectorAll('[data-menu-category-id]').forEach((row) => {
+    const rowCategoryId = Number(row.getAttribute('data-menu-category-id'));
+    const show = activeMenuCategoryId == null || rowCategoryId === activeMenuCategoryId;
+    row.classList.toggle('hidden', !show);
+  });
+  const visibleRows = list.querySelectorAll('[data-menu-category-id]:not(.hidden)');
+  let emptyMsg = list.querySelector('[data-menu-filter-empty]');
+  if (activeMenuCategoryId != null && visibleRows.length === 0) {
+    if (!emptyMsg) {
+      emptyMsg = document.createElement('li');
+      emptyMsg.setAttribute('data-menu-filter-empty', '1');
+      emptyMsg.className = 'text-slate-500 py-2';
+      emptyMsg.textContent = 'No items in this category.';
+      list.appendChild(emptyMsg);
+    }
+    emptyMsg.classList.remove('hidden');
+  } else if (emptyMsg) {
+    emptyMsg.classList.add('hidden');
+  }
+}
+
+function refreshMenuItemsView() {
+  renderMenuCategoryTabs();
+  renderMenuItems(menuItemsCache);
+  applyMenuCategoryFilter();
+}
+
 function renderMenuItems(items) {
   const el = document.getElementById('menu-items-list');
+  const isAdminPanel = isMenuAdminPanelRole(getCounterUserRole());
   if (!items.length) {
     el.innerHTML = '<li class="text-slate-500">No menu items yet.</li>';
     return;
@@ -2885,15 +3130,7 @@ function renderMenuItems(items) {
       const btnClass = available
         ? 'bg-red-600 hover:bg-red-700'
         : 'bg-emerald-600 hover:bg-emerald-700';
-      return `
-        <li class="py-2 flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2 min-w-0">
-            ${img}
-            ${priceLabel}
-            ${badge}
-            ${promotedBadge}
-          </div>
-          <div class="flex items-center gap-2 flex-wrap justify-end">
+      const adminActions = `
             <button
               type="button"
               data-toggle-promoted-id="${m.id}"
@@ -2921,13 +3158,38 @@ function renderMenuItems(items) {
               class="text-xs text-white px-3 py-1 rounded bg-slate-700 hover:bg-slate-800"
             >
               Delete
-            </button>
+            </button>`;
+      const cashierToggle = `
+            <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+              <span class="text-xs text-slate-600">${available ? 'In Stock' : 'Sold Out'}</span>
+              <input
+                type="checkbox"
+                role="switch"
+                data-availability-switch-id="${m.id}"
+                class="h-5 w-9 rounded-full appearance-none bg-slate-300 checked:bg-emerald-500 relative transition-colors cursor-pointer
+                  before:content-[''] before:absolute before:top-0.5 before:left-0.5 before:h-4 before:w-4 before:rounded-full before:bg-white before:transition-transform
+                  checked:before:translate-x-4"
+                ${available ? 'checked' : ''}
+                aria-label="${available ? 'Mark sold out' : 'Mark in stock'}"
+              />
+            </label>`;
+      return `
+        <li class="py-2 flex items-center justify-between gap-3" data-menu-category-id="${m.category_id}">
+          <div class="flex items-center gap-2 min-w-0">
+            ${img}
+            ${priceLabel}
+            ${badge}
+            ${isAdminPanel ? promotedBadge : ''}
+          </div>
+          <div class="flex items-center gap-2 flex-wrap justify-end">
+            ${isAdminPanel ? adminActions : cashierToggle}
           </div>
         </li>
       `;
     })
     .join('');
 
+  if (isAdminPanel) {
   el.querySelectorAll('[data-toggle-promoted-id]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const itemId = Number(btn.getAttribute('data-toggle-promoted-id'));
@@ -2990,6 +3252,25 @@ function renderMenuItems(items) {
       }
     });
   });
+  } else {
+    el.querySelectorAll('[data-availability-switch-id]').forEach((input) => {
+      input.addEventListener('change', async () => {
+        const itemId = Number(input.getAttribute('data-availability-switch-id'));
+        if (!itemId) return;
+        const nextAvailable = input.checked;
+        input.disabled = true;
+        try {
+          await setMenuItemAvailability(itemId, nextAvailable);
+          await loadMenuData();
+        } catch (err) {
+          console.error(err);
+          input.checked = !nextAvailable;
+          await dialogAlert(err.message || 'Failed to update availability', 'error', 'Stock Availability');
+          input.disabled = false;
+        }
+      });
+    });
+  }
 }
 
 function escapeAttr(text) {
@@ -3168,15 +3449,18 @@ function renderPredefinedInstructionsList(tags) {
 }
 
 async function loadMenuData() {
-  try {
-    await loadKitchenPrinterSettings();
-  } catch (e) {
-    console.error('Kitchen printer settings failed:', e);
-  }
-  try {
-    await loadPredefinedInstructionsAdmin();
-  } catch (e) {
-    console.error('Predefined instructions failed:', e);
+  const isMenuAdmin = isMenuAdminPanelRole(getCounterUserRole());
+  if (isMenuAdmin) {
+    try {
+      await loadKitchenPrinterSettings();
+    } catch (e) {
+      console.error('Kitchen printer settings failed:', e);
+    }
+    try {
+      await loadPredefinedInstructionsAdmin();
+    } catch (e) {
+      console.error('Predefined instructions failed:', e);
+    }
   }
 
   const [categoriesResult, menuItemsResult] = await Promise.allSettled([
@@ -3185,21 +3469,26 @@ async function loadMenuData() {
   ]);
 
   if (categoriesResult.status === 'fulfilled') {
-    renderCategories(categoriesResult.value);
-    populateCategorySelect(categoriesResult.value);
+    categoriesCache = categoriesResult.value || [];
+    renderCategories(categoriesCache);
+    populateCategorySelect(categoriesCache);
   } else {
     console.error(categoriesResult.reason);
-    document.getElementById('categories-list').innerHTML =
-      '<li class="text-red-600">Error loading categories.</li>';
+    const categoriesList = document.getElementById('categories-list');
+    if (categoriesList) {
+      categoriesList.innerHTML = '<li class="text-red-600">Error loading categories.</li>';
+    }
   }
 
   if (menuItemsResult.status === 'fulfilled') {
     menuItemsCache = menuItemsResult.value || [];
-    renderMenuItems(menuItemsCache);
+    refreshMenuItemsView();
   } else {
     console.error(menuItemsResult.reason);
-    document.getElementById('menu-items-list').innerHTML =
-      '<li class="text-red-600">Error loading menu items.</li>';
+    const menuList = document.getElementById('menu-items-list');
+    if (menuList) {
+      menuList.innerHTML = '<li class="text-red-600">Error loading menu items.</li>';
+    }
   }
 }
 
@@ -3208,28 +3497,26 @@ document.getElementById('form-category').addEventListener('submit', async (e) =>
   const input = document.getElementById('category-name');
   const routeSelect = document.getElementById('category-printer-route');
   const name = input.value.trim();
-  if (!name) return;
+  if (!name) {
+    await dialogAlert('Category name is required.', 'error', 'Create Category');
+    return;
+  }
   const routeValue = routeSelect ? String(routeSelect.value || '').trim() : '';
   const payload = { name };
   if (routeValue) payload.printer_route = routeValue;
   try {
-    const res = await fetch(`${API_BASE}/api/categories/`, {
+    await apiJsonRequest(`${API_BASE}/api/categories/`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-      body: JSON.stringify(payload),
+      body: payload,
+      fallbackMessage: 'Failed to create category',
     });
-    if (window.auth && window.auth.checkUnauthorized(res)) return;
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      await dialogAlert(err.detail || 'Failed to create category', 'error', 'Create Category');
-      return;
-    }
+    if (window.toast) window.toast.success('Category created.');
     input.value = '';
     if (routeSelect) routeSelect.value = '';
     await loadMenuData();
   } catch (err) {
     console.error(err);
-    await dialogAlert('Failed to create category', 'error', 'Create Category');
+    await dialogAlert(err.message || 'Failed to create category', 'error', 'Create Category');
   }
 });
 
@@ -3263,26 +3550,10 @@ document.getElementById('item-tax-type')?.addEventListener('change', syncTaxValu
 document.getElementById('form-menu-item').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = document.getElementById('form-menu-item');
-  const name = document.getElementById('item-name').value.trim();
-  const price = parseFloat(document.getElementById('item-price').value);
-  const discountPriceRaw = document.getElementById('item-discount-price').value.trim();
-  const discountPrice = discountPriceRaw === '' ? null : parseFloat(discountPriceRaw);
-  const takeawayPriceRaw = document.getElementById('item-takeaway-price')?.value.trim() ?? '';
-  const takeawayPrice = takeawayPriceRaw === '' ? null : parseFloat(takeawayPriceRaw);
-  const taxType = String(document.getElementById('item-tax-type')?.value || 'none');
-  const taxValueRaw = document.getElementById('item-tax-value')?.value.trim() ?? '0';
-  const taxValue = taxType === 'none' ? 0 : parseFloat(taxValueRaw || '0');
-  const description = document.getElementById('item-description').value.trim() || null;
-  const categoryId = document.getElementById('item-category').value;
-  const imageUrl = document.getElementById('item-image-url').value.trim() || null;
   const imageFile = document.getElementById('item-image-file').files?.[0];
-  const isPromoted = !!document.getElementById('item-is-promoted')?.checked;
   const editItemId = Number(document.getElementById('menu-edit-item-id').value || 0);
   const isEditMode = form?.getAttribute('data-mode') === 'edit' && !!editItemId;
-  if (!name || isNaN(price) || price < 0 || !categoryId) return;
-  if (discountPrice !== null && (Number.isNaN(discountPrice) || discountPrice < 0)) return;
-  if (takeawayPrice !== null && (Number.isNaN(takeawayPrice) || takeawayPrice < 0)) return;
-  if (taxType !== 'none' && (Number.isNaN(taxValue) || taxValue < 0)) return;
+  const imageUrl = document.getElementById('item-image-url').value.trim() || null;
   if (imageFile && !imageUrl) {
     await dialogAlert('Please wait for image upload to finish.', 'error', 'Upload In Progress');
     return;
@@ -3290,54 +3561,18 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
   const btn = document.getElementById('btn-submit-menu-item');
   btn.disabled = true;
   try {
+    const payload = buildMenuItemPayloadFromForm();
     if (isEditMode) {
-      await updateMenuItem(editItemId, {
-        name,
-        price,
-        discount_price: discountPrice,
-        takeaway_price: takeawayPrice,
-        tax_type: taxType,
-        tax_value: taxValue,
-        category_id: parseInt(categoryId, 10),
-        description,
-        image_url: imageUrl,
-        is_promoted: isPromoted,
-      });
+      delete payload.is_available;
+      await updateMenuItem(editItemId, payload);
     } else {
-      const res = await fetch(`${API_BASE}/api/menu-items/`, {
+      await apiJsonRequest(`${API_BASE}/api/menu-items/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-        body: JSON.stringify({
-          name,
-          price,
-          discount_price: discountPrice,
-          takeaway_price: takeawayPrice,
-          tax_type: taxType,
-          tax_value: taxValue,
-          category_id: parseInt(categoryId, 10),
-          description,
-          image_url: imageUrl,
-          is_promoted: isPromoted,
-        }),
+        body: payload,
+        fallbackMessage: 'Failed to create menu item',
       });
-      if (window.auth && window.auth.checkUnauthorized(res)) return;
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        await dialogAlert(
-          Array.isArray(data.detail) ? data.detail.map((x) => x.msg || x).join(', ') : (data.detail || 'Failed to create menu item'),
-          'error',
-          'Create Menu Item',
-        );
-        return;
-      }
+      if (window.toast) window.toast.success('Menu item created.');
     }
-    document.getElementById('item-name').value = '';
-    document.getElementById('item-price').value = '';
-    document.getElementById('item-discount-price').value = '';
-    document.getElementById('item-description').value = '';
-    document.getElementById('item-image-url').value = '';
-    document.getElementById('item-category').value = '';
-    document.getElementById('item-image-file').value = '';
     resetMenuItemFormMode();
     await loadMenuData();
   } catch (err) {
@@ -3349,13 +3584,6 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
 });
 
 document.getElementById('btn-cancel-menu-edit')?.addEventListener('click', () => {
-  document.getElementById('item-name').value = '';
-  document.getElementById('item-price').value = '';
-  document.getElementById('item-discount-price').value = '';
-  document.getElementById('item-description').value = '';
-  document.getElementById('item-image-url').value = '';
-  document.getElementById('item-category').value = '';
-  document.getElementById('item-image-file').value = '';
   resetMenuItemFormMode();
 });
 

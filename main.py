@@ -576,6 +576,12 @@ async def lifespan(app: FastAPI):
             conn.execute(text("CREATE UNIQUE INDEX ix_users_pin_code ON users(pin_code)"))
     except Exception:
         pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN created_by_id INTEGER"))
+    except Exception:
+        pass
     # Ensure default zone exists for table management.
     db = SessionLocal()
     try:
@@ -604,6 +610,31 @@ async def lifespan(app: FastAPI):
                 db.add(table)
                 db.flush()
             legacy_order.table_id = table.id
+        db.commit()
+    except Exception:
+        db.rollback()
+        pass
+    finally:
+        db.close()
+
+    db = SessionLocal()
+    try:
+        from models import OrderItem
+
+        orders_missing_creator = (
+            db.query(Order)
+            .filter(Order.created_by_id.is_(None))
+            .all()
+        )
+        for order in orders_missing_creator:
+            earliest = (
+                db.query(OrderItem)
+                .filter(OrderItem.order_id == order.id, OrderItem.created_by_id.isnot(None))
+                .order_by(OrderItem.batch_number.asc(), OrderItem.id.asc())
+                .first()
+            )
+            if earliest is not None:
+                order.created_by_id = earliest.created_by_id
         db.commit()
     except Exception:
         db.rollback()

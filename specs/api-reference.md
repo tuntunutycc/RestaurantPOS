@@ -50,35 +50,48 @@ Body: login requests accept optional `device_id` for session binding.
 | PUT | `/api/admin/users/{user_id}` | |
 | DELETE | `/api/admin/users/{user_id}` | Soft delete |
 
+**Counter UI payload (`static/counter.js` `#user-form`):** `{ username, role, pin_code }` — PIN required for `cashier`/`waiter`/`account`; no `password` field.
+
 ---
 
-## Categories & menu (`ADMIN_PANEL_ROLES` for mutations)
+## Categories & menu
 
-| Method | Path |
-|--------|------|
-| GET/POST | `/api/categories/` |
-| PUT/DELETE | `/api/categories/{category_id}` |
-| GET/POST | `/api/menu-items/` |
-| POST | `/api/menu-items/upload` |
-| PUT | `/api/menu-items/{item_id}` |
-| PUT | `/api/menu-items/{item_id}/toggle-promoted` |
-| PUT | `/api/menu-items/{item_id}/toggle-availability` |
-| DELETE | `/api/menu-items/{item_id}` |
+| Method | Path | Roles |
+|--------|------|-------|
+| GET | `/api/categories/` | authenticated |
+| POST | `/api/categories/` | `root`, `admin` |
+| PUT/DELETE | `/api/categories/{category_id}` | `root`, `admin` |
+| GET | `/api/menu-items/` | authenticated |
+| POST | `/api/menu-items/` | **`root`, `admin` only** |
+| POST | `/api/menu-items/upload` | **`root`, `admin` only** |
+| PUT | `/api/menu-items/{item_id}` | **`root`, `admin` only** (full update) |
+| PATCH | `/api/menu-items/{item_id}/availability` | **`root`, `admin`, `cashier`** — body `{ "is_available": boolean }` |
+| PUT | `/api/menu-items/{item_id}/toggle-promoted` | `root`, `admin` |
+| PUT | `/api/menu-items/{item_id}/toggle-availability` | `root`, `admin` (legacy flip; prefer PATCH) |
+| DELETE | `/api/menu-items/{item_id}` | **`root`, `admin` only** |
+
+See `specs/feature-menu-rbac/` for cashier availability-only contract.
 
 **MenuItem fields:** `price`, `discount_price` (legacy), `discount_type`, `discount_value`, `takeaway_price`, `tax_type`, `tax_value`, `modifiers_config`, etc.
+
+**Counter UI create payload (`static/counter.js` `#form-menu-item`):** sends all `MenuItemCreate` fields with defaults (`discount_type: "none"`, `discount_value: 0`, `modifiers_config: []`, `is_available: true`). Legacy `#item-discount-price` maps to `discount_price`. Edit mode omits `is_available` so sold-out state is preserved.
 
 ---
 
 ## Zones & tables (`ADMIN_PANEL_ROLES` for mutations)
 
-| Method | Path |
-|--------|------|
-| GET/POST | `/api/zones` |
-| PUT/DELETE | `/api/zones/{zone_id}` |
-| GET/POST | `/api/tables` |
-| PUT/DELETE | `/api/tables/{table_id}` |
-| GET | `/api/tables/status` |
-| GET | `/api/tables/grid` |
+| Method | Path | Roles | Notes |
+|--------|------|-------|-------|
+| GET/POST | `/api/zones` | GET: admin; POST: admin | |
+| PUT/DELETE | `/api/zones/{zone_id}` | admin | |
+| GET/POST | `/api/tables` | GET/POST: admin | **No pagination** — full list |
+| PUT/DELETE | `/api/tables/{table_id}` | admin | |
+| GET | `/api/tables/status` | authenticated | All zones + nested tables (**no pagination**) |
+| GET | `/api/tables/grid` | authenticated | All zones + table status/active order (**no pagination**) |
+
+**Counter UI table create (`static/counter.js` kanban):** `{ name, zone_id, status: "available" }` — `zone_id` integer from zone column.
+
+See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 
 ---
 
@@ -125,10 +138,14 @@ Body: login requests accept optional `device_id` for session binding.
 - `items[]` — `{ menu_item_id, quantity, is_takeaway, selected_modifiers, note }`
 
 ### `OrderDetailsResponse` / `ActiveTakeawayOrderResponse`
+- `order_type`, `table_id`, `customer_name`
+- `waiter_name` — resolved from `Order.created_by_id` (order-taking staff)
+- `served_by_name` — latest batch `OrderItem.created_by_id` (add-on staff when different)
 - `breakdown_subtotal`, `breakdown_discount_total`, `breakdown_tax_total`, `breakdown_grand_total`
-- `items[]` → `OrderItemDetailsResponse` with `unit_price_at_sale`, `unit_discount_at_sale`, `unit_tax_at_sale`, `is_takeaway`
+- `items[]` → `OrderItemDetailsResponse` with `unit_price_at_sale`, `unit_discount_at_sale`, `unit_tax_at_sale`, `is_takeaway`, per-line `waiter_name`
 
 ### `OrderResponseDetail` (list endpoints)
+- `waiter_name`, `served_by_name` (same resolution as above)
 - Does **not** include order-level `breakdown_*` fields
 - `OrderItemDetail` includes `unit_tax_at_sale` only (not full pricing snapshots)
 
@@ -151,6 +168,8 @@ Use **`GET /api/orders/{id}/details`** for waiter sidebar breakdown.
 | GET | `/api/predefined-instructions` | `POS_ORDER_ROLES` |
 | POST | `/api/predefined-instructions` | `ADMIN_PANEL_ROLES` |
 | DELETE | `/api/predefined-instructions/{instruction_id}` | `ADMIN_PANEL_ROLES` |
+
+Menu items include `category_id`; categories at `GET /api/categories/` — used for client-side category pill filtering (`specs/feature-menu-category-navigation/`).
 
 ---
 

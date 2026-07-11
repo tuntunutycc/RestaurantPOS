@@ -59,6 +59,8 @@ No additional global 5% tax.
 - Tax Type dropdown: None / Percentage % / Fixed Amount
 - Tax Value input (hidden/disabled when None)
 
+**Counter UI (`static/counter.js`):** `#item-tax-type` + `#item-tax-value` on create/update; `tax_value` forced to `0` when type is `none`. Validation errors surface via `dialogAlert` (422/400 messages included).
+
 ## FR-T6: Waiter / Cashier display (current)
 
 | Surface | Shows |

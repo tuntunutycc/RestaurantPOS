@@ -15,7 +15,8 @@ Allow waiters to start a **walk-in takeaway** order with **no physical table** (
 | `Order.table_id` | `NULL` for walk-in takeaway |
 | `Order.order_type` | `'takeaway'` |
 | `Order.customer_name` | Optional; default display "Walk-in" |
-| `OrderItem.created_by_id` | **Required at submit** — JWT `current_user.id` (waiter incentive attribution) |
+| `Order.created_by_id` | **Required on new order** — JWT `current_user.id` (who took the order). API field: `waiter_name`. |
+| `OrderItem.created_by_id` | **Required at submit** — JWT `current_user.id` (waiter incentive attribution per batch) |
 | `OrderItem.is_takeaway` | Default `true` for items added in walk-in takeaway cart |
 
 ## FR-W1: Create walk-in takeaway
@@ -27,10 +28,21 @@ Allow waiters to start a **walk-in takeaway** order with **no physical table** (
 - `order_type=dine_in` without `table_id` → **400** `table_id is required for dine_in orders`
 
 ## FR-W3: Display labels
-Kitchen, Cashier, and waiter active lists show:
-> **🛍️ Takeaway #\<Order_ID\>**
+When `table_id` is null (walk-in takeaway), **do not** show a table name, "Deleted Table", or "Unknown".
 
-When `table_id` is null and `order_type=takeaway`.
+| Surface | Label rule |
+|---------|------------|
+| Kitchen / waiter active list | **🛍️ Takeaway #\<Order_ID\>** |
+| Cashier active takeaway list | Same as above, or **🛍️ \<customer_name\>** when `customer_name` is set |
+| Cashier checkout header | `Checkout - {label}` where `{label}` follows the cashier rule below |
+
+**Cashier label (`static/counter.js`):**
+- If order has a linked table → table display name (strip leading `Table ` prefix).
+- Else if `customer_name` → **🛍️ {customer_name}**
+- Else → **Takeaway #{order_id}**
+
+## FR-W3b: Cashier "Served by"
+Cashier checkout modal and receipt print must show **Served by: {waiter_name}** where `waiter_name` comes from `Order.created_by_id` (resolved server-side). Fallback display: **Unknown** when unset. Latest-batch staff remains available as `served_by_name` on full order payloads for add-on scenarios.
 
 ## FR-W4: Waiter UI
 - Prominent **`[ + Walk-in Takeaway ]`** control near the table grid.

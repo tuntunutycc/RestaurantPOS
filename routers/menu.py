@@ -12,11 +12,12 @@ from sqlalchemy.orm import Session
 from auth import get_current_user, require_roles
 from database import get_db
 from models import Category, MenuItem, Order, OrderItem, User
-from rbac import ADMIN_PANEL_ROLES
+from rbac import ADMIN_PANEL_ROLES, MENU_AVAILABILITY_ROLES
 from schemas import (
     CategoryCreate,
     CategoryResponse,
     CategoryUpdate,
+    MenuItemAvailabilityUpdate,
     MenuItemCreate,
     MenuItemResponse,
     MenuItemUpdate,
@@ -188,6 +189,8 @@ async def create_menu_item(
         name=item.name,
         price=item.price,
         discount_price=item.discount_price,
+        discount_type=item.discount_type,
+        discount_value=item.discount_value,
         takeaway_price=item.takeaway_price,
         tax_type=item.tax_type,
         tax_value=item.tax_value,
@@ -352,7 +355,7 @@ async def toggle_menu_item_availability(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
-    """Toggle a menu item's availability. Admin only."""
+    """Toggle a menu item's availability. Admin only (legacy; prefer PATCH …/availability)."""
     db_item = (
         db.query(MenuItem)
         .filter(MenuItem.id == item_id, MenuItem.is_deleted.is_(False))
@@ -362,6 +365,37 @@ async def toggle_menu_item_availability(
         raise HTTPException(status_code=404, detail="Menu item not found")
 
     db_item.is_available = not bool(getattr(db_item, "is_available", True))
+    db.commit()
+    db.refresh(db_item)
+
+    item_response = MenuItemResponse.model_validate(db_item)
+    manager = getattr(request.app.state, "ws_manager", None)
+    if manager:
+        await manager.broadcast(
+            "menu_item_availability_toggled",
+            item_response.model_dump(mode="json"),
+        )
+    return item_response
+
+
+@router.patch("/menu-items/{item_id}/availability", response_model=MenuItemResponse)
+async def set_menu_item_availability(
+    request: Request,
+    item_id: int,
+    body: MenuItemAvailabilityUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(MENU_AVAILABILITY_ROLES)),
+):
+    """Set menu item availability (sold out / in stock). Admin and cashier."""
+    db_item = (
+        db.query(MenuItem)
+        .filter(MenuItem.id == item_id, MenuItem.is_deleted.is_(False))
+        .first()
+    )
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+
+    db_item.is_available = body.is_available
     db.commit()
     db.refresh(db_item)
 

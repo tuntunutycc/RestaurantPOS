@@ -66,6 +66,7 @@ def test_walk_in_takeaway_submit_null_table_assigns_created_by(client, db_sessio
     assert order is not None
     assert order.table_id is None
     assert order.order_type == "takeaway"
+    assert order.created_by_id == waiter.id
 
     line = db_session.query(OrderItem).filter(OrderItem.order_id == order_id).first()
     assert line is not None
@@ -163,8 +164,9 @@ def test_promoted_report_includes_null_table_walk_in_order(client, db_session, a
     assert float(row["total_sales"]) >= 2400.0
 
 
-def test_fetch_active_takeaway_order_with_null_table(client, db_session, auth_headers):
+def test_fetch_active_takeaway_order_with_null_table(client, db_session, auth_headers, seed_users):
     menu_item = _seed_menu_item(db_session)
+    waiter = seed_users["waiter"]
 
     submit = client.post(
         "/api/orders/submit",
@@ -185,17 +187,24 @@ def test_fetch_active_takeaway_order_with_null_table(client, db_session, auth_he
     assert submit.status_code == 200, submit.text
     order_id = submit.json()["id"]
 
-    active = client.get("/api/orders/active-takeaways", headers=auth_headers("waiter"))
+    active = client.get("/api/orders/active-takeaways", headers=auth_headers("cashier"))
     assert active.status_code == 200, active.text
     match = next((o for o in active.json() if o["id"] == order_id), None)
     assert match is not None
+    assert match["table_id"] is None
+    assert match["order_type"] == "takeaway"
+    assert match["customer_name"] == "Ko Zaw"
+    assert match["waiter_name"] == waiter.username
+    assert match["served_by_name"] == waiter.username
 
-    details = client.get(f"/api/orders/{order_id}/details", headers=auth_headers("waiter"))
+    details = client.get(f"/api/orders/{order_id}/details", headers=auth_headers("cashier"))
     assert details.status_code == 200, details.text
     body = details.json()
     assert body["table_id"] is None
     assert body["order_type"] == "takeaway"
     assert body["customer_name"] == "Ko Zaw"
+    assert body["waiter_name"] == waiter.username
+    assert body["served_by_name"] == waiter.username
     assert len(body["items"]) == 1
 
 

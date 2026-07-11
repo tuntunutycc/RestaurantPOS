@@ -360,6 +360,12 @@ class MenuItemUpdate(BaseModel):
     modifiers_config: List[ModifierGroup] | None = None
 
 
+class MenuItemAvailabilityUpdate(BaseModel):
+    """Set menu item sold-out / in-stock flag. Admin and cashier only."""
+
+    is_available: bool
+
+
 class OrderItemCreate(BaseModel):
     """Schema for a single item when creating an order."""
 
@@ -493,6 +499,8 @@ class OrderDetailsResponse(BaseModel):
     discount_type: str | None = None
     discount_value: float | None = 0.0
     created_at: datetime
+    waiter_name: str | None = None
+    served_by_name: str | None = None
     items: List[OrderItemDetailsResponse]
     breakdown_subtotal: float = 0.0
     breakdown_discount_total: float = 0.0
@@ -514,7 +522,9 @@ class OrderResponseDetail(BaseModel):
     total_amount: float
     created_at: datetime
     items: List[OrderItemDetail]
-    # For Cashier receipt: who served the latest (most recent) batch in this dining session.
+    # Order-taking staff who opened the order.
+    waiter_name: str | None = None
+    # Latest batch submitter (may differ when another staff adds items).
     served_by_name: str | None = None
     # Payment information for cashier
     payment_method: str | None = None
@@ -532,7 +542,6 @@ class OrderResponseDetail(BaseModel):
             order = data
             deleted_item_label = "[Deleted Item]"
             deleted_user_label = "[Deleted User]"
-            # Served by = waiter who created the latest batch (highest batch_number).
             latest_oi = None
             try:
                 latest_oi = max(order.order_items, key=lambda x: getattr(x, "batch_number", 1))
@@ -555,6 +564,13 @@ class OrderResponseDetail(BaseModel):
                 if latest_oi is not None
                 else None
             )
+            order_creator = getattr(order, "created_by", None)
+            if order_creator is not None and not bool(getattr(order_creator, "is_deleted", False)):
+                waiter_name = getattr(order_creator, "username", None)
+            elif getattr(order, "created_by_id", None) is not None:
+                waiter_name = deleted_user_label
+            else:
+                waiter_name = None
             items = [
                 OrderItemDetail(
                     menu_item_name=(
@@ -599,6 +615,7 @@ class OrderResponseDetail(BaseModel):
                 total_amount=float(order.total_amount),
                 created_at=order.created_at,
                 items=items,
+                waiter_name=waiter_name,
                 served_by_name=served_by_name,
                 payment_method=getattr(order, "payment_method", None),
                 amount_tendered=getattr(order, "amount_tendered", None),
@@ -708,7 +725,11 @@ class ActiveTakeawayOrderResponse(BaseModel):
     """Schema for active takeaway orders list."""
 
     id: int
+    table_id: int | None = None
+    order_type: str = "takeaway"
     customer_name: str | None = None
+    waiter_name: str | None = None
+    served_by_name: str | None = None
     total_amount: float
     created_at: datetime
     items: List[OrderItemDetailsResponse]

@@ -97,7 +97,11 @@ This feature enables admin-controlled table edit/delete operations with strict d
 - Behavior must be deterministic across repeated requests.
 - Existing table-related endpoints must remain backward compatible for current UI flows.
 
-## 8. Acceptance Criteria
+## 8. Table floor grid UX (see `specs/feature-table-all-view/`)
+- Waiter, Cashier, and Table Dashboard floor grids use an **ALL** zone tab (default) and compact display names (strip leading `"Table "` in UI only).
+- Admin kanban (zone columns) is unchanged for CRUD.
+
+## 9. Acceptance Criteria
 - AC-1: Admin can rename and reassign a table via UI and API.
 - AC-2: Admin can delete table only when no non-finalized linked orders exist.
 - AC-3: Delete is blocked with `400` and clear reason when active/non-finalized orders exist.

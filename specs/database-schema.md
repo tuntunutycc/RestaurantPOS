@@ -47,7 +47,7 @@ PrinterRouteEndpoint (route_key PK)
 | `tax_value` | Float | `0.0` | |
 | `description` | String(1024) nullable | | |
 | `image_url` | String(512) nullable | | |
-| `is_available` | Boolean | true | |
+| `is_available` | Boolean | true | Indexed; soft delete sets `false` |
 | `is_promoted` | Boolean | false | Waiter incentive reporting |
 | `is_deleted` | Boolean | false | Soft delete |
 | `deleted_at` | DateTime nullable | | |
@@ -95,6 +95,9 @@ PrinterRouteEndpoint (route_key PK)
 | `discount_type` | String(32) nullable | | Order-level checkout discount: `percentage` \| `amount` |
 | `discount_value` | Float nullable | 0.0 | |
 | `checked_out_by_id` | FK → users nullable | | Cashier attribution |
+| `created_by_id` | FK → users nullable | | **Order-taking staff** (waiter/cashier who opened the order). Set on first `POST /api/orders/submit` or `POST /api/orders/`. Immutable after create. API exposes as `waiter_name`. |
+
+**Attribution split:** `Order.created_by_id` = who **opened** the order; `OrderItem.created_by_id` = who submitted each batch; `Order.checked_out_by_id` = cashier at checkout.
 
 ---
 

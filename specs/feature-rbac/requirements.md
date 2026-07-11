@@ -105,8 +105,13 @@ ADMIN →  creates CASHIER, WAITER (and ACCOUNT for finance)
 - **Must not** access Staff Performance (`by-cashier`, `by-order-staff`) or view other staff breakdowns.
 - **No monthly self-view** — cashier is excluded from `GET /api/reports/monthly-sales` and counter UI must not show a monthly sales widget.
 
+**Menu availability (resolved — see `specs/feature-menu-rbac/`)**
+- Cashier may open Counter → **Menu Management** in **availability-only** mode.
+- Cashier may `PATCH /api/menu-items/{id}/availability` with `{ "is_available": boolean }` only.
+- Cashier **must not** create, edit (price/details), delete menu items, or mutate categories/printers/instruction tags.
+
 **Restrictions**
-- No admin panel mutations (menu, tables, staff).
+- No other admin panel mutations (tables, staff, categories, full menu CRUD).
 - No checkout when acting only as order-taker is not a restriction — cashier retains checkout rights on counter screen.
 
 ### 3.5 Waiter

@@ -17,6 +17,53 @@ def _seed_zone_and_table(db_session):
     return zone, table
 
 
+def test_admin_can_create_zone(client, auth_headers, db_session):
+    suffix = uuid.uuid4().hex[:8]
+    zone_name = f"TM-NewZone-{suffix}"
+
+    res = client.post(
+        "/api/zones",
+        headers=auth_headers("admin"),
+        json={"name": zone_name},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["name"] == zone_name
+    assert body["id"] is not None
+
+    grid = client.get("/api/tables/grid", headers=auth_headers("admin"))
+    assert grid.status_code == 200, grid.text
+    names = [z["name"] for z in grid.json()]
+    assert zone_name in names
+
+
+def test_non_admin_cannot_create_zone(client, auth_headers):
+    res = client.post(
+        "/api/zones",
+        headers=auth_headers("cashier"),
+        json={"name": "Cashier-Zone"},
+    )
+    assert res.status_code == 403, res.text
+
+
+def test_admin_can_create_table(client, db_session, auth_headers):
+    zone = Zone(name=f"TM-CreateTable-{uuid.uuid4().hex[:8]}")
+    db_session.add(zone)
+    db_session.commit()
+    db_session.refresh(zone)
+
+    res = client.post(
+        "/api/tables",
+        headers=auth_headers("admin"),
+        json={"name": f"T-{uuid.uuid4().hex[:6]}", "zone_id": zone.id, "status": "available"},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["zone_id"] == zone.id
+    assert body["status"] == "available"
+    assert body["name"]
+
+
 def test_admin_can_delete_empty_table(client, db_session, auth_headers):
     _, table = _seed_zone_and_table(db_session)
 

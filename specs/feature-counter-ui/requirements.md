@@ -25,8 +25,8 @@ Secondary tabs (Staff Management, Admin Accounts, Audit Logs, Table Management) 
 
 ## Out of scope
 - Dashboard **sub-tabs** (Overview, History, Staff) — separate `applyDashboardTabState` contract.
-- Waiter screen category tabs — `waiter.html` / `waiter.js`.
 
 ## Related
+- `specs/feature-menu-category-navigation/` — category pills on Menu Management menu list and waiter grid
 - `specs/feature-counter-ui/implementation.md`
 - `specs/feature-category-crud/` — Menu Management panel content

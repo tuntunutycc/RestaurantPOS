@@ -44,7 +44,8 @@ def list_zones(
 
 
 @router.post("/zones", response_model=ZoneResponse)
-def create_zone(
+async def create_zone(
+    request: Request,
     body: ZoneCreate,
     db: Session = Depends(get_db),
     _admin: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
@@ -58,6 +59,7 @@ def create_zone(
     db.add(zone)
     db.commit()
     db.refresh(zone)
+    await _broadcast_table_grid_updated(request)
     return zone
 
 

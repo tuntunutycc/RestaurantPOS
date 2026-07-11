@@ -80,9 +80,8 @@ def list_users(
     db: Session = Depends(get_db),
     current: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
-    q = db.query(User)
-    if current.role == ROLE_ADMIN:
-        q = q.filter(User.role.in_(tuple(ADMIN_MANAGEABLE_ROLES)))
+    """List floor staff (cashier, waiter, account), including soft-deleted rows."""
+    q = db.query(User).filter(User.role.in_(tuple(ADMIN_MANAGEABLE_ROLES)))
     q = q.order_by(User.is_deleted.asc(), User.id.asc())
     return q.all()
 

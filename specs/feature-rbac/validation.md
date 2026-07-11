@@ -168,6 +168,23 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 
 ---
 
+## Menu management RBAC (`specs/feature-menu-rbac/`)
+
+### Automated
+- [x] Cashier `POST /api/menu-items/` → **403** — `test_cashier_cannot_create_menu_item`
+- [x] Cashier `PATCH /api/menu-items/{id}/availability` → **200** — `test_cashier_can_patch_menu_availability`
+- [x] Cashier `PUT /api/menu-items/{id}` (price) → **403** — `test_cashier_cannot_full_update_menu_item`
+- [x] Admin `PATCH …/availability` → **200** — `test_admin_can_patch_menu_availability`
+- [x] Waiter `PATCH …/availability` → **403** — `test_waiter_cannot_patch_menu_availability`
+- [x] Account menu/table mutations → **403** — `test_account_forbidden_on_menu_item_and_table_mutations` in `test_rbac_security_gaps.py`
+
+### Manual
+- [ ] Cashier Counter → Menu Management: availability toggles only (no Add/Edit/Delete)
+- [ ] Admin sees full menu CRUD on Menu Management tab
+- [ ] Waiter menu greys out sold-out item (WebSocket or refresh)
+
+---
+
 ## Definition of Done
 
 | Criterion | Required |
@@ -180,4 +197,4 @@ PYTHONPATH=. pytest tests/test_rbac_hierarchy.py -v
 | `CHANGELOG.md` entry added | yes |
 | Open decisions in `requirements.md` §12 resolved or explicitly accepted | yes |
 
-**Current evidence (2026-07-05):** **121 passed** — RBAC Phases 1–4b complete; Staff Performance root/admin only; role creation hierarchy in `tests/test_rbac_hierarchy.py` + `tests/test_rbac_security_gaps.py`.
+**Current evidence (2026-07-11):** **171 passed** — includes menu RBAC (`tests/test_menu_rbac_availability.py`); RBAC Phases 1–4b; Staff Performance root/admin only; role creation hierarchy in `tests/test_rbac_hierarchy.py` + `tests/test_rbac_security_gaps.py`.

@@ -37,12 +37,20 @@ function t(key, fallback) {
 }
 
 function tableLabel(table) {
-  return table?.name || table?.name_or_number || `#${table?.id ?? ''}`;
+  if (window.tableDisplay?.displayTableName) {
+    return window.tableDisplay.displayTableName(table);
+  }
+  const raw = table?.name || table?.name_or_number || `#${table?.id ?? ''}`;
+  return String(raw).replace(/^table\s+/i, '').trim() || raw;
 }
 
 function tableNameById(tableId, fallback) {
   const table = zones.flatMap((z) => z.tables || []).find((t) => t.id === tableId);
-  return table ? tableLabel(table) : fallback;
+  if (table) return tableLabel(table);
+  if (window.tableDisplay?.displayTableName) {
+    return window.tableDisplay.displayTableName(fallback, tableId);
+  }
+  return fallback ? String(fallback).replace(/^table\s+/i, '').trim() : `#${tableId}`;
 }
 
 function escapeHtml(text) {
@@ -554,11 +562,12 @@ function setActiveZone(zoneId) {
 function renderZoneTabs() {
   const container = document.getElementById('zone-tabs');
   if (!container) return;
+  const allButton = `<button type="button" data-zone-id="" class="zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${currentView === 'tables' && activeZoneId == null ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${escapeHtml(t('all', 'All'))}</button>`;
   const zoneButtons = zones.map((z) => (
     `<button type="button" data-zone-id="${z.id}" class="zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${currentView === 'tables' && activeZoneId === z.id ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">${escapeHtml(z.name)}</button>`
   ));
   const takeawayButton = `<button type="button" data-zone-view="takeaway" class="zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${currentView === 'takeaway' ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}">🛍️ ${escapeHtml(t('takeaway', 'Takeaway'))}</button>`;
-  container.innerHTML = [...zoneButtons, takeawayButton].join('');
+  container.innerHTML = [allButton, ...zoneButtons, takeawayButton].join('');
   container.querySelectorAll('.zone-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
       const view = btn.getAttribute('data-zone-view');
@@ -568,7 +577,8 @@ function renderZoneTabs() {
         updateOrderSourceView();
         return;
       }
-      setActiveZone(Number(btn.dataset.zoneId));
+      const zoneAttr = btn.getAttribute('data-zone-id');
+      setActiveZone(zoneAttr === '' || zoneAttr == null ? null : Number(zoneAttr));
     });
   });
 }
@@ -584,6 +594,9 @@ function updateOrderSourceView() {
 }
 
 function getActiveZoneTables() {
+  if (activeZoneId == null) {
+    return zones.flatMap((z) => z.tables || []);
+  }
   const zone = zones.find((z) => z.id === activeZoneId);
   return zone?.tables || [];
 }
@@ -638,7 +651,7 @@ function renderTableCards() {
     const ringClass = isSelected ? 'ring-2 ring-blue-700 ring-offset-2' : '';
     return `
       <button type="button" data-table-id="${table.id}" class="table-card rounded-md p-2 text-left transition ${statusClass} ${ringClass}">
-        <div class="font-semibold">Table ${escapeHtml(tableLabel(table))}</div>
+        <div class="font-semibold">${escapeHtml(tableLabel(table))}</div>
         <div class="text-xs uppercase tracking-wide">${escapeHtml(table.status)}</div>
       </button>
     `;
@@ -664,7 +677,7 @@ function renderTableCards() {
           type: 'dine_in',
           table_id: tableId,
           customer_name: null,
-          title: `Table ${tableName}`,
+          title: tableName,
         });
         renderSelectedTableLabel();
         renderCart();
@@ -694,7 +707,7 @@ async function openOrderDetails(options) {
   if (subtitle) {
     subtitle.textContent = normalizedType === 'takeaway'
       ? `${t('takeaway', 'Takeaway')} ${t('order', 'Order')} - ${t('customer', 'Customer')}: ${customer}`
-      : `Table ${tableName}`;
+      : tableName;
   }
   if (content) content.innerHTML = `<p class="text-slate-500">${escapeHtml(t('loading_order_details', 'Loading order details...'))}</p>`;
 
@@ -704,7 +717,7 @@ async function openOrderDetails(options) {
     type: normalizedType === 'takeaway' ? 'takeaway' : 'dine_in',
     table_id: normalizedType === 'takeaway' ? null : (tableId ?? initialOrderData?.table_id ?? null),
     customer_name: normalizedType === 'takeaway' ? customer : null,
-    title: normalizedType === 'takeaway' ? `Takeaway: ${customer}` : `Table ${tableName}`,
+    title: normalizedType === 'takeaway' ? `Takeaway: ${customer}` : tableName,
     source_order_id: Number(orderId),
   };
   updateOrderDetailsAddMoreButton();
@@ -721,7 +734,7 @@ async function openOrderDetails(options) {
     const detailsTableId = details.table_id ?? tableId ?? null;
     const detailsTableLabel = detailsType === 'takeaway'
       ? `Takeaway: ${detailCustomer}`
-      : `Table ${tableNameById(detailsTableId, tableName)}`;
+      : tableNameById(detailsTableId, tableName);
     tableDetailsOrderContext = {
       type: detailsType === 'takeaway' ? 'takeaway' : 'dine_in',
       table_id: detailsType === 'takeaway' ? null : detailsTableId,
@@ -1734,7 +1747,7 @@ async function refreshTableStatus() {
     selectedTableId = null;
     if (activeOrderContext?.type === 'dine_in') setActiveOrderContext(null);
   } else {
-    if (!activeZoneId || !zones.some((z) => z.id === activeZoneId)) activeZoneId = zones[0].id;
+    if (activeZoneId != null && !zones.some((z) => z.id === activeZoneId)) activeZoneId = null;
     const allTableIds = zones.flatMap((z) => z.tables || []).map((t) => t.id);
     if (selectedTableId && !allTableIds.includes(selectedTableId)) selectedTableId = null;
     if (
@@ -1759,7 +1772,7 @@ async function refreshTableStatus() {
       type: 'dine_in',
       table_id: paramTableId,
       customer_name: null,
-      title: `Table ${paramTableName}`,
+      title: paramTableName,
     });
     const selectedZone = zones.find((z) => (z.tables || []).some((t) => t.id === paramTableId));
     if (selectedZone) activeZoneId = selectedZone.id;

@@ -72,7 +72,7 @@
       <button type="button" id="tab-audit-logs" data-target-panel="panel-audit-logs" class="tab-btn px-4 py-2 font-medium text-slate-600 whitespace-nowrap hidden">
         Audit Logs
       </button>
-      <button type="button" id="tab-tables" data-target-panel="panel-tables" class="tab-btn px-4 py-2 font-medium text-slate-600 whitespace-nowrap">
+      <button type="button" id="tab-tables" data-target-panel="panel-tables" class="tab-btn px-4 py-2 font-medium text-slate-600 whitespace-nowrap hidden">
         <span data-i18n="table_management">Table Management</span>
       </button>
       </div>
@@ -301,7 +301,7 @@
           <div class="overflow-x-auto mb-3">
             <div id="cashier-zone-tabs" class="flex gap-1 min-w-max"></div>
           </div>
-          <div id="cashier-tables-grid" class="grid grid-cols-3 md:grid-cols-4 gap-2">
+          <div id="cashier-tables-grid" class="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2">
             <p class="col-span-full text-slate-500" data-i18n="loading_table_grid">Loading table grid...</p>
           </div>
           <div class="mt-5">
@@ -387,7 +387,7 @@
 
     <!-- Tab 2: Menu Management -->
     <div id="panel-menu" class="tab-panel hidden">
-      <section class="bg-white rounded-lg shadow p-6 mb-8">
+      <section data-menu-admin-only class="bg-white rounded-lg shadow p-6 mb-8">
         <h2 class="text-lg font-semibold text-slate-700 mb-4">Kitchen Printer Settings</h2>
         <form id="form-kitchen-printers" class="space-y-4">
           <div>
@@ -435,7 +435,7 @@
           <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">Save Printer Settings</button>
         </form>
       </section>
-      <section class="bg-white rounded-lg shadow p-6 mb-8">
+      <section data-menu-admin-only class="bg-white rounded-lg shadow p-6 mb-8">
         <h2 class="text-lg font-semibold text-slate-700 mb-4">Quick Instruction Tags</h2>
         <p class="text-sm text-slate-500 mb-4">Predefined chips shown to waiters in the special-instructions modal.</p>
         <form id="form-predefined-instruction" class="flex flex-wrap gap-2 mb-4">
@@ -452,7 +452,7 @@
           <li class="text-slate-500">Loading tags…</li>
         </ul>
       </section>
-      <div class="grid md:grid-cols-2 gap-8 mb-10">
+      <div data-menu-admin-only class="grid md:grid-cols-2 gap-8 mb-10">
         <section class="bg-white rounded-lg shadow p-6">
           <h2 class="text-lg font-semibold text-slate-700 mb-4">Add Category</h2>
           <form id="form-category" class="space-y-3">
@@ -523,14 +523,20 @@
         </section>
       </div>
       <div class="grid md:grid-cols-2 gap-8">
-        <section class="bg-white rounded-lg shadow p-6">
+        <section data-menu-admin-only class="bg-white rounded-lg shadow p-6">
           <h2 class="text-lg font-semibold text-slate-700 mb-4">Categories</h2>
           <ul id="categories-list" class="space-y-2 text-slate-700">
             <li class="text-slate-500">Loading…</li>
           </ul>
         </section>
-        <section class="bg-white rounded-lg shadow p-6">
-          <h2 class="text-lg font-semibold text-slate-700 mb-4">Menu Items</h2>
+        <section id="menu-items-section" class="bg-white rounded-lg shadow p-6">
+          <h2 id="menu-items-section-title" class="text-lg font-semibold text-slate-700 mb-4">Menu Items</h2>
+          <p id="menu-items-cashier-hint" class="hidden text-sm text-slate-500 mb-4">Toggle availability when items are sold out. Price and menu edits require admin access.</p>
+          <div class="overflow-x-auto mb-3 -mx-1 px-1">
+            <div id="menu-category-tabs" class="flex gap-1 min-w-max">
+              <!-- ALL + category pills rendered by counter.js -->
+            </div>
+          </div>
           <ul id="menu-items-list" class="space-y-2 text-slate-700">
             <li class="text-slate-500">Loading…</li>
           </ul>
@@ -840,6 +846,7 @@
   <script src="/toast.js"></script>
   <script src="/i18n.js"></script>
   <script src="/currency.js"></script>
+  <script src="/table-display.js"></script>
   <script src="/counter.js"></script>
 </body>
 </html>

@@ -148,3 +148,43 @@ def test_takeaway_line_falls_back_to_regular_price_without_takeaway_price(client
     assert line.is_takeaway is True
     assert float(line.unit_price_at_sale) == 800.0
     assert float(line.subtotal) == 800.0
+
+
+def test_menu_item_create_payload_matches_counter_form(client, auth_headers, db_session):
+    """Counter admin form sends tax/discount defaults + legacy discount_price."""
+    suffix = uuid.uuid4().hex[:8]
+    category = Category(name=f"Cat-{suffix}")
+    db_session.add(category)
+    db_session.commit()
+    db_session.refresh(category)
+
+    payload = {
+        "name": f"TaxItem-{suffix}",
+        "price": 3000.0,
+        "discount_price": 2500.0,
+        "discount_type": "none",
+        "discount_value": 0.0,
+        "takeaway_price": None,
+        "tax_type": "percentage",
+        "tax_value": 5.0,
+        "category_id": category.id,
+        "description": "Test item",
+        "image_url": None,
+        "is_available": True,
+        "is_promoted": False,
+        "modifiers_config": [],
+    }
+    res = client.post("/api/menu-items/", headers=auth_headers("admin"), json=payload)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["tax_type"] == "percentage"
+    assert body["tax_value"] == 5.0
+    assert body["discount_price"] == 2500.0
+    assert body["discount_type"] == "none"
+    assert body["discount_value"] == 0.0
+
+    persisted = db_session.query(MenuItem).filter(MenuItem.id == body["id"]).first()
+    assert persisted is not None
+    assert persisted.tax_type == "percentage"
+    assert float(persisted.tax_value) == 5.0
+    assert persisted.discount_type == "none"

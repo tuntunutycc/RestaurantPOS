@@ -182,6 +182,28 @@ def _display_waiter_name(order_item: OrderItem) -> str | None:
     return None
 
 
+def _resolve_order_waiter_name(order: Order) -> str | None:
+    """Staff who opened the order (Order.created_by_id)."""
+    created_by = getattr(order, "created_by", None)
+    if created_by is not None and not bool(getattr(created_by, "is_deleted", False)):
+        return getattr(created_by, "username", None)
+    if getattr(order, "created_by_id", None) is not None:
+        return DELETED_USER_LABEL
+    return None
+
+
+def _resolve_order_served_by_name(order: Order) -> str | None:
+    """Staff who submitted the latest batch (most recent add-on)."""
+    latest_oi = None
+    try:
+        latest_oi = max(order.order_items, key=lambda x: getattr(x, "batch_number", 1))
+    except Exception:
+        latest_oi = None
+    if latest_oi is None:
+        return None
+    return _display_waiter_name(latest_oi)
+
+
 def _resolve_unit_base_price(menu_item: MenuItem, *, is_takeaway: bool = False) -> float:
     """Effective base before discount/tax (takeaway_price or catalog price)."""
     if is_takeaway:
@@ -509,6 +531,7 @@ async def create_order(
         customer_name=(order_data.customer_name or "").strip() or None,
         status="open",
         total_amount=_round_money(total_amount),
+        created_by_id=current_user.id,
     )
     db.add(db_order)
     db.flush()
@@ -542,6 +565,7 @@ async def create_order(
     full_order = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -570,6 +594,7 @@ def list_orders(
     q = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -592,6 +617,7 @@ def list_active_takeaways(
     orders = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -611,7 +637,11 @@ def list_active_takeaways(
         payload.append(
             ActiveTakeawayOrderResponse(
                 id=order.id,
+                table_id=getattr(order, "table_id", None),
+                order_type=getattr(order, "order_type", "takeaway"),
                 customer_name=getattr(order, "customer_name", None),
+                waiter_name=_resolve_order_waiter_name(order),
+                served_by_name=_resolve_order_served_by_name(order),
                 total_amount=float(order.total_amount),
                 created_at=order.created_at,
                 items=items,
@@ -650,6 +680,7 @@ def list_orders_by_table(
     q = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -680,6 +711,7 @@ def get_active_order_by_table(
     q = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -780,6 +812,7 @@ def get_order_details(
     order = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -803,6 +836,8 @@ def get_order_details(
         discount_type=getattr(order, "discount_type", None),
         discount_value=float(getattr(order, "discount_value", 0.0) or 0.0),
         created_at=order.created_at,
+        waiter_name=_resolve_order_waiter_name(order),
+        served_by_name=_resolve_order_served_by_name(order),
         items=items,
         **breakdown,
     )
@@ -820,6 +855,7 @@ async def update_order_item_status(
     order = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -856,6 +892,7 @@ async def update_order_item_status(
     updated_order = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -980,6 +1017,7 @@ async def submit_order(
             customer_name=(body.customer_name or "").strip() or None,
             status="open",
             total_amount=0.0,
+            created_by_id=current_user.id,
         )
         db.add(order)
         db.flush()
@@ -1152,6 +1190,7 @@ async def checkout_order(
     order = (
         db.query(Order)
         .options(
+            joinedload(Order.created_by),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )

@@ -1,5 +1,74 @@
 # Changelog
 
+## 2026-07-11 — Cashier takeaway display & order waiter attribution
+
+### Summary
+Walk-in takeaway orders no longer show "Deleted Table" / "Unknown" in the Cashier UI. Orders track who opened them via `Order.created_by_id`; API exposes `waiter_name` and Cashier checkout shows **Served by: [Name]**.
+
+### Spec
+- Updated `specs/database-schema.md`, `specs/feature-walk-in-takeaway/requirements.md`, `specs/api-reference.md`
+
+### Backend
+- `Order.created_by_id` FK + startup migration/backfill from earliest order item
+- `waiter_name` / `served_by_name` on `OrderResponseDetail`, `OrderDetailsResponse`, `ActiveTakeawayOrderResponse`
+- Set `created_by_id` on new orders in `POST /api/orders/submit` and `POST /api/orders/`
+
+### Frontend
+- `static/counter.js` — `cashierOrderDisplayLabel()`, `orderServedByLabel()` for takeaway list + checkout modal
+
+### Tests
+- Extended `tests/test_walk_in_takeaway.py` (order + active-takeaways `waiter_name`)
+
+## 2026-07-11 — Table ALL view & compact table names
+
+### Summary
+Waiter, Cashier, and Table Dashboard floor grids default to an **ALL** zone tab showing every table in a dense responsive grid. UI strips leading `"Table "` from dine-in labels (e.g. `Table G1` → `G1`); takeaway labels unchanged.
+
+### Spec
+- `specs/feature-table-all-view/`
+- Updated `specs/feature-table-management/requirements.md`, `specs/api-reference.md`
+
+### Frontend
+- `static/table-display.js` — shared `displayTableName()`
+- `waiter.js`, `counter.js`, `table-dashboard.js` — ALL tab + grid density + formatted labels
+
+### Tests
+- `tests/test_table_all_view.py`
+
+## 2026-07-11 — Menu management RBAC (admin vs cashier availability)
+
+### Summary
+Admins retain full menu CRUD. Cashiers may toggle sold-out/in-stock via `PATCH /api/menu-items/{id}/availability` only. Counter Menu Management tab shows availability-only UI for cashiers.
+
+### Spec
+- `specs/feature-menu-rbac/`
+- Updated `specs/feature-rbac/requirements.md`, `specs/feature-menu-items/requirements.md`, `specs/api-reference.md`
+
+### Backend
+- `MENU_AVAILABILITY_ROLES` in `rbac.py`
+- `MenuItemAvailabilityUpdate` schema; `PATCH /api/menu-items/{item_id}/availability`
+
+### Frontend
+- `counter.html` / `counter.js` — cashier stock toggles; admin-only sections hidden
+
+### Tests
+- `tests/test_menu_rbac_availability.py`
+
+## 2026-07-06 — Menu category navigation pills (Counter + Waiter)
+
+### Summary
+Category ALL + per-category pills for client-side menu filtering. Counter Menu Management list gains tabs; waiter grid behavior documented (already implemented).
+
+### Spec
+- `specs/feature-menu-category-navigation/`
+
+### Frontend
+- `counter.html` / `counter.js` — `#menu-category-tabs`, `filterMenu()`, `hidden` row filter
+- Waiter: existing `#category-tabs` in `waiter.js` (unchanged)
+
+### Tests
+- `tests/test_menu_category_navigation.py`; full suite **166 passed**
+
 ## 2026-07-06 — Predefined instruction quick tags
 
 ### Summary

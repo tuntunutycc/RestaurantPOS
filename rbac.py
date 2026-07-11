@@ -27,6 +27,9 @@ def uses_multi_device_sessions(role: str) -> bool:
 # Admin panel: menu, tables, printers, staff (with restrictions inside handlers)
 ADMIN_PANEL_ROLES = [ROLE_ROOT, ROLE_ADMIN]
 
+# Menu item availability toggle (sold out / in stock) — floor + admin
+MENU_AVAILABILITY_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER]
+
 # POS order read/write (not checkout)
 POS_ORDER_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER, ROLE_WAITER]
 

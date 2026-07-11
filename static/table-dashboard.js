@@ -83,7 +83,24 @@ async function updateOrderItemStatus(orderId, itemId, status) {
   });
 }
 
+function tableDisplayLabel(table) {
+  if (window.tableDisplay?.displayTableName) {
+    return window.tableDisplay.displayTableName(table);
+  }
+  const raw = table?.name || `#${table?.id ?? ''}`;
+  return String(raw).replace(/^table\s+/i, '').trim() || raw;
+}
+
+function getActiveZoneTables() {
+  if (activeZoneId == null) {
+    return zones.flatMap((z) => z.tables || []);
+  }
+  const zone = zones.find((z) => z.id === activeZoneId);
+  return zone?.tables || [];
+}
+
 function getActiveZone() {
+  if (activeZoneId == null) return null;
   return zones.find((z) => z.id === activeZoneId) || null;
 }
 
@@ -101,7 +118,11 @@ function renderZoneTabs() {
     container.innerHTML = '<p class="text-slate-500">No zones found.</p>';
     return;
   }
-  container.innerHTML = zones
+  container.innerHTML = `
+    <button type="button" data-zone-id="" class="zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${
+      activeZoneId == null ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+    }">${escapeHtml(t('all', 'All'))}</button>
+  ` + zones
     .map((zone) => `
       <button type="button" data-zone-id="${zone.id}" class="zone-tab px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap ${
         zone.id === activeZoneId
@@ -114,7 +135,8 @@ function renderZoneTabs() {
     .join('');
   container.querySelectorAll('.zone-tab').forEach((btn) => {
     btn.addEventListener('click', () => {
-      activeZoneId = Number(btn.dataset.zoneId);
+      const zoneAttr = btn.getAttribute('data-zone-id');
+      activeZoneId = zoneAttr === '' || zoneAttr == null ? null : Number(zoneAttr);
       renderZoneTabs();
       renderTablesGrid();
     });
@@ -124,8 +146,7 @@ function renderZoneTabs() {
 function renderTablesGrid() {
   const container = document.getElementById('tables-grid');
   if (!container) return;
-  const zone = getActiveZone();
-  const tables = zone?.tables || [];
+  const tables = getActiveZoneTables();
   if (!tables.length) {
     container.innerHTML = '<p class="col-span-full text-slate-500">No tables in this zone.</p>';
     return;
@@ -133,6 +154,7 @@ function renderTablesGrid() {
 
   container.innerHTML = tables
     .map((table) => {
+      const displayName = tableDisplayLabel(table);
       const occupied = String(table.status) === 'occupied';
       const cardColor = occupied
         ? 'bg-red-100 border-red-500'
@@ -141,12 +163,12 @@ function renderTablesGrid() {
         <button
           type="button"
           data-table-id="${table.id}"
-          data-table-name="${escapeHtml(table.name)}"
+          data-table-name="${escapeHtml(displayName)}"
           data-status="${escapeHtml(table.status)}"
           data-active-order-id="${table.active_order_id ?? ''}"
           class="table-card border-2 rounded-lg p-3 text-left ${cardColor} hover:shadow"
         >
-          <div class="font-semibold text-slate-800">Table ${escapeHtml(table.name)}</div>
+          <div class="font-semibold text-slate-800">${escapeHtml(displayName)}</div>
           <div class="text-xs mt-1 uppercase tracking-wide text-slate-700">${escapeHtml(table.status)}</div>
           ${
             occupied && table.active_order_id
@@ -197,7 +219,7 @@ function closeSidebar() {
 
 async function openOrderSidebar(orderId, tableName) {
   const subtitle = document.getElementById('sidebar-subtitle');
-  if (subtitle) subtitle.textContent = `Table ${tableName} • Order #${orderId}`;
+  if (subtitle) subtitle.textContent = `${tableName} • Order #${orderId}`;
   openSidebar();
   await renderOrderDetails(orderId);
 }
@@ -335,8 +357,8 @@ async function refreshGrid() {
   zones = data || [];
   if (!zones.length) {
     activeZoneId = null;
-  } else if (!activeZoneId || !zones.some((z) => z.id === activeZoneId)) {
-    activeZoneId = zones[0].id;
+  } else if (activeZoneId != null && !zones.some((z) => z.id === activeZoneId)) {
+    activeZoneId = null;
   }
   renderZoneTabs();
   renderTablesGrid();
