@@ -339,6 +339,10 @@ function applyDashboardRoleVisibility(role) {
   if (salesLabel) {
     salesLabel.textContent = isCashier ? 'My Checkout Sales (Today)' : "Today's Sales";
   }
+  const pmTodayHeading = document.getElementById('pm-today-heading');
+  if (pmTodayHeading) {
+    pmTodayHeading.textContent = isCashier ? 'My Checkout Sales (Today)' : "Today's Sales";
+  }
 }
 
 function t(key, fallback) {
@@ -1166,6 +1170,9 @@ async function loadDashboardSummary() {
     console.error(err);
     if (window.toast) window.toast.error('Failed to load dashboard summary');
   }
+
+  await loadPaymentMethodBreakdown();
+
   if (activeDashboardTab === 'overview') {
     const role = getCounterUserRole();
     if (role === 'root' || role === 'admin') {
@@ -1177,6 +1184,69 @@ async function loadDashboardSummary() {
       });
     }
   }
+}
+
+async function loadPaymentMethodBreakdown() {
+  const todayTotalEl = document.getElementById('pm-today-total');
+  const todayCashEl = document.getElementById('pm-today-cash');
+  const todayMobileEl = document.getElementById('pm-today-mobile');
+  const monthTotalEl = document.getElementById('pm-month-total');
+  const monthCashEl = document.getElementById('pm-month-cash');
+  const monthMobileEl = document.getElementById('pm-month-mobile');
+  if (!todayTotalEl || !todayCashEl || !todayMobileEl) return;
+
+  const zero = formatMoney(0);
+  todayTotalEl.textContent = zero;
+  todayCashEl.textContent = zero;
+  todayMobileEl.textContent = zero;
+  if (monthTotalEl) monthTotalEl.textContent = zero;
+  if (monthCashEl) monthCashEl.textContent = zero;
+  if (monthMobileEl) monthMobileEl.textContent = zero;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/analytics/sales-breakdown`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed to load payment breakdown');
+
+    const today = data.today || {};
+    const month = data.month || {};
+    todayTotalEl.textContent = formatMoney(Number(today.total) || 0);
+    todayCashEl.textContent = formatMoney(Number(today.cash) || 0);
+    todayMobileEl.textContent = formatMoney(Number(today.mobile_money) || 0);
+    if (monthTotalEl) monthTotalEl.textContent = formatMoney(Number(month.total) || 0);
+    if (monthCashEl) monthCashEl.textContent = formatMoney(Number(month.cash) || 0);
+    if (monthMobileEl) monthMobileEl.textContent = formatMoney(Number(month.mobile_money) || 0);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function setCheckoutPaymentMethod(method) {
+  const normalized = method === 'mobile_money' ? 'mobile_money' : 'cash';
+  const hidden = document.getElementById('payment-method');
+  if (hidden) hidden.value = normalized;
+  document.querySelectorAll('.payment-method-btn').forEach((btn) => {
+    const isActive = btn.getAttribute('data-payment-method') === normalized;
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    btn.classList.toggle('border-emerald-500', isActive);
+    btn.classList.toggle('bg-emerald-50', isActive);
+    btn.classList.toggle('text-emerald-900', isActive);
+    btn.classList.toggle('border-slate-200', !isActive);
+    btn.classList.toggle('bg-white', !isActive);
+    btn.classList.toggle('text-slate-700', !isActive);
+  });
+}
+
+function initPaymentMethodToggle() {
+  document.querySelectorAll('.payment-method-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setCheckoutPaymentMethod(btn.getAttribute('data-payment-method'));
+    });
+  });
+  setCheckoutPaymentMethod('cash');
 }
 
 function getCheckoutDiscountState() {
@@ -1352,6 +1422,11 @@ function renderCashierTablesGrid() {
       const color = occupied
         ? 'bg-red-100 border-red-500'
         : 'bg-green-100 border-green-500';
+      const statusLabel = window.tableDisplay?.displayTableStatus
+        ? window.tableDisplay.displayTableStatus(table.status)
+        : table.status;
+      const statusTypography = window.tableDisplay?.tableStatusTypographyClass
+        || 'text-[10px] font-normal leading-tight normal-case text-slate-600';
       return `
         <button
           type="button"
@@ -1361,7 +1436,7 @@ function renderCashierTablesGrid() {
           class="cashier-table-card border-2 rounded-md p-2 text-left ${color} hover:shadow"
         >
           <div class="font-medium text-slate-800 text-sm">${escapeHtml(cashierTableName(table))}</div>
-          <div class="text-[11px] uppercase tracking-wide text-slate-700">${escapeHtml(table.status)}</div>
+          <div class="${statusTypography}">${escapeHtml(statusLabel)}</div>
         </button>
       `;
     })
@@ -1522,17 +1597,16 @@ function selectOrder(order) {
   // Reset payment inputs for this order
   const amountInput = document.getElementById('amount-tendered');
   const changeSpan = document.getElementById('change-amount');
-  const methodSelect = document.getElementById('payment-method');
   const discountTypeSelect = document.getElementById('checkout-discount-type');
   const discountValueInput = document.getElementById('checkout-discount-value');
   if (amountInput) amountInput.value = '';
   if (changeSpan) changeSpan.textContent = formatMoney(0);
-  if (methodSelect) methodSelect.value = 'cash';
   if (discountTypeSelect) discountTypeSelect.value = 'none';
   if (discountValueInput) {
     discountValueInput.value = '';
     discountValueInput.disabled = true;
   }
+  setCheckoutPaymentMethod('cash');
   recalculateCheckoutTotals();
 }
 
@@ -1590,9 +1664,10 @@ function renderReceiptForPrint(order) {
 // Dynamic change calculation and payment processing
 const amountInputEl = document.getElementById('amount-tendered');
 const changeSpanEl = document.getElementById('change-amount');
-const paymentMethodEl = document.getElementById('payment-method');
 const discountTypeEl = document.getElementById('checkout-discount-type');
 const discountValueEl = document.getElementById('checkout-discount-value');
+
+initPaymentMethodToggle();
 
 if (amountInputEl) {
   amountInputEl.addEventListener('input', recalculateCheckoutTotals);
@@ -1612,7 +1687,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
   if (selectedOrderId == null) return;
   const btn = document.getElementById('btn-process-payment');
   const amountInput = document.getElementById('amount-tendered');
-  const methodSelect = document.getElementById('payment-method');
+  const paymentMethodInput = document.getElementById('payment-method');
   const tendered = parseFloat((amountInput && amountInput.value) || '0');
   const { type: discountType, value: discountValue } = getCheckoutDiscountState();
   const currentFinalTotal = recalculateCheckoutTotals();
@@ -1626,7 +1701,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     return;
   }
 
-  const method = methodSelect ? methodSelect.value || 'cash' : 'cash';
+  const method = paymentMethodInput ? paymentMethodInput.value || 'cash' : 'cash';
 
   btn.disabled = true;
   btn.textContent = t('processing', 'Processing...');

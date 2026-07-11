@@ -124,7 +124,28 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 |--------|------|
 | POST/PUT | `/api/orders/{order_id}/checkout` |
 
-**Checkout body:** `payment_method`, `amount_tendered`, optional `discount_type` (`percentage`|`amount`), `discount_value`.
+**Checkout body (`OrderCheckoutRequest`):**
+- `payment_method` — **required**; `cash` \| `mobile_money` (aliases like `Cash`, `Mobile Money` normalized server-side)
+- `amount_tendered` — float, must be ≥ final total
+- optional `discount_type` (`percentage`|`amount`), `discount_value`
+
+---
+
+## Analytics
+
+| Method | Path | Response | Role notes |
+|--------|------|----------|------------|
+| GET | `/api/analytics/sales-breakdown` | `SalesBreakdownResponse` | root, admin, account (store-wide); cashier (own checkouts). Waiter → **403** |
+
+**`SalesBreakdownResponse`:**
+```json
+{
+  "today": { "cash": 0, "mobile_money": 0, "total": 0 },
+  "month": { "cash": 0, "mobile_money": 0, "total": 0 }
+}
+```
+
+Paid/completed orders only. `total == cash + mobile_money`.
 
 ---
 

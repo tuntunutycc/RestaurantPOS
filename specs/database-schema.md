@@ -88,7 +88,7 @@ PrinterRouteEndpoint (route_key PK)
 | `status` | String(50) | `pending` | `open`, `dining`, `paid`, `cancelled`, etc. |
 | `total_amount` | Float | 0.0 | Sum of active line subtotals (open); finalized at checkout |
 | `created_at` | DateTime | utcnow | |
-| `payment_method` | String(32) nullable | | Set at checkout |
+| `payment_method` | String(32) nullable | | Set at checkout: `cash` \| `mobile_money` (canonical). Used for dashboard sales breakdown. |
 | `amount_tendered` | Float nullable | | |
 | `change_amount` | Float nullable | | |
 | `tax_amount` | Float nullable | 0.0 | Receipt tax breakdown (sum of line taxes) |

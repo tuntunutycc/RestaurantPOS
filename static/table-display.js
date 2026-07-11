@@ -33,8 +33,28 @@
     return stripTableNamePrefix(text);
   }
 
+  /** Compact status label for floor grid cards (API values unchanged in data attrs). */
+  function displayTableStatus(status) {
+    const key = String(status ?? '').trim().toLowerCase();
+    if (key === 'available') return 'Free';
+    if (key === 'occupied') return 'Occupied';
+    if (!key) return '';
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  }
+
+  /** Typography for status on light card backgrounds (Cashier, Table Dashboard). */
+  const tableStatusTypographyClass =
+    'text-[10px] font-normal leading-tight tracking-normal normal-case text-slate-600';
+
+  /** Typography for status on saturated card backgrounds (Waiter grid). */
+  const tableStatusTypographyClassOnDark =
+    'text-[10px] font-normal leading-tight tracking-normal normal-case text-white/85';
+
   global.tableDisplay = {
     stripTableNamePrefix,
     displayTableName,
+    displayTableStatus,
+    tableStatusTypographyClass,
+    tableStatusTypographyClassOnDark,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

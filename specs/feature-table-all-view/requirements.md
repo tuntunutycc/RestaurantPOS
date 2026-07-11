@@ -49,6 +49,20 @@ Frontend ALL view loads the full table set from existing APIs:
 
 Server must return **all** zones/tables in one response (no page/limit params). Typical restaurant scale (≤100 tables) is acceptable in memory.
 
+## FR-TA5: Table status labels & typography (floor grids)
+On **Waiter**, **Cashier**, and **Table Dashboard** floor grids only:
+
+| DB `status` | Display label |
+|-------------|---------------|
+| `available` | **Free** |
+| `occupied` | **Occupied** |
+
+- **Do not** show raw uppercase enum strings (e.g. `AVAILABLE`) on grid cards.
+- Status line uses compact typography: `text-[10px]`, `font-normal`, `normal-case` (no `uppercase` / wide tracking).
+- Table **name** remains the primary visual element (`font-semibold` / `font-medium`, larger size).
+- Shared helper: `window.tableDisplay.displayTableStatus(status)` in `static/table-display.js`.
+- `data-*` attributes for click handlers keep canonical API values (`available`, `occupied`); only visible label changes.
+
 ## Related
 - `specs/feature-table-management/` — admin CRUD & delete safety
 - `specs/feature-menu-category-navigation/` — ALL pill pattern reference

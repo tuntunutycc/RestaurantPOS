@@ -17,6 +17,7 @@ from routers import menu as menu_router
 from routers import orders as orders_router
 from routers import predefined_instructions as predefined_instructions_router
 from routers import reports as reports_router
+from routers import analytics as analytics_router
 from routers import root_users as root_users_router
 from routers import setup as setup_router
 from routers import tables as tables_router
@@ -72,6 +73,7 @@ def app(db_session: Session) -> FastAPI:
     app.include_router(menu_router.router)
     app.include_router(orders_router.router)
     app.include_router(reports_router.router)
+    app.include_router(analytics_router.router)
     app.include_router(tables_router.router)
     app.include_router(users_router.router)
     app.include_router(kitchen_printers_router.router)

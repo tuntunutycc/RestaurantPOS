@@ -649,10 +649,15 @@ function renderTableCards() {
     const isSelected = table.id === selectedTableId;
     const statusClass = table.status === 'occupied' ? 'bg-red-500 text-white' : 'bg-green-500 text-white';
     const ringClass = isSelected ? 'ring-2 ring-blue-700 ring-offset-2' : '';
+    const statusLabel = window.tableDisplay?.displayTableStatus
+      ? window.tableDisplay.displayTableStatus(table.status)
+      : table.status;
+    const statusTypography = window.tableDisplay?.tableStatusTypographyClassOnDark
+      || 'text-[10px] font-normal leading-tight normal-case text-white/85';
     return `
       <button type="button" data-table-id="${table.id}" class="table-card rounded-md p-2 text-left transition ${statusClass} ${ringClass}">
         <div class="font-semibold">${escapeHtml(tableLabel(table))}</div>
-        <div class="text-xs uppercase tracking-wide">${escapeHtml(table.status)}</div>
+        <div class="${statusTypography}">${escapeHtml(statusLabel)}</div>
       </button>
     `;
   }).join('');

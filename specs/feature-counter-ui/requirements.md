@@ -25,6 +25,7 @@ Secondary tabs (Staff Management, Admin Accounts, Audit Logs, Table Management) 
 
 ## Out of scope
 - Dashboard **sub-tabs** (Overview, History, Staff) — separate `applyDashboardTabState` contract.
+- Payment method breakdown — see `specs/feature-payment-method-analytics/`
 
 ## Related
 - `specs/feature-menu-category-navigation/` — category pills on Menu Management menu list and waiter grid

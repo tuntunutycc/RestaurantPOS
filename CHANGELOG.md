@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-07-11 — Waiter cart footer: Submit below price breakdown
+
+### Summary
+Cart sidebar groups price breakdown and Submit Order at the bottom so waiters review totals before confirming.
+
+### Spec
+- Updated `specs/feature-waiter-cart-breakdown/requirements.md` (FR-WB1b), `implementation.md`, `validation.md`
+
+### Frontend
+- `static/waiter.html` — `#cart-footer` with breakdown then `#submit-order`; table selection moved above footer
+
+## 2026-07-11 — Table grid status labels (Free + compact typography)
+
+### Summary
+Floor grid cards show **Free** instead of raw `available` / `AVAILABLE`, with smaller status text so table names stand out.
+
+### Spec
+- Updated `specs/feature-table-all-view/requirements.md` (FR-TA5), `implementation.md`, `validation.md`
+
+### Frontend
+- `static/table-display.js` — `displayTableStatus()`, typography helpers
+- `waiter.js`, `counter.js`, `table-dashboard.js` — consistent status rendering
+
+## 2026-07-11 — Payment method analytics (Cash vs Mobile Money)
+
+### Summary
+Checkout requires and persists `payment_method` (`cash` | `mobile_money`). Dashboard Overview shows today/monthly sales split by payment method for reconciliation.
+
+### Spec
+- `specs/feature-payment-method-analytics/`
+- Updated `specs/database-schema.md`, `specs/api-reference.md`, `specs/feature-counter-ui/requirements.md`
+
+### Backend
+- `OrderCheckoutRequest` validates/normalizes payment method
+- `GET /api/analytics/sales-breakdown` — today + current month totals by payment method (`routers/analytics.py`)
+
+### Frontend
+- `counter.html` / `counter.js` — Cash/Mobile Money toggle buttons at checkout; payment breakdown cards on Dashboard Overview
+
+### Tests
+- `tests/test_payment_method_analytics.py` (4 scenarios)
+
 ## 2026-07-11 — Cashier takeaway display & order waiter attribution
 
 ### Summary

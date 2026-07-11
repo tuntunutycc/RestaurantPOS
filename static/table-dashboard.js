@@ -159,6 +159,11 @@ function renderTablesGrid() {
       const cardColor = occupied
         ? 'bg-red-100 border-red-500'
         : 'bg-green-100 border-green-500';
+      const statusLabel = window.tableDisplay?.displayTableStatus
+        ? window.tableDisplay.displayTableStatus(table.status)
+        : table.status;
+      const statusTypography = window.tableDisplay?.tableStatusTypographyClass
+        || 'text-[10px] font-normal leading-tight normal-case text-slate-600';
       return `
         <button
           type="button"
@@ -169,10 +174,10 @@ function renderTablesGrid() {
           class="table-card border-2 rounded-lg p-3 text-left ${cardColor} hover:shadow"
         >
           <div class="font-semibold text-slate-800">${escapeHtml(displayName)}</div>
-          <div class="text-xs mt-1 uppercase tracking-wide text-slate-700">${escapeHtml(table.status)}</div>
+          <div class="${statusTypography} mt-0.5">${escapeHtml(statusLabel)}</div>
           ${
             occupied && table.active_order_id
-              ? `<div class="text-xs mt-1 text-slate-600">Order #${table.active_order_id}</div>`
+              ? `<div class="text-[10px] font-normal mt-0.5 text-slate-500">Order #${table.active_order_id}</div>`
               : ''
           }
         </button>

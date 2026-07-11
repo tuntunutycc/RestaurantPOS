@@ -15,6 +15,7 @@ PYTHONPATH=. pytest -q
 ## Manual
 
 - [ ] Waiter: **ALL** tab default; 35+ tables visible in dense grid; labels show `G1` not `Table G1`
+- [ ] Available tables show **Free** (not `AVAILABLE`); status line uses compact `text-[10px]` typography
 - [ ] Cashier: same ALL default on floor grid
 - [ ] Table Dashboard (admin): ALL tab + compact names
 - [ ] Takeaway pills/labels unchanged (`🛍️ Takeaway #…`)

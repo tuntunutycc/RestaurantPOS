@@ -636,10 +636,35 @@ class OrderRead(OrderResponseDetail):
 class OrderCheckoutRequest(BaseModel):
     """Request body for cashier checkout with optional order-level discount."""
 
-    payment_method: str  # 'cash', 'mobile_money', etc.
+    payment_method: str
     amount_tendered: float
     discount_type: Literal["percentage", "amount"] | None = None
     discount_value: float | None = 0.0
+
+    @field_validator("payment_method", mode="before")
+    @classmethod
+    def normalize_payment_method(cls, v):
+        raw = str(v or "").strip().lower().replace(" ", "_")
+        if raw in ("cash",):
+            return "cash"
+        if raw in ("mobile_money", "mobilemoney"):
+            return "mobile_money"
+        raise ValueError("payment_method must be 'cash' or 'mobile_money'")
+
+
+class PaymentMethodTotalsResponse(BaseModel):
+    """Aggregated sales for one period grouped by payment method."""
+
+    cash: float = 0.0
+    mobile_money: float = 0.0
+    total: float = 0.0
+
+
+class SalesBreakdownResponse(BaseModel):
+    """Today and current-month sales split by Cash vs Mobile Money."""
+
+    today: PaymentMethodTotalsResponse
+    month: PaymentMethodTotalsResponse
 
 
 class TodaySalesSummaryResponse(BaseModel):

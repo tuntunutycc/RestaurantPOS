@@ -13,6 +13,7 @@ from database import SessionLocal, engine
 from models import Base, Order, Table, User, Zone
 from rbac import ROLE_ROOT
 from routers import (
+    analytics,
     auth,
     kitchen_printers,
     menu,
@@ -684,6 +685,7 @@ app.include_router(auth.router)
 app.include_router(menu.router)
 app.include_router(orders.router)
 app.include_router(reports.router)
+app.include_router(analytics.router)
 app.include_router(users.router)
 app.include_router(tables.router)
 app.include_router(kitchen_printers.router)
