@@ -3011,6 +3011,35 @@ function populateCategorySelect(categories) {
   if (currentValue) select.value = currentValue;
 }
 
+const predefinedInstructionForm = document.getElementById('form-predefined-instruction');
+if (predefinedInstructionForm) {
+  predefinedInstructionForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('predefined-instruction-input');
+    const text = String(input?.value || '').trim();
+    if (!text) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/predefined-instructions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+        body: JSON.stringify({ text }),
+      });
+      if (window.auth && window.auth.checkUnauthorized(res)) return;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        await dialogAlert(err.detail || 'Failed to add tag', 'error', 'Quick Tags');
+        return;
+      }
+      if (input) input.value = '';
+      await loadPredefinedInstructionsAdmin();
+      await dialogAlert('Tag added.', 'success', 'Quick Tags');
+    } catch (err) {
+      console.error(err);
+      await dialogAlert('Failed to add tag', 'error', 'Quick Tags');
+    }
+  });
+}
+
 const kitchenPrinterForm = document.getElementById('form-kitchen-printers');
 if (kitchenPrinterForm) {
   kitchenPrinterForm.addEventListener('submit', async (e) => {
@@ -3084,11 +3113,70 @@ async function loadKitchenPrinterSettings() {
   }
 }
 
+async function loadPredefinedInstructionsAdmin() {
+  const listEl = document.getElementById('predefined-instructions-list');
+  if (!listEl) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/predefined-instructions`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    if (!res.ok) throw new Error('Failed to load instruction tags');
+    const tags = await res.json();
+    renderPredefinedInstructionsList(Array.isArray(tags) ? tags : []);
+  } catch (err) {
+    console.error(err);
+    listEl.innerHTML = '<li class="text-red-600">Error loading instruction tags.</li>';
+  }
+}
+
+function renderPredefinedInstructionsList(tags) {
+  const listEl = document.getElementById('predefined-instructions-list');
+  if (!listEl) return;
+  if (!tags.length) {
+    listEl.innerHTML = '<li class="text-slate-500">No quick tags yet. Add one above.</li>';
+    return;
+  }
+  listEl.innerHTML = tags.map((tag) => `
+    <li class="flex items-center justify-between gap-2 border border-slate-200 rounded-md px-3 py-2">
+      <span>${escapeHtml(tag.text)}</span>
+      <button type="button" data-delete-instruction-id="${tag.id}" class="text-sm text-rose-600 hover:text-rose-800">Delete</button>
+    </li>
+  `).join('');
+  listEl.querySelectorAll('[data-delete-instruction-id]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-delete-instruction-id');
+      if (!id) return;
+      try {
+        const res = await fetch(`${API_BASE}/api/predefined-instructions/${id}`, {
+          method: 'DELETE',
+          headers: { ...window.auth.getAuthHeaders() },
+        });
+        if (window.auth && window.auth.checkUnauthorized(res)) return;
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          await dialogAlert(err.detail || 'Failed to delete tag', 'error', 'Quick Tags');
+          return;
+        }
+        await loadPredefinedInstructionsAdmin();
+      } catch (err) {
+        console.error(err);
+        await dialogAlert('Failed to delete tag', 'error', 'Quick Tags');
+      }
+    });
+  });
+}
+
 async function loadMenuData() {
   try {
     await loadKitchenPrinterSettings();
   } catch (e) {
     console.error('Kitchen printer settings failed:', e);
+  }
+  try {
+    await loadPredefinedInstructionsAdmin();
+  } catch (e) {
+    console.error('Predefined instructions failed:', e);
   }
 
   const [categoriesResult, menuItemsResult] = await Promise.allSettled([

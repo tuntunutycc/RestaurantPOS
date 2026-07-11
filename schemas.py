@@ -716,3 +716,28 @@ class ActiveTakeawayOrderResponse(BaseModel):
     breakdown_discount_total: float = 0.0
     breakdown_tax_total: float = 0.0
     breakdown_grand_total: float = 0.0
+
+
+class PredefinedInstructionCreate(BaseModel):
+    """Schema for creating a predefined instruction tag."""
+
+    text: str
+
+    @field_validator("text")
+    @classmethod
+    def normalize_text(cls, v):
+        text = str(v or "").strip()
+        if not text:
+            raise ValueError("text is required")
+        if len(text) > 255:
+            raise ValueError("text must be at most 255 characters")
+        return text
+
+
+class PredefinedInstructionResponse(BaseModel):
+    """Predefined instruction tag in API responses."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    text: str

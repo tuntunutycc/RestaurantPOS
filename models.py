@@ -292,3 +292,12 @@ class AdminAuditLog(Base):
 
     actor = relationship("User", foreign_keys=[actor_user_id])
     target = relationship("User", foreign_keys=[target_user_id])
+
+
+class PredefinedInstruction(Base):
+    """Store-wide quick tags for waiter special instructions."""
+
+    __tablename__ = "predefined_instructions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    text = Column(String(255), nullable=False, unique=True, index=True)

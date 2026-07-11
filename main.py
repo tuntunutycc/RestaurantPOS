@@ -12,7 +12,18 @@ from auth import hash_password, require_roles
 from database import SessionLocal, engine
 from models import Base, Order, Table, User, Zone
 from rbac import ROLE_ROOT
-from routers import auth, kitchen_printers, menu, orders, reports, root_users, setup, tables, users
+from routers import (
+    auth,
+    kitchen_printers,
+    menu,
+    orders,
+    predefined_instructions,
+    reports,
+    root_users,
+    setup,
+    tables,
+    users,
+)
 from websocket_manager import ConnectionManager
 
 
@@ -610,6 +621,16 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    db = SessionLocal()
+    try:
+        from services.predefined_instructions import seed_predefined_instructions
+
+        seed_predefined_instructions(db)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
     # Ensure default admin exists (even if staff were added first via scripts)
     db = SessionLocal()
     try:
@@ -635,6 +656,7 @@ app.include_router(reports.router)
 app.include_router(users.router)
 app.include_router(tables.router)
 app.include_router(kitchen_printers.router)
+app.include_router(predefined_instructions.router)
 
 
 @app.get("/api/health")

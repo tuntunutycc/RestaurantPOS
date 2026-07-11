@@ -136,6 +136,24 @@ Use **`GET /api/orders/{id}/details`** for waiter sidebar breakdown.
 
 ---
 
+## Kitchen printers (`ADMIN_PANEL_ROLES`)
+
+| Method | Path |
+|--------|------|
+| GET/PUT | `/api/admin/kitchen-printers` |
+
+---
+
+## Predefined instructions
+
+| Method | Path | Role notes |
+|--------|------|------------|
+| GET | `/api/predefined-instructions` | `POS_ORDER_ROLES` |
+| POST | `/api/predefined-instructions` | `ADMIN_PANEL_ROLES` |
+| DELETE | `/api/predefined-instructions/{instruction_id}` | `ADMIN_PANEL_ROLES` |
+
+---
+
 ## Reports
 
 | Method | Path | Role notes |

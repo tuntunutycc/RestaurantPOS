@@ -188,6 +188,17 @@ See `specs/feature-menu-item-discount/` and `specs/feature-menu-item-tax/`.
 
 ---
 
+## `predefined_instructions`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | Integer PK | |
+| `text` | String(255) | Unique quick-tag label |
+
+See `specs/feature-predefined-instructions/`.
+
+---
+
 ## Legacy / compatibility notes
 
 | Item | Status |

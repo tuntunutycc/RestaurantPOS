@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-07-06 — Predefined instruction quick tags
+
+### Summary
+Waiters can tap predefined instruction chips in the special-instructions modal; admins manage tags from Menu Management.
+
+### Spec
+- `specs/feature-predefined-instructions/`
+
+### Backend
+- `PredefinedInstruction` model; CRUD at `/api/predefined-instructions`
+- Default Myanmar seed tags on empty table
+
+### Frontend
+- `waiter.html` / `waiter.js` — chip buttons append to textarea
+- `counter.html` / `counter.js` — admin add/delete tags
+
+### Tests
+- `tests/test_predefined_instructions.py`; full suite **165 passed**
+
 ## 2026-07-06 — Spec/code baseline audit (SDD sync)
 
 ### Summary

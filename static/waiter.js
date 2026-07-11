@@ -27,6 +27,7 @@ let tableDetailsOrderId = null;
 let tableDetailsTableName = '';
 let tableDetailsOrderContext = null;
 let modifierModalItem = null;
+let predefinedInstructions = [];
 let takeawayPromptResolver = null;
 let takeawayOrdersById = new Map();
 let takeawayPollTimer = null;
@@ -1237,6 +1238,62 @@ function closeModifierModal() {
   modifierModalItem = null;
 }
 
+async function fetchPredefinedInstructions() {
+  try {
+    const res = await fetch(`${API_BASE}/api/predefined-instructions`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth?.checkUnauthorized?.(res)) return [];
+    if (!res.ok) return [];
+    const data = await res.json();
+    predefinedInstructions = Array.isArray(data) ? data : [];
+    return predefinedInstructions;
+  } catch (err) {
+    console.error('Failed to load predefined instructions:', err);
+    return [];
+  }
+}
+
+function appendInstructionTag(tagText) {
+  const noteEl = document.getElementById('modifier-special-instructions');
+  if (!noteEl) return;
+  const tag = String(tagText || '').trim();
+  if (!tag) return;
+  const current = String(noteEl.value || '').trim();
+  noteEl.value = current ? `${current}, ${tag}` : tag;
+  noteEl.focus();
+}
+
+function renderPredefinedInstructionChips() {
+  const container = document.getElementById('predefined-instruction-chips');
+  if (!container) return;
+  const tags = Array.isArray(predefinedInstructions) ? predefinedInstructions : [];
+  if (!tags.length) {
+    container.innerHTML = '';
+    container.classList.add('hidden');
+    return;
+  }
+  container.classList.remove('hidden');
+  container.innerHTML = tags.map((item) => `
+    <button
+      type="button"
+      class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-800 transition"
+      data-instruction-text="${escapeAttr(item.text)}"
+    >${escapeHtml(item.text)}</button>
+  `).join('');
+}
+
+function bindPredefinedInstructionChips() {
+  const container = document.getElementById('predefined-instruction-chips');
+  if (!container || container.dataset.bound === '1') return;
+  container.dataset.bound = '1';
+  container.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-instruction-text]');
+    if (!btn || !container.contains(btn)) return;
+    appendInstructionTag(btn.getAttribute('data-instruction-text'));
+  });
+}
+
 function getSelectedModifiersFromModal() {
   const selected = [];
   document.querySelectorAll('[data-modifier-option]').forEach((input) => {
@@ -1278,6 +1335,9 @@ function openModifierModal(menuItem) {
     return;
   }
   modifierModalItem = menuItem;
+  fetchPredefinedInstructions().then(() => {
+    renderPredefinedInstructionChips();
+  });
   const title = document.getElementById('modifier-modal-title');
   const base = document.getElementById('modifier-modal-base-price');
   const groupsEl = document.getElementById('modifier-modal-groups');
@@ -1912,6 +1972,7 @@ if (
     bindBackToDashboardNav();
     bindSubmitOrder();
     bindModifierModal();
+    bindPredefinedInstructionChips();
     bindTakeawayModal();
     const walkInBtn = document.getElementById('btn-walk-in-takeaway');
     if (walkInBtn) walkInBtn.addEventListener('click', startWalkInTakeaway);
@@ -1929,8 +1990,10 @@ if (
     startTakeawayPolling();
     try {
       const [items, cats] = await Promise.all([fetchMenuItems(), fetchCategories()]);
+      await fetchPredefinedInstructions();
       menuItems = items || [];
       categories = cats || [];
+      renderPredefinedInstructionChips();
       activeCategoryId = null;
       renderCategoryTabs();
       renderMenu();
