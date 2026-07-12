@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-07-12 — Waiter qty-adjuster isolation audit
+
+### Summary
+Verified cart `+`/`-` and modifier-modal qty are isolated from Active Order Modal cancel flow; specs isolation notes tightened; full pytest green (184).
+
+### Spec
+- `feature-waiter-cart-breakdown` FR-WB2 isolation
+- `feature-waiter-two-pane-layout` cart qty mention
+- `feature-predefined-instructions` validation FR-Q3b
+
+### Tests
+- `pytest`: 184 passed
+
+## 2026-07-12 — Modifier modal quantity before add-to-cart
+
+### Summary
+Customize Item popup includes `+` / `-` quantity (min 1). Add to Cart uses that qty; button total scales with qty × (base + modifiers).
+
+### Spec
+- `specs/feature-predefined-instructions/requirements.md` — FR-Q3b
+
+### Frontend
+- `static/waiter.html` — `#modifier-modal-qty-*`
+- `static/waiter.js` — `modifierModalQty`, `addToCart(..., quantity)`
+
+## 2026-07-12 — Waiter cart inline quantity adjusters
+
+### Summary
+New Order Cart lines use `+` / `-` qty controls; qty 0 removes the line. Notes/modifiers retained. Active-order modal unchanged.
+
+### Spec
+- `specs/feature-waiter-cart-breakdown/` — FR-WB1c
+- `specs/qa_test_plan.md` — Waiter qty check
+
+### Frontend
+- `static/waiter.js` — `increaseCartItemQty` / `decreaseCartItemQty` → `updateCartQuantity` → `renderCart()`
+
 ## 2026-07-12 — System audit QA test plan
 
 ### Summary

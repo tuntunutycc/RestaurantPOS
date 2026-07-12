@@ -22,7 +22,13 @@ List endpoints (`OrderResponseDetail`) do **not** include order-level breakdown 
 | `computeOrderItemsBreakdown()` | Prefers server fields; fallback from line snapshots |
 | `renderPriceBreakdownHtml()` | 4-line summary HTML |
 | `renderItemBreakdownHtml()` | Per-row `Base \| Disc \| Tax` |
-| `renderCart()` | Cart rows with breakdown + final price |
+| `renderCart()` | Cart rows with breakdown, final price, and qty `+`/`-` |
+| `updateCartQuantity(lineKey, delta)` | Core qty mutate; delete line when qty ≤ 0; calls `renderCart()` |
+| `increaseCartItemQty(index)` / `decreaseCartItemQty(index)` | Index into current cart entry order; wraps `updateCartQuantity` |
+
+Cart state: `Map` of lineKey → `{ menu_item, selected_modifiers, special_instructions, unit_price, is_takeaway, quantity }`. Notes are part of the line key and are retained on qty change.
+
+Active-order modal rendering must not wire these qty controls.
 
 ## HTML (`static/waiter.html`)
 

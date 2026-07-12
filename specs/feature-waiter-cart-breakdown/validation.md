@@ -7,7 +7,9 @@ PYTHONPATH=. pytest -q
 
 ## Manual
 - [ ] Cart shows Subtotal / Tax / Grand Total; toggling takeaway updates tax
-- [ ] **Submit Order** appears directly under Grand Total; zone/table grid is **below** submit
+- [ ] Cart line `+` / `-` adjusts qty; `-` to 0 removes line; notes/modifiers retained; footer totals update
+- [ ] Active-order modal still has **no** qty `+`/`-` (cancel item only)
+- [ ] **Submit Order** appears directly under Grand Total; floor pane is separate
 - [ ] Active-order modal shows same breakdown from API fields
 
 ## Evidence

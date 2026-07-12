@@ -9,8 +9,8 @@
 ## Frontend
 | File | Change |
 |------|--------|
-| `waiter.html` | `#predefined-instruction-chips` container above textarea |
-| `waiter.js` | fetch, render chips, `appendInstructionTag()` |
+| `waiter.html` | `#predefined-instruction-chips` container above textarea; `#modifier-modal-qty-*` quantity row (FR-Q3b) |
+| `waiter.js` | fetch, render chips, `appendInstructionTag()`; `modifierModalQty` + `addToCart(..., quantity)` |
 | `counter.html` | Quick Instruction Tags admin section |
 | `counter.js` | list, add, delete wiring |
 

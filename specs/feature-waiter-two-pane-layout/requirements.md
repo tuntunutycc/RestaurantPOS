@@ -12,7 +12,7 @@ On `/waiter` (`static/waiter.html`), the main workspace uses a responsive two-co
 
 | Pane | Contents | Visual cue |
 |------|----------|------------|
-| **Left — Menu & Cart** (`#waiter-pane-menu`) | Category tabs, menu grid, cart lines, price breakdown, Submit | Light green tint (`bg-emerald-50/60`) |
+| **Left — Menu & Cart** (`#waiter-pane-menu`) | Category tabs, menu grid, cart lines with inline qty `+`/`-` (FR-WB1c), price breakdown, Submit | Light green tint (`bg-emerald-50/60`) |
 | **Right — Floor** (`#waiter-pane-floor`) | Zone tabs, Walk-in Takeaway, table grid, active takeaways, selected label | Light rose tint (`bg-rose-50/60`) |
 
 - Empty (available) table click: set dine-in cart context only — **do not** open the modal.
@@ -23,7 +23,7 @@ On `/waiter` (`static/waiter.html`), the main workspace uses a responsive two-co
 - Opened when Waiter taps an **occupied** table or an **active** walk-in takeaway card.
 - Must include a prominent **Close (✖)** control (`#active-order-modal-close` / existing close binding).
 - Backdrop click dismisses the modal.
-- Modal body reuses existing details rendering (`#waiter-table-details-content`): price breakdown, item rows, Cancel Item, served toggle, **Add More Items**.
+- Modal body reuses existing details rendering (`#waiter-table-details-content`): price breakdown, item rows (static qty), Cancel Item, served toggle, **Add More Items**. No cart qty `+`/`-` in this modal.
 - Closing clears modal content state via existing `closeDetailsSidebar()` semantics (order-details context only); cart remains untouched unless user explicitly clears / Add More Items.
 
 ## FR-TP3: Add More Items

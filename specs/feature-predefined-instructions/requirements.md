@@ -37,6 +37,15 @@ In the **Special Instructions** area of the modifier modal (`waiter.html` / `wai
   - If non-empty → append `, {chip text}` (comma + space)
 - Manual typing remains unchanged.
 
+## FR-Q3b: Quantity in modifier modal
+In the same customize / Add to Cart modal:
+- Show inline **`-` / qty / `+`** controls (default qty `1`, minimum `1` while modal is open — cannot go to 0 in the modal)
+- **Add to Cart** button label shows **unit line price × qty** (base + selected modifiers, before cart tax/discount breakdown)
+- On confirm, add **that quantity** as one cart line (same notes/modifiers applied to the whole line)
+- Cart-side `+`/`-` (FR-WB1c) remains the way to adjust qty after the line is in the cart
+
+Does not affect the Active Order pop-out modal.
+
 ## FR-Q4: Admin UI
 Counter **Menu Management** tab (`counter.html` / `counter.js`):
 - List existing tags with delete control

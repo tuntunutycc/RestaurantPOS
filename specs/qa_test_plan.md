@@ -113,6 +113,7 @@ Log in as **waiter** → `/waiter`
 
 - [ ] Click an empty (**Free**) table — cart context shows that table
 - [ ] Add items (include item C with discount+tax if available)
+- [ ] Use cart line **`+` / `-`** to change qty; confirm notes stay; totals update; `-` to 0 removes the line
 - [ ] Open customize modal → click a **Predefined Instruction** chip → confirm note appears → Add to Cart
 - [ ] Verify cart footer: Subtotal, Discount, Tax, Grand Total, then **Submit**
 - [ ] Submit order

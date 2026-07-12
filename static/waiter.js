@@ -27,6 +27,7 @@ let tableDetailsOrderId = null;
 let tableDetailsTableName = '';
 let tableDetailsOrderContext = null;
 let modifierModalItem = null;
+let modifierModalQty = 1;
 let predefinedInstructions = [];
 let takeawayPromptResolver = null;
 let takeawayOrdersById = new Map();
@@ -1009,9 +1010,10 @@ async function startTakeawayOrder() {
   setTakeawayContext(name || t('guest', 'Guest'));
 }
 
-function addToCart(menuItem, selectedModifiers = [], specialInstructions = '', isTakeaway = defaultCartLineTakeaway()) {
+function addToCart(menuItem, selectedModifiers = [], specialInstructions = '', isTakeaway = defaultCartLineTakeaway(), quantity = 1) {
   const id = Number(menuItem?.id);
   if (!id) return;
+  const qtyToAdd = Math.max(1, Math.floor(Number(quantity) || 1));
   const normalizedModifiers = normalizeSelectedModifiers(selectedModifiers);
   const note = String(specialInstructions || '').trim();
   const takeawayFlag = !!isTakeaway;
@@ -1019,7 +1021,7 @@ function addToCart(menuItem, selectedModifiers = [], specialInstructions = '', i
   const key = buildCartLineKey(id, normalizedModifiers, note, takeawayFlag);
   const existing = cart.get(key);
   if (existing) {
-    existing.quantity += 1;
+    existing.quantity += qtyToAdd;
   } else {
     cart.set(key, {
       menu_item: {
@@ -1037,7 +1039,7 @@ function addToCart(menuItem, selectedModifiers = [], specialInstructions = '', i
       special_instructions: note || null,
       unit_price: unitPrice,
       is_takeaway: takeawayFlag,
-      quantity: 1,
+      quantity: qtyToAdd,
     });
   }
   renderCart();
@@ -1081,6 +1083,29 @@ function updateCartQuantity(lineKey, delta) {
   if (item.quantity <= 0) cart.delete(lineKey);
   renderCart();
 }
+
+/** Index into current cart entry order (New Order Cart only). */
+function getCartLineKeyAt(index) {
+  const entries = Array.from(cart.keys());
+  const i = Number(index);
+  if (!Number.isInteger(i) || i < 0 || i >= entries.length) return null;
+  return entries[i];
+}
+
+function increaseCartItemQty(index) {
+  const lineKey = getCartLineKeyAt(index);
+  if (lineKey == null) return;
+  updateCartQuantity(lineKey, 1);
+}
+
+function decreaseCartItemQty(index) {
+  const lineKey = getCartLineKeyAt(index);
+  if (lineKey == null) return;
+  updateCartQuantity(lineKey, -1);
+}
+
+window.increaseCartItemQty = increaseCartItemQty;
+window.decreaseCartItemQty = decreaseCartItemQty;
 
 function computeCartPriceBreakdown() {
   let breakdownSubtotal = 0;
@@ -1197,7 +1222,10 @@ function renderCart() {
   }
 
   list.innerHTML = '';
+  let lineIndex = 0;
   cart.forEach(({ menu_item, quantity, selected_modifiers, special_instructions, unit_price, is_takeaway }, lineKey) => {
+    const index = lineIndex;
+    lineIndex += 1;
     const lineBreakdown = computeLinePricingBreakdown(menu_item, selected_modifiers, is_takeaway);
     const subtotal = lineBreakdown.finalUnit * quantity;
     const takeawayPrice = menu_item?.takeaway_price != null ? toNumber(menu_item.takeaway_price, 0) : null;
@@ -1216,7 +1244,7 @@ function renderCart() {
     li.className = 'flex items-center justify-between gap-2';
     li.innerHTML = `
       <div class="flex-1 min-w-0">
-        <span class="truncate block">${escapeHtml(menu_item.name)} x ${quantity}</span>
+        <span class="truncate block font-medium text-slate-800">${escapeHtml(menu_item.name)}</span>
         ${priceHtml}
         ${breakdownHtml}
         ${modifiersHtml}
@@ -1226,18 +1254,24 @@ function renderCart() {
           <span>🛍️ ${escapeHtml(t('takeaway', 'Takeaway'))}</span>
         </label>
       </div>
-      <span class="font-medium">${formatMoney(subtotal)}</span>
-      <div class="flex items-center gap-0">
-        <button type="button" data-key="${escapeAttr(lineKey)}" class="qty-btn minus w-7 h-7 rounded border border-slate-300 bg-slate-100 hover:bg-slate-200">-</button>
-        <span class="w-6 text-center text-sm">${quantity}</span>
-        <button type="button" data-key="${escapeAttr(lineKey)}" class="qty-btn plus w-7 h-7 rounded border border-slate-300 bg-slate-100 hover:bg-slate-200">+</button>
+      <span class="font-medium shrink-0">${formatMoney(subtotal)}</span>
+      <div class="flex items-center gap-2 shrink-0">
+        <button type="button" data-cart-qty-index="${index}" data-cart-qty-delta="-1" class="cart-qty-btn px-2 py-1 bg-gray-200 rounded text-gray-700 hover:bg-gray-300" aria-label="Decrease quantity">-</button>
+        <span class="w-6 text-center font-medium">${quantity}</span>
+        <button type="button" data-cart-qty-index="${index}" data-cart-qty-delta="1" class="cart-qty-btn px-2 py-1 bg-gray-200 rounded text-gray-700 hover:bg-gray-300" aria-label="Increase quantity">+</button>
       </div>
     `;
     list.appendChild(li);
   });
 
-  list.querySelectorAll('.qty-btn.minus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, -1)));
-  list.querySelectorAll('.qty-btn.plus').forEach((btn) => btn.addEventListener('click', () => updateCartQuantity(btn.dataset.key, 1)));
+  list.querySelectorAll('.cart-qty-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const index = Number(btn.getAttribute('data-cart-qty-index'));
+      const delta = Number(btn.getAttribute('data-cart-qty-delta'));
+      if (delta > 0) increaseCartItemQty(index);
+      else decreaseCartItemQty(index);
+    });
+  });
   list.querySelectorAll('.cart-takeaway-toggle').forEach((input) => {
     input.addEventListener('change', () => toggleCartLineTakeaway(input.dataset.key, input.checked));
   });
@@ -1253,6 +1287,15 @@ function closeModifierModal() {
   if (backdrop) backdrop.classList.add('hidden');
   if (modal) modal.classList.add('hidden');
   modifierModalItem = null;
+  modifierModalQty = 1;
+}
+
+function setModifierModalQty(nextQty) {
+  const qty = Math.max(1, Math.floor(Number(nextQty) || 1));
+  modifierModalQty = qty;
+  const display = document.getElementById('modifier-modal-qty-display');
+  if (display) display.textContent = String(modifierModalQty);
+  updateModifierModalAddButton();
 }
 
 async function fetchPredefinedInstructions() {
@@ -1327,8 +1370,9 @@ function getSelectedModifiersFromModal() {
 function updateModifierModalAddButton() {
   const addBtn = document.getElementById('modifier-modal-add');
   if (!addBtn || !modifierModalItem) return;
-  const total = getEffectiveBasePrice(modifierModalItem) + modifiersTotal(getSelectedModifiersFromModal());
-  addBtn.textContent = `${t('add_to_cart', 'Add to Cart')} (${formatMoney(total)})`;
+  const unitTotal = getEffectiveBasePrice(modifierModalItem) + modifiersTotal(getSelectedModifiersFromModal());
+  const lineTotal = roundMoney(unitTotal * Math.max(1, modifierModalQty));
+  addBtn.textContent = `${t('add_to_cart', 'Add to Cart')} (${formatMoney(lineTotal)})`;
 }
 
 function validateRequiredModifierGroups() {
@@ -1374,6 +1418,7 @@ function openModifierModal(menuItem) {
     base.textContent = `Base: ${formatMoney(basePrice)}`;
   }
   noteEl.value = '';
+  setModifierModalQty(1);
 
   const groups = Array.isArray(menuItem.modifiers_config) ? menuItem.modifiers_config : [];
   if (!groups.length) {
@@ -1427,17 +1472,27 @@ function bindModifierModal() {
   const addBtn = document.getElementById('modifier-modal-add');
   const backdrop = document.getElementById('modifier-modal-backdrop');
   const noteEl = document.getElementById('modifier-special-instructions');
+  const qtyMinus = document.getElementById('modifier-modal-qty-minus');
+  const qtyPlus = document.getElementById('modifier-modal-qty-plus');
 
   if (closeBtn) closeBtn.addEventListener('click', closeModifierModal);
   if (cancelBtn) cancelBtn.addEventListener('click', closeModifierModal);
   if (backdrop) backdrop.addEventListener('click', closeModifierModal);
+  if (qtyMinus) qtyMinus.addEventListener('click', () => setModifierModalQty(modifierModalQty - 1));
+  if (qtyPlus) qtyPlus.addEventListener('click', () => setModifierModalQty(modifierModalQty + 1));
   if (addBtn) {
     addBtn.addEventListener('click', () => {
       if (!modifierModalItem) return;
       if (!validateRequiredModifierGroups()) return;
       const selectedModifiers = getSelectedModifiersFromModal();
       const specialInstructions = noteEl ? noteEl.value : '';
-      addToCart(modifierModalItem, selectedModifiers, specialInstructions);
+      addToCart(
+        modifierModalItem,
+        selectedModifiers,
+        specialInstructions,
+        defaultCartLineTakeaway(),
+        modifierModalQty
+      );
       closeModifierModal();
     });
   }
