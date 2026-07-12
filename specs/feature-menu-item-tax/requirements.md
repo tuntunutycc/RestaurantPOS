@@ -16,7 +16,7 @@ Allow admins to configure **item-level tax** on menu items. Tax is included in l
 |-------|-------|
 | `unit_tax_at_sale` | Per-unit tax at submit time (audit + receipt) |
 
-Line `subtotal` stores **(base + unit_tax + modifiers) × quantity** (rounded per line).
+Line `subtotal` stores **(discounted_price + unit_tax + modifiers) × quantity** (rounded per line).
 
 ## FR-T1: Tax base (after discount — CRITICAL)
 
@@ -67,7 +67,7 @@ No additional global 5% tax.
 |---------|--------|
 | **Menu grid** | Base price with strikethrough when discount applies (dine-in base) |
 | **Cart line** | Per-item `Base \| Disc \| Tax` breakdown + line final total |
-| **Cart footer / order sidebar** | 4-line Subtotal / Total Discount / Tax / Grand Total |
+| **Cart footer / active-order modal** | 4-line Subtotal / Total Discount / Tax / Grand Total |
 | **Modifier modal “Add to Cart”** | Base + modifiers only (tax/discount reflected after add, in cart) |
 | **Cashier checkout** | Sum of line taxes; order-level discount separate |
 

@@ -22,12 +22,14 @@ Admin **Table Management** kanban remains zone-column layout (operational CRUD);
 ## FR-TA2: Responsive grid density
 Table floor grids use Tailwind responsive columns so 35+ tables fit on screen, e.g.:
 
-`grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2`
+Waiter / Table Dashboard: `grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2`
+
+Cashier (inside `#pane-tables`): `grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-2`
 
 Exact breakpoints may vary by surface but must increase columns on larger viewports.
 
 ## FR-TA3: Display name formatting (UI only)
-Before rendering a **dine-in table** label in grids, cart headers, active orders, checkout modals, and receipts:
+Before rendering a **dine-in table** label in grids, cart headers, active orders, checkout panels, and receipts:
 
 ```javascript
 displayTableName(raw) // strips leading "Table " case-insensitive

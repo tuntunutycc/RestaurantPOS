@@ -153,7 +153,7 @@ class Order(Base):
     total_amount = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     # Payment information (filled at checkout)
-    payment_method = Column(String(32), nullable=True)  # 'cash', 'mobile_money', etc.
+    payment_method = Column(String(32), nullable=True)  # checkout: 'cash' | 'mobile_money'
     amount_tendered = Column(Float, nullable=True)
     change_amount = Column(Float, nullable=True)
     tax_amount = Column(Float, nullable=True, default=0.0)

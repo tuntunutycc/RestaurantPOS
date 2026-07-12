@@ -42,7 +42,7 @@ When `table_id` is null (walk-in takeaway), **do not** show a table name, "Delet
 - Else → **Takeaway #{order_id}**
 
 ## FR-W3b: Cashier "Served by"
-Cashier checkout modal and receipt print must show **Served by: {waiter_name}** where `waiter_name` comes from `Order.created_by_id` (resolved server-side). Fallback display: **Unknown** when unset. Latest-batch staff remains available as `served_by_name` on full order payloads for add-on scenarios.
+Cashier Check Out pane (`#pane-checkout`) and receipt print must show **Served by: {waiter_name}** where `waiter_name` comes from `Order.created_by_id` (resolved server-side). Fallback display: **Unknown** when unset. Latest-batch staff remains available as `served_by_name` on full order payloads for add-on scenarios.
 
 ## FR-W4: Waiter UI
 - Prominent **`[ + Walk-in Takeaway ]`** control near the table grid.
@@ -60,8 +60,8 @@ Active walk-in takeaway orders (`order_type=takeaway`, status not `paid`/`cancel
 
 | Action | Behavior |
 |--------|----------|
-| Click active takeaway card | Open **order details sidebar** (same as occupied table): list submitted items, totals, per-item actions |
-| **Add More Items** (sidebar) | Enter **Append Mode** bound to existing `order_id` |
+| Click active takeaway card | Open **active-order modal** (same as occupied table): list submitted items, totals, per-item actions |
+| **Add More Items** (active-order modal) | Enter **Append Mode** bound to existing `order_id` |
 | Submit new items | `POST /api/orders/submit` with `order_id` → append batch (`batch_number` increments), **no new order** |
 | Cancel unserved line | `PUT /api/orders/{order_id}/items/{item_id}/status` with `cancelled` — **same endpoint and UI as dine-in** |
 | Kitchen | `new_order_batch` WebSocket + add-on ticket for new batch only |
@@ -78,11 +78,11 @@ Cart header in append mode (waiter UI): **"Adding to Takeaway: \<customer\>"**
 
 ## FR-W7: Item-level cancellation (takeaway)
 Walk-in takeaway orders **must** support item-by-item cancellation for unserved items, mirroring dine-in table order details:
-- Cancel control visible in order details sidebar for non-`cancelled` lines (pending/cooking/served — same rules as dine-in).
+- Cancel control visible in active-order modal for non-`cancelled` lines (pending/cooking/served — same rules as dine-in).
 - No separate "Cancel Entire Order" button on waiter or cashier UI; staff cancel lines individually.
 
 ## FR-W8: Cart price breakdown
-Waiter cart and active-order sidebar show **Subtotal**, **Total Discount**, **Tax**, and **Grand Total** (see `specs/feature-waiter-cart-breakdown/`).
+Waiter cart and active-order modal show **Subtotal**, **Total Discount**, **Tax**, and **Grand Total** (see `specs/feature-waiter-cart-breakdown/`).
 
 ## Authorization
 - Submit — `POS_ORDER_ROLES` (`waiter`, `cashier`, `admin`, `root`)

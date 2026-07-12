@@ -33,7 +33,7 @@ Enable restaurant owners and cashiers to reconcile daily and monthly sales by **
 - Invariant: `total == cash + mobile_money` (orders with null/unknown `payment_method` excluded from both buckets).
 
 ## FR-PM3: Cashier checkout UI
-- Counter checkout modal shows two large toggle buttons: **💵 Cash** (default) and **📱 Mobile Money**.
+- Counter Check Out pane (`#pane-checkout`) shows two large toggle buttons: **💵 Cash** (default) and **📱 Mobile Money**.
 - Selected value sent as `payment_method` in checkout payload (`cash` or `mobile_money`).
 
 ## FR-PM4: Dashboard UI (Counter — `static/counter.js`)

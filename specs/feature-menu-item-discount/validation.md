@@ -15,7 +15,7 @@ Run: `PYTHONPATH=. python -m pytest -q tests/test_menu_item_discount.py tests/te
 
 - [ ] Waiter cart: item with discount shows `Base | Disc | Tax` row
 - [ ] Cart footer shows Total Discount when any line has discount
-- [ ] Order details sidebar matches server `breakdown_*` fields
+- [ ] Active-order modal matches server `breakdown_*` fields
 - [ ] Admin: legacy discount price still creates correct submit totals
 
 ## Known gaps (documented, not blocking baseline)

@@ -26,8 +26,10 @@ Secondary tabs (Staff Management, Admin Accounts, Audit Logs, Table Management) 
 ## Out of scope
 - Dashboard **sub-tabs** (Overview, History, Staff) — separate `applyDashboardTabState` contract.
 - Payment method breakdown — see `specs/feature-payment-method-analytics/`
+- Cashier billing **3-pane layout** — see `specs/feature-cashier-three-pane/` (primary Counter tabs remain)
 
 ## Related
+- `specs/feature-cashier-three-pane/` — Tables | Takeaways | Check Out
 - `specs/feature-menu-category-navigation/` — category pills on Menu Management menu list and waiter grid
 - `specs/feature-counter-ui/implementation.md`
 - `specs/feature-category-crud/` — Menu Management panel content

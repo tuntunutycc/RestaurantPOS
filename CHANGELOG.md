@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-07-12 — Pre-E2E system audit (SDD sync)
+
+### Summary
+Documentation and frontend health check against current Cashier 3-pane / Waiter two-pane reality. No new product features. Specs updated for modal/pane wording; waiter legacy sidebar DOM fallbacks removed; full pytest green (181).
+
+### Spec
+- Synced pane/modal language across walk-in, cancellation, cart-breakdown, payment-method, table-all-view, api-reference, menu-item-tax/discount
+- Added `feature-menu-item-tax/implementation.md` and `feature-payment-method-analytics/implementation.md` (explicitly notes **No Receipt / tax exemption is not implemented**)
+
+### Frontend
+- `static/waiter.js` — removed orphaned `#waiter-table-details-sidebar` / backdrop fallbacks; modal-only open/close
+
+### Tests
+- `pytest`: 181 passed
+
+## 2026-07-12 — Cashier 3-pane billing layout
+
+### Summary
+Cashier / Billing is a single-page **Tables | Takeaways | Check Out** grid. Selecting an occupied table or takeaway fills the right pane without a modal; checkout controls and listeners stay intact.
+
+### Spec
+- `specs/feature-cashier-three-pane/`
+- Updated `specs/feature-counter-ui/requirements.md`
+
+### Frontend
+- `static/counter.html` — `#pane-tables`, `#pane-takeaways`, `#pane-checkout`
+- `static/counter.js` — selection highlighting; `selectOrder(order, source)`
+
+## 2026-07-12 — Waiter two-pane layout & active-order modal
+
+### Summary
+Waiter screen splits into Menu+Cart (left) and Tables/Takeaways (right). Occupied tables and active takeaways open a centered pop-out modal so viewing an order never overrides the new-order cart.
+
+### Spec
+- `specs/feature-waiter-two-pane-layout/`
+- Updated `specs/feature-waiter-cart-breakdown/` (FR-WB1b)
+
+### Frontend
+- `static/waiter.html` — tinted two panes; `#active-order-modal`
+- `static/waiter.js` — modal open/close; available tables set cart context only
+
 ## 2026-07-11 — Waiter cart footer: Submit below price breakdown
 
 ### Summary

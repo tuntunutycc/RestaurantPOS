@@ -321,112 +321,143 @@
       </div>
     </div>
 
-    <!-- Tab 1: Cashier / Billing (table-centric) -->
+    <!-- Tab 1: Cashier / Billing — 3-pane: Tables | Takeaways | Check Out -->
     <div id="panel-cashier" class="tab-panel">
-      <div class="grid md:grid-cols-2 gap-6">
-        <!-- Full table grid -->
-        <div>
-          <h2 class="text-lg font-semibold text-slate-700 mb-2" data-i18n="table_floor_grid">Table Floor Grid</h2>
-          <p class="text-sm text-slate-500 mb-3" data-i18n="tap_occupied_table_hint">Tap an occupied table to open billing. Available tables are empty.</p>
-          <div class="overflow-x-auto mb-3">
-            <div id="cashier-zone-tabs" class="flex gap-1 min-w-max"></div>
+      <div
+        id="cashier-three-pane"
+        class="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:h-[calc(100vh-9rem)] lg:min-h-[32rem]"
+      >
+        <!-- Left: Tables -->
+        <section
+          id="pane-tables"
+          class="flex flex-col min-h-0 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+        >
+          <div class="shrink-0 px-3 py-2.5 border-b border-slate-100 bg-slate-50">
+            <h2 class="text-base font-semibold text-slate-800" data-i18n="table_floor_grid">Tables</h2>
+            <p class="text-xs text-slate-500 mt-0.5" data-i18n="tap_occupied_table_hint">Tap an occupied table to open billing. Available tables are empty.</p>
           </div>
-          <div id="cashier-tables-grid" class="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2">
-            <p class="col-span-full text-slate-500" data-i18n="loading_table_grid">Loading table grid...</p>
+          <div class="shrink-0 px-3 pt-2 overflow-x-auto">
+            <div id="cashier-zone-tabs" class="flex gap-1 min-w-max pb-1"></div>
           </div>
-          <div class="mt-5">
-            <h3 class="text-sm font-semibold text-slate-700 mb-2">🛍️ <span data-i18n="active_takeaway_orders">Active Takeaway Orders</span></h3>
+          <div class="flex-1 overflow-y-auto p-3">
+            <div id="cashier-tables-grid" class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+              <p class="col-span-full text-slate-500" data-i18n="loading_table_grid">Loading table grid...</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Middle: Takeaways -->
+        <section
+          id="pane-takeaways"
+          class="flex flex-col min-h-0 rounded-xl border border-orange-100 bg-orange-50/40 shadow-sm overflow-hidden"
+        >
+          <div class="shrink-0 px-3 py-2.5 border-b border-orange-100 bg-orange-50">
+            <h2 class="text-base font-semibold text-slate-800">🛍️ <span data-i18n="active_takeaway_orders">Takeaways</span></h2>
+            <p class="text-xs text-slate-500 mt-0.5">Active walk-in takeaway orders</p>
+          </div>
+          <div class="flex-1 overflow-y-auto p-3">
             <div id="cashier-takeaway-orders" class="space-y-2">
               <p class="text-slate-500 text-sm" data-i18n="no_takeaway_orders">No takeaway orders.</p>
             </div>
           </div>
-        </div>
-        <!-- Receipt: consolidated items + grand total for this table -->
-        <div>
-          <div id="receipt-container" class="bg-white rounded-lg shadow p-6 hidden">
-            <h2 id="checkout-header" class="text-lg font-semibold text-slate-700 mb-4" data-i18n="checkout">Checkout</h2>
-            <p class="text-sm text-slate-600 mb-3">
-              <span data-i18n="served_by">Served by</span>: <span id="receipt-served-by" class="font-medium text-slate-800">—</span>
-            </p>
-            <div id="receipt-content"></div>
-            <p class="text-sm text-slate-700 border-t border-slate-200 pt-2 mt-2">
-              <span data-i18n="subtotal">Subtotal</span>: <span id="receipt-subtotal" class="font-semibold">0 Ks</span>
-            </p>
-            <p class="text-sm text-slate-700">
-              <span data-i18n="discount">Discount</span>: <span id="receipt-discount-amount" class="font-semibold">0 Ks</span>
-            </p>
-            <p class="text-sm text-slate-700">
-              <span>Tax</span>: <span id="receipt-tax-amount" class="font-semibold">0 Ks</span>
-            </p>
-            <p id="receipt-grand-total" class="text-lg font-semibold text-slate-800 border-t border-slate-200 pt-2 mt-2"></p>
+        </section>
 
-            <div class="mt-4 space-y-3">
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1" data-i18n="discount_type">Discount Type</label>
-                <select id="checkout-discount-type" class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                  <option value="none">None</option>
-                  <option value="percentage">Percentage (%)</option>
-                  <option value="amount">Fixed Amount (Ks)</option>
-                </select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1" data-i18n="discount_value">Discount Value</label>
-                <input
-                  type="number"
-                  id="checkout-discount-value"
-                  min="0"
-                  step="0.01"
-                  disabled
-                  class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
-                />
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-2" data-i18n="payment_method">Payment Method</label>
-                <input type="hidden" id="payment-method" value="cash" />
-                <div id="payment-method-toggle" class="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    data-payment-method="cash"
-                    class="payment-method-btn px-3 py-3 rounded-md border-2 border-emerald-500 bg-emerald-50 text-emerald-900 font-semibold text-sm hover:bg-emerald-100"
-                    aria-pressed="true"
-                  >
-                    💵 Cash
-                  </button>
-                  <button
-                    type="button"
-                    data-payment-method="mobile_money"
-                    class="payment-method-btn px-3 py-3 rounded-md border-2 border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
-                    aria-pressed="false"
-                  >
-                    📱 Mobile Money
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-slate-700 mb-1" data-i18n="amount_tendered">Amount Tendered</label>
-                <input
-                  type="number"
-                  id="amount-tendered"
-                  min="0"
-                  step="0.01"
-                  class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <p class="text-sm text-slate-700">
-                <span data-i18n="change">Change</span>:
-                <span id="change-amount" class="font-semibold">0 Ks</span>
-              </p>
-              <button
-                type="button"
-                id="btn-process-payment"
-                class="w-full py-3 bg-emerald-600 text-white font-medium rounded-md hover:bg-emerald-700"
-              >
-                <span data-i18n="confirm_payment">Confirm Payment</span>
-              </button>
-            </div>
+        <!-- Right: Check Out -->
+        <section
+          id="pane-checkout"
+          class="flex flex-col min-h-0 rounded-xl border border-emerald-100 bg-emerald-50/30 shadow-sm overflow-hidden"
+        >
+          <div class="shrink-0 px-3 py-2.5 border-b border-emerald-100 bg-emerald-50">
+            <h2 class="text-base font-semibold text-slate-800" data-i18n="checkout">Check Out</h2>
           </div>
-          <p id="receipt-placeholder" class="text-slate-500" data-i18n="select_table_left_hint">Select a table on the left to view its consolidated order and grand total.</p>
-        </div>
+          <div class="flex-1 overflow-y-auto p-3">
+            <div id="receipt-container" class="bg-white rounded-lg border border-slate-100 shadow-sm p-4 hidden">
+              <h2 id="checkout-header" class="text-lg font-semibold text-slate-700 mb-3" data-i18n="checkout">Checkout</h2>
+              <p class="text-sm text-slate-600 mb-3">
+                <span data-i18n="served_by">Served by</span>: <span id="receipt-served-by" class="font-medium text-slate-800">—</span>
+              </p>
+              <div id="receipt-content"></div>
+              <p class="text-sm text-slate-700 border-t border-slate-200 pt-2 mt-2">
+                <span data-i18n="subtotal">Subtotal</span>: <span id="receipt-subtotal" class="font-semibold">0 Ks</span>
+              </p>
+              <p class="text-sm text-slate-700">
+                <span data-i18n="discount">Discount</span>: <span id="receipt-discount-amount" class="font-semibold">0 Ks</span>
+              </p>
+              <p class="text-sm text-slate-700">
+                <span>Tax</span>: <span id="receipt-tax-amount" class="font-semibold">0 Ks</span>
+              </p>
+              <p id="receipt-grand-total" class="text-lg font-semibold text-slate-800 border-t border-slate-200 pt-2 mt-2"></p>
+
+              <div class="mt-4 space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-slate-700 mb-1" data-i18n="discount_type">Discount Type</label>
+                  <select id="checkout-discount-type" class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <option value="none">None</option>
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="amount">Fixed Amount (Ks)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-slate-700 mb-1" data-i18n="discount_value">Discount Value</label>
+                  <input
+                    type="number"
+                    id="checkout-discount-value"
+                    min="0"
+                    step="0.01"
+                    disabled
+                    class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:text-slate-500"
+                  />
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-slate-700 mb-2" data-i18n="payment_method">Payment Method</label>
+                  <input type="hidden" id="payment-method" value="cash" />
+                  <div id="payment-method-toggle" class="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      data-payment-method="cash"
+                      class="payment-method-btn px-3 py-3 rounded-md border-2 border-emerald-500 bg-emerald-50 text-emerald-900 font-semibold text-sm hover:bg-emerald-100"
+                      aria-pressed="true"
+                    >
+                      💵 Cash
+                    </button>
+                    <button
+                      type="button"
+                      data-payment-method="mobile_money"
+                      class="payment-method-btn px-3 py-3 rounded-md border-2 border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
+                      aria-pressed="false"
+                    >
+                      📱 Mobile Money
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-slate-700 mb-1" data-i18n="amount_tendered">Amount Tendered</label>
+                  <input
+                    type="number"
+                    id="amount-tendered"
+                    min="0"
+                    step="0.01"
+                    class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                <p class="text-sm text-slate-700">
+                  <span data-i18n="change">Change</span>:
+                  <span id="change-amount" class="font-semibold">0 Ks</span>
+                </p>
+                <button
+                  type="button"
+                  id="btn-process-payment"
+                  class="w-full py-3 bg-emerald-600 text-white font-medium rounded-md hover:bg-emerald-700"
+                >
+                  <span data-i18n="confirm_payment">Confirm Payment</span>
+                </button>
+              </div>
+            </div>
+            <p id="receipt-placeholder" class="text-slate-500 text-sm leading-relaxed" data-i18n="select_table_or_takeaway_hint">
+              Select a table or takeaway order to process payment.
+            </p>
+          </div>
+        </section>
       </div>
     </div>
 

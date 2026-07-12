@@ -170,7 +170,7 @@ Paid/completed orders only. `total == cash + mobile_money`.
 - Does **not** include order-level `breakdown_*` fields
 - `OrderItemDetail` includes `unit_tax_at_sale` only (not full pricing snapshots)
 
-Use **`GET /api/orders/{id}/details`** for waiter sidebar breakdown.
+Use **`GET /api/orders/{id}/details`** for waiter active-order modal / cart breakdown.
 
 ---
 

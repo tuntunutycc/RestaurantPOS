@@ -28,7 +28,7 @@ List endpoints (`OrderResponseDetail`) do **not** include order-level breakdown 
 
 Cart summary: `#cart-subtotal`, `#cart-discount-row`, `#cart-discount-total`, `#cart-tax-total`, `#cart-grand-total`.
 
-Footer layout (`#cart-footer`): price breakdown then `#submit-order`. Zone/table UI in `#table-selection-panel` below the footer.
+Footer layout (`#cart-footer`): price breakdown then `#submit-order`. Floor UI (`#table-selection-panel`) is in `#waiter-pane-floor` (see two-pane layout).
 
 ## Tests
 

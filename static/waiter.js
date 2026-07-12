@@ -668,26 +668,25 @@ function renderTableCards() {
       const tableName = tableLabel(table || { id: tableId });
       const isOccupied = String(table?.status || '').toLowerCase() === 'occupied';
       currentView = 'tables';
-      selectedTableId = tableId;
-      renderTableCards();
-      renderSelectedTableLabel();
-      renderCart();
       if (isOccupied) {
+        // View existing order in modal — do not override new-order cart context.
         openTableDetailsSidebar(tableId, tableName).catch((err) => {
           console.error(err);
           showError(err.message || t('load_failed', 'Load Failed'));
         });
-      } else {
-        setActiveOrderContext({
-          type: 'dine_in',
-          table_id: tableId,
-          customer_name: null,
-          title: tableName,
-        });
-        renderSelectedTableLabel();
-        renderCart();
-        focusCartSidebar();
+        return;
       }
+      selectedTableId = tableId;
+      renderTableCards();
+      setActiveOrderContext({
+        type: 'dine_in',
+        table_id: tableId,
+        customer_name: null,
+        title: tableName,
+      });
+      renderSelectedTableLabel();
+      renderCart();
+      focusCartSidebar();
     });
   });
   renderSelectedTableLabel();
@@ -1493,10 +1492,10 @@ function isConfirmAccepted(result) {
 }
 
 function openDetailsSidebar() {
-  const backdrop = document.getElementById('waiter-table-details-backdrop');
-  const sidebar = document.getElementById('waiter-table-details-sidebar');
+  const backdrop = document.getElementById('active-order-modal-backdrop');
+  const modal = document.getElementById('active-order-modal');
   if (backdrop) backdrop.classList.remove('hidden');
-  if (sidebar) sidebar.classList.remove('translate-x-full');
+  if (modal) modal.classList.remove('hidden');
   tableDetailsOpen = true;
 }
 
@@ -1514,10 +1513,14 @@ function updateOrderDetailsAddMoreButton() {
 }
 
 function closeDetailsSidebar() {
-  const backdrop = document.getElementById('waiter-table-details-backdrop');
-  const sidebar = document.getElementById('waiter-table-details-sidebar');
+  const backdrop = document.getElementById('active-order-modal-backdrop');
+  const modal = document.getElementById('active-order-modal');
+  const content = document.getElementById('waiter-table-details-content');
   if (backdrop) backdrop.classList.add('hidden');
-  if (sidebar) sidebar.classList.add('translate-x-full');
+  if (modal) modal.classList.add('hidden');
+  if (content) {
+    content.innerHTML = `<p class="text-slate-500">${escapeHtml(t('select_occupied_table', 'Select an occupied table.'))}</p>`;
+  }
   tableDetailsOpen = false;
   tableDetailsOrderId = null;
   tableDetailsTableName = '';
@@ -1995,13 +1998,30 @@ if (
     const walkInBtn = document.getElementById('btn-walk-in-takeaway');
     if (walkInBtn) walkInBtn.addEventListener('click', startWalkInTakeaway);
     const closeBtn = document.getElementById('waiter-table-details-close');
+    const closeBtnHeader = document.getElementById('active-order-modal-close');
     const addMoreBtn = document.getElementById('waiter-table-details-add-more');
     const clearContextBtn = document.getElementById('cart-clear-context');
-    const backdrop = document.getElementById('waiter-table-details-backdrop');
+    const backdrop = document.getElementById('active-order-modal-backdrop');
     if (closeBtn) closeBtn.addEventListener('click', closeDetailsSidebar);
+    if (closeBtnHeader) closeBtnHeader.addEventListener('click', closeDetailsSidebar);
     if (addMoreBtn) addMoreBtn.addEventListener('click', activateContextFromOrderDetails);
     if (clearContextBtn) clearContextBtn.addEventListener('click', clearCartAndContext);
     if (backdrop) backdrop.addEventListener('click', closeDetailsSidebar);
+    document.querySelectorAll('.close-modal-btn').forEach((btn) => {
+      if (btn === closeBtn || btn === closeBtnHeader) return;
+      btn.addEventListener('click', closeDetailsSidebar);
+    });
+    // Prevent clicks inside the modal panel from closing via backdrop bubbling.
+    const modalPanel = document.querySelector('#active-order-modal > div');
+    if (modalPanel) {
+      modalPanel.addEventListener('click', (event) => event.stopPropagation());
+    }
+    const modalRoot = document.getElementById('active-order-modal');
+    if (modalRoot) {
+      modalRoot.addEventListener('click', (event) => {
+        if (event.target === modalRoot) closeDetailsSidebar();
+      });
+    }
     updateOrderDetailsAddMoreButton();
     updateCartUIContext();
     connectWebSocket();

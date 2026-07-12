@@ -261,6 +261,8 @@ let selectedTableNumber = null;
 let selectedOrderTotal = 0;
 let selectedOrderSubtotal = 0;
 let selectedOrderVisibleItems = [];
+/** @type {{ type: 'table'|'takeaway', id: number }|null} */
+let cashierCheckoutSource = null;
 let cashierZones = [];
 let cashierActiveZoneId = null;
 let hourlyChart = null;
@@ -1433,7 +1435,11 @@ function renderCashierTablesGrid() {
           data-cashier-table-id="${table.id}"
           data-cashier-table-name="${escapeHtml(cashierTableName(table))}"
           data-cashier-table-status="${escapeHtml(table.status)}"
-          class="cashier-table-card border-2 rounded-md p-2 text-left ${color} hover:shadow"
+          class="cashier-table-card border-2 rounded-md p-2 text-left ${color} hover:shadow ${
+            cashierCheckoutSource?.type === 'table' && Number(cashierCheckoutSource.id) === Number(table.id)
+              ? 'ring-2 ring-blue-600 ring-offset-1'
+              : ''
+          }"
         >
           <div class="font-medium text-slate-800 text-sm">${escapeHtml(cashierTableName(table))}</div>
           <div class="${statusTypography}">${escapeHtml(statusLabel)}</div>
@@ -1453,7 +1459,7 @@ function renderCashierTablesGrid() {
       }
       try {
         const order = await fetchActiveOrderByTable(tableId);
-        selectOrder(order);
+        selectOrder(order, { type: 'table', id: tableId });
       } catch (e) {
         await dialogAlert(e.message || `${t('no_active_order_for_table', 'No active order found for this table.')}`, 'error', t('load_failed', 'Load Failed'));
       }
@@ -1481,7 +1487,11 @@ function renderTakeawayOrders(orders) {
       <button
         type="button"
         data-takeaway-order-id="${o.id}"
-        class="w-full text-left border border-orange-200 rounded-md p-2 bg-orange-50 hover:bg-orange-100"
+        class="w-full text-left border border-orange-200 rounded-md p-2 bg-orange-50 hover:bg-orange-100 ${
+          cashierCheckoutSource?.type === 'takeaway' && Number(cashierCheckoutSource.id) === Number(o.id)
+            ? 'ring-2 ring-orange-500 ring-offset-1'
+            : ''
+        }"
       >
         <div class="flex items-center justify-between gap-2">
           <span class="text-sm font-medium text-orange-800">${escapeHtml(cashierOrderDisplayLabel(o))}</span>
@@ -1500,7 +1510,7 @@ function renderTakeawayOrders(orders) {
     btn.addEventListener('click', () => {
       const orderId = Number(btn.getAttribute('data-takeaway-order-id'));
       const order = takeawayOrders.find((o) => Number(o.id) === orderId);
-      if (order) selectOrder(order);
+      if (order) selectOrder(order, { type: 'takeaway', id: orderId });
     });
   });
 }
@@ -1546,8 +1556,13 @@ function clearCheckoutSelection() {
   selectedOrderTotal = 0;
   selectedOrderSubtotal = 0;
   selectedOrderVisibleItems = [];
+  cashierCheckoutSource = null;
   document.getElementById('receipt-container')?.classList.add('hidden');
   document.getElementById('receipt-placeholder')?.classList.remove('hidden');
+  if (cashierZones.length) renderCashierTablesGrid();
+  document.querySelectorAll('#cashier-takeaway-orders [data-takeaway-order-id]').forEach((btn) => {
+    btn.classList.remove('ring-2', 'ring-orange-500', 'ring-offset-1');
+  });
 }
 
 function handleRemoteOrderClosed(data) {
@@ -1565,17 +1580,26 @@ function handleRemoteOrderClosed(data) {
   }
 }
 
-function selectOrder(order) {
+function selectOrder(order, source = null) {
   if (!order) return;
   selectedOrderId = order.id;
   selectedTableNumber = order.table_number;
+  if (source?.type && source?.id != null) {
+    cashierCheckoutSource = { type: source.type, id: Number(source.id) };
+  } else if (String(order.order_type || '').toLowerCase() === 'takeaway') {
+    cashierCheckoutSource = { type: 'takeaway', id: Number(order.id) };
+  } else if (order.table_id != null) {
+    cashierCheckoutSource = { type: 'table', id: Number(order.table_id) };
+  } else {
+    cashierCheckoutSource = null;
+  }
   const visibleItems = (order.items || []).filter((i) => String(i?.item_status || '').toLowerCase() !== 'cancelled');
   selectedOrderVisibleItems = visibleItems;
   selectedOrderSubtotal = visibleItems.reduce((sum, i) => sum + (Number(i.subtotal) || 0), 0);
   selectedOrderTotal = selectedOrderSubtotal;
-  document.getElementById('receipt-placeholder').classList.add('hidden');
+  document.getElementById('receipt-placeholder')?.classList.add('hidden');
   const container = document.getElementById('receipt-container');
-  container.classList.remove('hidden');
+  if (container) container.classList.remove('hidden');
   const checkoutHeaderEl = document.getElementById('checkout-header');
   if (checkoutHeaderEl) {
     checkoutHeaderEl.textContent = `${t('checkout', 'Checkout')} - ${cashierOrderDisplayLabel(order)}`;
@@ -1586,15 +1610,17 @@ function selectOrder(order) {
         `<tr><td class="py-1">${escapeHtml(i.menu_item_name)}</td><td class="py-1 text-right">${i.quantity}</td><td class="py-1 text-right">${formatMoney(Number(i.subtotal))}</td></tr>`
     )
     .join('');
-  document.getElementById('receipt-content').innerHTML = `
+  const receiptContent = document.getElementById('receipt-content');
+  if (receiptContent) {
+    receiptContent.innerHTML = `
     <table class="w-full text-sm text-slate-700">
       <thead><tr class="border-b border-slate-200"><th class="text-left py-1">${escapeHtml(t('item', 'Item'))}</th><th class="text-right py-1">${escapeHtml(t('qty', 'Qty'))}</th><th class="text-right py-1">${escapeHtml(t('subtotal', 'Subtotal'))}</th></tr></thead>
       <tbody>${itemsRows}</tbody>
     </table>
   `;
+  }
   const servedByEl = document.getElementById('receipt-served-by');
   if (servedByEl) servedByEl.textContent = orderServedByLabel(order);
-  // Reset payment inputs for this order
   const amountInput = document.getElementById('amount-tendered');
   const changeSpan = document.getElementById('change-amount');
   const discountTypeSelect = document.getElementById('checkout-discount-type');
@@ -1608,6 +1634,15 @@ function selectOrder(order) {
   }
   setCheckoutPaymentMethod('cash');
   recalculateCheckoutTotals();
+  if (cashierZones.length) renderCashierTablesGrid();
+  document.querySelectorAll('#cashier-takeaway-orders [data-takeaway-order-id]').forEach((btn) => {
+    const id = Number(btn.getAttribute('data-takeaway-order-id'));
+    const active = cashierCheckoutSource?.type === 'takeaway' && Number(cashierCheckoutSource.id) === id;
+    btn.classList.toggle('ring-2', active);
+    btn.classList.toggle('ring-orange-500', active);
+    btn.classList.toggle('ring-offset-1', active);
+  });
+  document.getElementById('pane-checkout')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderReceiptForPrint(order) {

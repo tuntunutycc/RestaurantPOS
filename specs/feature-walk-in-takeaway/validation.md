@@ -20,8 +20,8 @@ PYTHONPATH=. pytest -q
 
 ## Manual
 - [ ] `[ + Walk-in Takeaway ]` prompts for optional customer name, then opens cart without table
-- [ ] Click active takeaway card → order details sidebar (items list, same as occupied table)
-- [ ] Cancel unserved item from takeaway sidebar → item cancelled; list refreshes
+- [ ] Click active takeaway card → active-order modal (items list, same as occupied table)
+- [ ] Cancel unserved item from takeaway active-order modal → item cancelled; list refreshes
 - [ ] **Add More Items** → append mode → submit add-on → single receipt at cashier
 
 ## Evidence

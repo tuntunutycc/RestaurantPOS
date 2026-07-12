@@ -14,8 +14,8 @@ PYTHONPATH=. pytest -q
 | 3 | Checkout excludes cancelled lines from total | Net total correct |
 
 ## Manual
-- [ ] Occupied table → cancel pending item in sidebar
-- [ ] Active takeaway card → same sidebar → cancel pending item
+- [ ] Occupied table → cancel pending item in active-order modal
+- [ ] Active takeaway card → same modal → cancel pending item
 - [ ] No "Cancel Entire Order" button on waiter or cashier
 
 ## Evidence

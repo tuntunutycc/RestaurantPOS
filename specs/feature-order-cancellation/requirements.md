@@ -24,13 +24,13 @@ When the waiter cancels items one-by-one and the **last active line** is cancell
 - Root order transitions to `status = cancelled`
 - **Dine-in:** linked table becomes `available`; table grid refreshes
 - **Takeaway:** order is removed from active takeaway lists immediately (API + WebSocket)
-- Waiter sidebar/cart bound to that order closes without page refresh
+- Waiter active-order modal / cart bound to that order closes without page refresh
 
 ## FR-C1: Dine-in parity
-Occupied table → order details sidebar → per-item **Cancel Item** for non-cancelled lines.
+Occupied table → **active-order modal** → per-item **Cancel Item** for non-cancelled lines.
 
 ## FR-C2: Walk-in takeaway parity
-Active takeaway card → order details sidebar (same component as dine-in) → per-item **Cancel Item** with identical confirmation and API call.
+Active takeaway card → **active-order modal** (same component as dine-in) → per-item **Cancel Item** with identical confirmation and API call.
 
 ## FR-C3: No whole-order cancel button (UI)
 Waiter and Cashier UIs do **not** expose a separate "Cancel Entire Order" control. Staff use item-level cancel only.

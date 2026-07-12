@@ -18,17 +18,18 @@ Each cart row shows an item-level breakdown when discount or tax applies: `Base 
 Updates **in real time** when quantity changes or the 🛍️ Takeaway checkbox toggles (base/tax may change).
 
 ## FR-WB1b: Cart sidebar layout (cart-first)
-Vertical order in `#cart-sidebar` (`waiter.html`):
+Vertical order in the **left pane** cart block (`#cart-sidebar` in `waiter.html`):
 
 1. **Cart line items** (`#cart-list`)
 2. **Price breakdown** (`#cart-summary`) — Subtotal, Total Discount, Tax, Grand Total
-3. **Submit Order** (`#submit-order`) — full-width CTA directly below the breakdown (`#cart-footer`, `flex flex-col gap-4`)
-4. **Zone & table selection** (`#table-selection-panel`) — zone tabs, walk-in takeaway, table grid, active takeaways, selected label — at the **bottom** of the sidebar
+3. **Submit Order** (`#submit-order`) — full-width CTA directly below the breakdown (`#cart-footer`)
 
-Rationale: waiters add items from the menu (left), then immediately see totals and submit; table/destination picker stays accessible below without pushing the bill out of view. Submit still requires a valid order context (table or takeaway) via existing JS validation.
+Zone / table / takeaway selection lives in the **right floor pane** (`#waiter-pane-floor`). See `specs/feature-waiter-two-pane-layout/`.
 
-## FR-WB2: Active order sidebar
-When viewing an occupied table or active takeaway order (`GET /api/orders/{id}/details`), the summary shows the same **4-line** breakdown using **server-calculated** fields:
+Rationale: waiters add items and review totals next to the menu; table destination is chosen on the floor pane. Occupied-order details open in a modal and do not replace the cart.
+
+## FR-WB2: Active order modal
+When viewing an occupied table or active takeaway order (`GET /api/orders/{id}/details`) in `#active-order-modal`, the summary shows the same **4-line** breakdown using **server-calculated** fields:
 
 | Response field | Meaning |
 |----------------|---------|

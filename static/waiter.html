@@ -20,25 +20,22 @@
       </button>
     </div>
 
-    <div class="grid md:grid-cols-2 gap-4 md:gap-6">
-      <!-- Menu: sticky category tabs + grid -->
-      <div>
-        <h2 class="text-lg font-semibold text-slate-700 mb-3" data-i18n="menu">Menu</h2>
-        <!-- Sticky category tab bar -->
-        <div class="sticky top-0 z-10 bg-slate-50 pb-2 -mx-1 mb-3 overflow-x-auto">
-          <div id="category-tabs" class="flex gap-1 min-w-max">
-            <!-- All / အားလုံး and category tabs rendered by JS -->
+    <div id="waiter-main-grid" class="grid md:grid-cols-2 gap-4 md:gap-6 items-start">
+      <!-- Pane 1: Menu + Cart (new order taking) -->
+      <section id="waiter-pane-menu" class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 md:p-4 space-y-4 min-h-[70vh]">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-700 mb-3" data-i18n="menu">Menu</h2>
+          <div class="sticky top-0 z-10 bg-emerald-50/90 pb-2 -mx-1 mb-3 overflow-x-auto rounded-md">
+            <div id="category-tabs" class="flex gap-1 min-w-max">
+              <!-- All / category tabs rendered by JS -->
+            </div>
+          </div>
+          <div id="menu-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3">
+            <p class="col-span-full text-slate-500" data-i18n="loading_menu">Loading menu…</p>
           </div>
         </div>
-        <div id="menu-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-3">
-          <p class="col-span-full text-slate-500" data-i18n="loading_menu">Loading menu…</p>
-        </div>
 
-      </div>
-
-      <!-- Cart -->
-      <div>
-        <div id="cart-sidebar" class="bg-white rounded-lg shadow p-4 sticky top-4 flex flex-col">
+        <div id="cart-sidebar" class="bg-white rounded-lg shadow p-4 sticky top-4 flex flex-col border border-emerald-100">
           <div class="flex items-start justify-between gap-3 mb-3">
             <div>
               <h2 class="text-lg font-semibold text-slate-700" data-i18n="cart">Cart</h2>
@@ -82,55 +79,81 @@
               <span data-i18n="submit_order">Submit Order</span>
             </button>
           </div>
-          <div id="table-selection-panel" class="border-t border-slate-200 mt-4 pt-4">
-            <h3 class="text-sm font-semibold text-slate-700 mb-2" data-i18n="zone_table_selection">Zone & Table Selection</h3>
-            <div class="mb-3 overflow-x-auto">
-              <div id="zone-tabs" class="flex gap-1 min-w-max"></div>
-            </div>
-            <button
-              type="button"
-              id="btn-walk-in-takeaway"
-              class="w-full mb-3 py-2.5 rounded-md border-2 border-dashed border-orange-400 bg-orange-50 text-orange-800 font-semibold text-sm hover:bg-orange-100 transition"
-            >
-              [ + Walk-in Takeaway ]
-            </button>
-            <div id="table-cards" class="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2 mb-3">
-              <p class="col-span-full text-slate-500" data-i18n="loading_tables">Loading tables…</p>
-            </div>
-            <div id="takeaway-view" class="mb-3 hidden">
-              <h4 class="text-sm font-semibold text-slate-700 mb-2">🛍️ <span data-i18n="active_takeaway_orders">Active Takeaway Orders</span></h4>
-              <div id="takeaway-orders-list" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <p class="text-slate-500 text-sm" data-i18n="no_active_takeaway_orders">No active takeaway orders.</p>
-              </div>
-            </div>
-            <div id="selected-table-label" class="text-sm text-slate-600">
-              <span data-i18n="selected">Selected</span>: <span class="font-medium" data-i18n="none">None</span>
+        </div>
+      </section>
+
+      <!-- Pane 2: Tables & Active Takeaways -->
+      <section id="waiter-pane-floor" class="rounded-xl border border-rose-100 bg-rose-50/60 p-3 md:p-4 min-h-[70vh]">
+        <div id="table-selection-panel">
+          <h2 class="text-lg font-semibold text-slate-700 mb-2" data-i18n="zone_table_selection">Zone & Table Selection</h2>
+          <div class="mb-3 overflow-x-auto">
+            <div id="zone-tabs" class="flex gap-1 min-w-max"></div>
+          </div>
+          <button
+            type="button"
+            id="btn-walk-in-takeaway"
+            class="w-full mb-3 py-2.5 rounded-md border-2 border-dashed border-orange-400 bg-orange-50 text-orange-800 font-semibold text-sm hover:bg-orange-100 transition"
+          >
+            [ + Walk-in Takeaway ]
+          </button>
+          <div id="table-cards" class="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-8 gap-2 mb-3">
+            <p class="col-span-full text-slate-500" data-i18n="loading_tables">Loading tables…</p>
+          </div>
+          <div id="takeaway-view" class="mb-3 hidden">
+            <h4 class="text-sm font-semibold text-slate-700 mb-2">🛍️ <span data-i18n="active_takeaway_orders">Active Takeaway Orders</span></h4>
+            <div id="takeaway-orders-list" class="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <p class="text-slate-500 text-sm" data-i18n="no_active_takeaway_orders">No active takeaway orders.</p>
             </div>
           </div>
+          <div id="selected-table-label" class="text-sm text-slate-600 bg-white/70 rounded-md px-3 py-2 border border-rose-100">
+            <span data-i18n="selected">Selected</span>: <span class="font-medium" data-i18n="none">None</span>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
   </div>
 
-  <!-- Table Details Sidebar -->
-  <div id="waiter-table-details-backdrop" class="fixed inset-0 bg-black/40 hidden z-40"></div>
-  <aside id="waiter-table-details-sidebar" class="fixed top-0 right-0 h-full w-full sm:w-[420px] bg-white shadow-2xl transform translate-x-full transition-transform duration-200 z-50">
-    <div class="h-full flex flex-col">
-      <div class="p-4 border-b border-slate-200 flex items-center justify-between">
-        <div>
-          <h2 class="text-lg font-semibold text-slate-800" data-i18n="table_details">Table Details</h2>
-          <p id="waiter-table-details-subtitle" class="text-sm text-slate-500">Table</p>
+  <!-- Active Order Pop-out Modal (occupied table / active takeaway) -->
+  <div id="active-order-modal-backdrop" class="fixed inset-0 bg-black/40 hidden z-40" aria-hidden="true"></div>
+  <div
+    id="active-order-modal"
+    class="fixed inset-0 hidden z-50 flex items-center justify-center p-4"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="active-order-modal-title"
+  >
+    <div class="w-full max-w-lg max-h-[90vh] bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col">
+      <div class="p-4 border-b border-slate-200 flex items-start justify-between gap-3 shrink-0">
+        <div class="min-w-0">
+          <h2 id="active-order-modal-title" class="text-lg font-semibold text-slate-800" data-i18n="table_details">Table Details</h2>
+          <p id="waiter-table-details-subtitle" class="text-sm text-slate-500 truncate">Table</p>
         </div>
-        <div class="flex items-center gap-2">
-          <button id="waiter-table-details-add-more" type="button" class="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm" data-i18n="add_more_items">Add More Items</button>
-          <button id="waiter-table-details-close" type="button" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700" data-i18n="close">Close</button>
+        <div class="flex items-center gap-2 shrink-0">
+          <button id="waiter-table-details-add-more" type="button" class="px-2.5 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-sm" data-i18n="add_more_items">Add More Items</button>
+          <button
+            id="active-order-modal-close"
+            type="button"
+            class="close-modal-btn px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold"
+            aria-label="Close"
+          >
+            ✖ Close
+          </button>
         </div>
       </div>
       <div id="waiter-table-details-content" class="flex-1 overflow-y-auto p-4 space-y-3">
         <p class="text-slate-500" data-i18n="select_occupied_table">Select an occupied table.</p>
       </div>
+      <div class="p-3 border-t border-slate-200 bg-slate-50 shrink-0">
+        <button
+          id="waiter-table-details-close"
+          type="button"
+          class="close-modal-btn w-full py-2.5 rounded-md border border-slate-300 bg-white text-slate-800 font-medium hover:bg-slate-100"
+        >
+          ✖ <span data-i18n="close">Close</span>
+        </button>
+      </div>
     </div>
-  </aside>
+  </div>
 
   <!-- Modifier & Special Instructions Modal -->
   <div id="modifier-modal-backdrop" class="fixed inset-0 bg-black/40 hidden z-40"></div>

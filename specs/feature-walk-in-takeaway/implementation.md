@@ -25,8 +25,8 @@ order = db.query(Order).filter(
 |---------|------|-------|
 | Walk-in button | `waiter.html` `#btn-walk-in-takeaway` | Near table grid |
 | Walk-in context | `waiter.js` `startWalkInTakeaway()` | `table_id: null`, `walk_in: true` |
-| Append context | `waiter.js` `activateContextFromOrderDetails()` | **Add More Items** from order details sidebar |
-| View active takeaway | `waiter.js` `openOrderDetails()` | Click takeaway card → same sidebar as occupied table |
+| Append context | `waiter.js` `activateContextFromOrderDetails()` | **Add More Items** from active-order modal |
+| View active takeaway | `waiter.js` `openOrderDetails()` | Click takeaway card → same `#active-order-modal` as occupied table |
 | Submit append | `waiter.js` `bindSubmitOrder()` | sends `order_id` when `append_mode` |
 | Cart default pricing | `waiter.js` `defaultCartLineTakeaway()` | true when walk-in / append / takeaway |
 | Cashier list | `counter.js` | `🛍️ Takeaway #id` |
