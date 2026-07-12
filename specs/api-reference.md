@@ -122,12 +122,17 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 
 | Method | Path |
 |--------|------|
-| POST/PUT | `/api/orders/{order_id}/checkout` |
+| POST/PUT | `/api/orders/{order_id}/checkout` | `OrderCheckoutResponse` |
 
 **Checkout body (`OrderCheckoutRequest`):**
 - `payment_method` — **required**; `cash` \| `mobile_money` (aliases like `Cash`, `Mobile Money` normalized server-side)
 - `amount_tendered` — float, must be ≥ final total
 - optional `discount_type` (`percentage`|`amount`), `discount_value`
+- `issue_receipt` — bool, default `true`; when true, server attempts LAN/file receipt print after payment commit
+
+**Checkout response (`OrderCheckoutResponse`):** same fields as `OrderResponseDetail` plus optional `warning` (e.g. printer offline). Payment success is always reflected by HTTP 200 + `status=paid`; print failures do not roll back checkout.
+
+**Admin printers:** `GET/PUT /api/admin/kitchen-printers` routes include `drinks`, `food`, and **`cashier`** (receipt printer). Env fallbacks: `PRINTER_*_HOST` / `PRINTER_*_PORT`; receipt header uses `SHOP_NAME`.
 
 ---
 

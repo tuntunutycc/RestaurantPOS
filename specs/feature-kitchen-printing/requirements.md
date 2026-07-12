@@ -70,7 +70,8 @@ Each ticket must include:
 
 ### FR-8: Extensible Route Registry
 - Route registry must be data-driven (not hardcoded only in dispatch calls).
-- v1 registers `drinks` and `food`.
+- Kitchen category routes: `drinks`, `food`.
+- Print endpoints also include **`cashier`** for checkout receipts (see `specs/feature-cashier-receipt-printing/`).
 - Future routes can be added via registry + env without rewriting order logic.
 
 ### FR-9: Image Rendering Mode for Myanmar Tickets

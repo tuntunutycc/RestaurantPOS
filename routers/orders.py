@@ -1,6 +1,7 @@
 """Orders API: create and manage orders."""
 
 import asyncio
+import logging
 from pydantic import BaseModel, field_validator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,10 +13,11 @@ from database import get_db
 from models import MenuItem, Order, OrderItem, Table, User
 from rbac import CHECKOUT_ROLES, POS_ORDER_ROLES
 from services.printing.routes import resolve_printer_route
-from services.printing.service import dispatch_kitchen_ticket
+from services.printing.service import dispatch_cashier_receipt, dispatch_kitchen_ticket
 from schemas import (
     ActiveTakeawayOrderResponse,
     OrderCheckoutRequest,
+    OrderCheckoutResponse,
     OrderCreateResponse,
     OrderCreate,
     OrderDetailsResponse,
@@ -30,6 +32,7 @@ from schemas import (
 )
 
 router = APIRouter(prefix="/api")
+logger = logging.getLogger(__name__)
 
 OPEN_ORDER_STATUSES = ("open", "dining")
 DELETED_ITEM_LABEL = "[Deleted Item]"
@@ -1142,6 +1145,7 @@ async def submit_order(
                     item_ticket,
                     order_type=getattr(order, "order_type", "dine_in"),
                     customer_name=getattr(order, "customer_name", None),
+                    db=db,
                 )
                 for printer_route, item_ticket in item_print_jobs
             ],
@@ -1169,8 +1173,8 @@ async def submit_order(
     )
 
 
-@router.post("/orders/{order_id}/checkout", response_model=OrderResponseDetail)
-@router.put("/orders/{order_id}/checkout", response_model=OrderResponseDetail)
+@router.post("/orders/{order_id}/checkout", response_model=OrderCheckoutResponse)
+@router.put("/orders/{order_id}/checkout", response_model=OrderCheckoutResponse)
 async def checkout_order(
     request: Request,
     order_id: int,
@@ -1185,12 +1189,13 @@ async def checkout_order(
     - Ensure final total is never below 0
     - Validate amount_tendered >= final total
     - Set status = 'paid' and store payment + discount details
-    - Return full receipt for cashier
+    - Optionally print LAN receipt when issue_receipt=true (print failures become warning)
     """
     order = (
         db.query(Order)
         .options(
             joinedload(Order.created_by),
+            joinedload(Order.table),
             joinedload(Order.order_items).joinedload(OrderItem.menu_item),
             joinedload(Order.order_items).joinedload(OrderItem.created_by),
         )
@@ -1264,4 +1269,65 @@ async def checkout_order(
         await manager.broadcast("order_completed", payload)
         if (order.order_type or "").strip().lower() == "takeaway":
             await manager.broadcast("takeaways_updated", payload)
-    return OrderResponseDetail.model_validate(order)
+
+    # Re-load relationships for receipt + response after commit.
+    order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.created_by),
+            joinedload(Order.table),
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
+        )
+        .filter(Order.id == order_id)
+        .first()
+    )
+    detail = OrderResponseDetail.model_validate(order)
+    warning: str | None = None
+    if body.issue_receipt:
+        try:
+            active_items = [
+                oi
+                for oi in (order.order_items or [])
+                if _normalized_item_status_value(getattr(oi, "item_status", None)) != "cancelled"
+            ]
+            receipt_items = [
+                {
+                    "name": (
+                        getattr(getattr(oi, "menu_item", None), "name", None)
+                        or DELETED_ITEM_LABEL
+                    ),
+                    "quantity": int(getattr(oi, "quantity", 1) or 1),
+                    "subtotal": float(getattr(oi, "subtotal", 0.0) or 0.0),
+                }
+                for oi in active_items
+            ]
+            order_type = (getattr(order, "order_type", None) or "dine_in").strip().lower()
+            if order_type == "takeaway":
+                customer = (getattr(order, "customer_name", None) or "").strip()
+                location_label = customer or f"Takeaway #{order.id}"
+            else:
+                table_name = getattr(getattr(order, "table", None), "name_or_number", None)
+                location_label = str(table_name) if table_name is not None else f"Table #{getattr(order, 'table_id', '')}"
+            created_at = getattr(order, "created_at", None)
+            created_at_str = created_at.isoformat(sep=" ", timespec="seconds") if created_at else None
+            await dispatch_cashier_receipt(
+                order_id=order.id,
+                served_by=detail.waiter_name,
+                location_label=location_label,
+                items=receipt_items,
+                subtotal=subtotal,
+                discount_amount=discount_amount,
+                tax_amount=_round_money(tax_amount),
+                grand_total=_round_money(final_total),
+                payment_method=body.payment_method,
+                amount_tendered=_round_money(tendered),
+                change_amount=_round_money(change),
+                created_at=created_at_str,
+                db=db,
+            )
+        except Exception as exc:
+            logger.error("Cashier receipt print failed for order %s: %s", order_id, exc)
+            warning = "Receipt printer offline or unreachable"
+
+    return OrderCheckoutResponse(**detail.model_dump(), warning=warning)

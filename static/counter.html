@@ -444,6 +444,15 @@
                   <span data-i18n="change">Change</span>:
                   <span id="change-amount" class="font-semibold">0 Ks</span>
                 </p>
+                <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    id="checkout-issue-receipt"
+                    checked
+                    class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span data-i18n="print_receipt">Print Receipt</span>
+                </label>
                 <button
                   type="button"
                   id="btn-process-payment"
@@ -492,7 +501,7 @@
               </select>
             </div>
           </div>
-          <div class="grid md:grid-cols-2 gap-4">
+          <div class="grid md:grid-cols-3 gap-4">
             <div class="border border-slate-200 rounded-md p-4 space-y-3">
               <h3 class="font-medium text-slate-700">Drinks printer</h3>
               <input type="text" id="printer-drinks-host" placeholder="LAN IP (e.g. 192.168.1.101)"
@@ -505,6 +514,13 @@
               <input type="text" id="printer-food-host" placeholder="LAN IP (e.g. 192.168.1.102)"
                 class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
               <input type="number" id="printer-food-port" placeholder="Port" min="1" max="65535" value="9100"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+            <div class="border border-slate-200 rounded-md p-4 space-y-3">
+              <h3 class="font-medium text-slate-700">Cashier receipt printer</h3>
+              <input type="text" id="printer-cashier-host" placeholder="LAN IP (e.g. 192.168.1.103)"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
+              <input type="number" id="printer-cashier-port" placeholder="Port" min="1" max="65535" value="9100"
                 class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
             </div>
           </div>
@@ -862,61 +878,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Printable receipt (hidden until checkout) -->
-  <div id="receipt-print" class="hidden print:block">
-    <div class="receipt-root bg-white p-4">
-      <h1 class="text-base font-bold text-slate-900 mb-2">My Restaurant Name</h1>
-      <p class="text-sm text-slate-700">
-        Table: <span id="rp-table"></span><br />
-        Served by: <span id="rp-served-by"></span><br />
-        Date: <span id="rp-datetime"></span>
-      </p>
-      <hr class="my-2" />
-      <div id="rp-items" class="text-sm text-slate-700"></div>
-      <hr class="my-2" />
-      <p class="text-sm text-slate-700">
-        Subtotal: <span id="rp-subtotal" class="font-semibold"></span>
-      </p>
-      <p class="text-sm text-slate-700">
-        Discount: <span id="rp-discount" class="font-semibold"></span>
-      </p>
-      <p class="text-sm text-slate-700">
-        Tax: <span id="rp-tax" class="font-semibold"></span>
-      </p>
-      <p class="text-sm text-slate-700">
-        Total: <span id="rp-total" class="font-semibold"></span>
-      </p>
-      <p class="text-sm text-slate-700">
-        Payment: <span id="rp-method"></span>
-      </p>
-      <p class="text-sm text-slate-700">
-        Amount Tendered: <span id="rp-tendered"></span>
-      </p>
-      <p class="text-sm text-slate-700">
-        Change: <span id="rp-change"></span>
-      </p>
-      <p class="text-sm text-slate-600 mt-3">Thank you!</p>
-    </div>
-  </div>
-
-  <style>
-    @media print {
-      body * {
-        visibility: hidden;
-      }
-      #receipt-print,
-      #receipt-print * {
-        visibility: visible;
-      }
-      #receipt-print {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-      }
-    }
-  </style>
 
   <script src="/auth.js"></script>
   <script src="/toast.js"></script>

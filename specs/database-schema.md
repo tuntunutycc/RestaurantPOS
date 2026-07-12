@@ -174,7 +174,7 @@ Singleton row `id=1`: `backend`, `render_mode`, `paper_width_px`.
 
 ## `printer_route_endpoints`
 
-PK `route_key`: LAN `host`, `port` per kitchen route.
+PK `route_key` (`drinks` | `food` | `cashier`): LAN `host`, `port` per print endpoint. Category routing uses only `drinks`/`food`; `cashier` is checkout receipts.
 
 ---
 

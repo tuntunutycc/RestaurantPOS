@@ -5,6 +5,7 @@
 (function () {
   const CONTAINER_ID = 'toast-container';
   const DURATION_MS = 500;
+  const ERROR_DURATION_MS = 4500;
   const FADE_OUT_MS = 100;
 
   function ensureContainer() {
@@ -31,11 +32,12 @@
           : 'bg-slate-700');
     toast.textContent = message;
     container.appendChild(toast);
+    const holdMs = type === 'error' ? ERROR_DURATION_MS : DURATION_MS;
     const t = setTimeout(() => {
       toast.style.opacity = '0';
       toast.style.transition = `opacity ${FADE_OUT_MS}ms`;
       setTimeout(() => toast.remove(), FADE_OUT_MS);
-    }, DURATION_MS);
+    }, holdMs);
     toast.addEventListener('click', () => {
       clearTimeout(t);
       toast.style.opacity = '0';

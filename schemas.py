@@ -49,6 +49,7 @@ StaffRole = Literal["root", "admin", "account", "cashier", "waiter"]
 AdminStaffRole = Literal["cashier", "waiter", "account"]
 RootAdminRole = Literal["admin"]
 PrinterRouteLiteral = Literal["drinks", "food"]
+PrinterEndpointRouteLiteral = Literal["drinks", "food", "cashier"]
 PrinterBackendLiteral = Literal["file", "escpos_network"]
 PrinterRenderModeLiteral = Literal["text", "image"]
 TableStatusLiteral = Literal["available", "occupied"]
@@ -143,17 +144,17 @@ class CategoryUpdate(BaseModel):
 
 
 class PrinterRouteEndpointResponse(BaseModel):
-    """LAN endpoint for one kitchen printer route."""
+    """LAN endpoint for one printer route (kitchen or cashier)."""
 
-    route_key: PrinterRouteLiteral
+    route_key: PrinterEndpointRouteLiteral
     host: str | None = None
     port: int = 9100
 
 
 class PrinterRouteEndpointUpdate(BaseModel):
-    """Update payload for one kitchen printer route endpoint."""
+    """Update payload for one printer route endpoint."""
 
-    route_key: PrinterRouteLiteral
+    route_key: PrinterEndpointRouteLiteral
     host: str | None = None
     port: int = Field(default=9100, ge=1, le=65535)
 
@@ -178,8 +179,8 @@ class KitchenPrinterSettingsUpdate(BaseModel):
     @model_validator(mode="after")
     def settings_must_be_valid(self):
         keys = {route.route_key for route in self.routes}
-        if keys != {"drinks", "food"}:
-            raise ValueError("routes must include exactly drinks and food")
+        if keys != {"drinks", "food", "cashier"}:
+            raise ValueError("routes must include exactly drinks, food, and cashier")
         if self.paper_width_px not in (384, 576):
             raise ValueError("paper_width_px must be 384 or 576")
         return self
@@ -640,6 +641,7 @@ class OrderCheckoutRequest(BaseModel):
     amount_tendered: float
     discount_type: Literal["percentage", "amount"] | None = None
     discount_value: float | None = 0.0
+    issue_receipt: bool = True
 
     @field_validator("payment_method", mode="before")
     @classmethod
@@ -650,6 +652,12 @@ class OrderCheckoutRequest(BaseModel):
         if raw in ("mobile_money", "mobilemoney"):
             return "mobile_money"
         raise ValueError("payment_method must be 'cash' or 'mobile_money'")
+
+
+class OrderCheckoutResponse(OrderResponseDetail):
+    """Checkout result: paid order payload plus optional receipt-print warning."""
+
+    warning: str | None = None
 
 
 class PaymentMethodTotalsResponse(BaseModel):

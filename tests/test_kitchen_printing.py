@@ -342,7 +342,7 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
     assert get_res.status_code == 200, get_res.text
     body = get_res.json()
     assert body["backend"] in ("file", "escpos_network")
-    assert len(body["routes"]) == 2
+    assert len(body["routes"]) == 3
 
     put_res = client.put(
         "/api/admin/kitchen-printers",
@@ -354,6 +354,7 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
             "routes": [
                 {"route_key": "drinks", "host": "192.168.1.101", "port": 9100},
                 {"route_key": "food", "host": "192.168.1.102", "port": 9100},
+                {"route_key": "cashier", "host": "192.168.1.103", "port": 9100},
             ],
         },
     )
@@ -364,8 +365,10 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
     assert updated["paper_width_px"] == 384
     drinks = next(r for r in updated["routes"] if r["route_key"] == "drinks")
     food = next(r for r in updated["routes"] if r["route_key"] == "food")
+    cashier = next(r for r in updated["routes"] if r["route_key"] == "cashier")
     assert drinks["host"] == "192.168.1.101"
     assert food["host"] == "192.168.1.102"
+    assert cashier["host"] == "192.168.1.103"
 
     waiter_res = client.get("/api/admin/kitchen-printers", headers=auth_headers("waiter"))
     assert waiter_res.status_code == 403

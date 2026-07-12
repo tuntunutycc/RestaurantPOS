@@ -1645,57 +1645,6 @@ function selectOrder(order, source = null) {
   document.getElementById('pane-checkout')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function renderReceiptForPrint(order) {
-  try {
-    const rpTable = document.getElementById('rp-table');
-    const rpServedBy = document.getElementById('rp-served-by');
-    const rpDatetime = document.getElementById('rp-datetime');
-    const rpItems = document.getElementById('rp-items');
-    const rpTotal = document.getElementById('rp-total');
-    const rpSubtotal = document.getElementById('rp-subtotal');
-    const rpDiscount = document.getElementById('rp-discount');
-    const rpTax = document.getElementById('rp-tax');
-    const rpMethod = document.getElementById('rp-method');
-    const rpTendered = document.getElementById('rp-tendered');
-    const rpChange = document.getElementById('rp-change');
-
-    if (rpTable) rpTable.textContent = cashierOrderDisplayLabel(order);
-    if (rpServedBy) rpServedBy.textContent = orderServedByLabel(order);
-    if (rpDatetime) rpDatetime.textContent = order.created_at ? new Date(order.created_at).toLocaleString() : '';
-    if (rpMethod) rpMethod.textContent = order.payment_method || '';
-    if (rpTendered) rpTendered.textContent = order.amount_tendered != null ? formatMoney(Number(order.amount_tendered)) : formatMoney(0);
-    if (rpChange) rpChange.textContent = order.change_amount != null ? formatMoney(Number(order.change_amount)) : formatMoney(0);
-
-    let subtotal = 0;
-    const visibleItems = (order.items || []).filter((i) => String(i?.item_status || '').toLowerCase() !== 'cancelled');
-    const rows = visibleItems
-      .map((item) => {
-        subtotal += Number(item.subtotal) || 0;
-        return `
-          <div class="flex justify-between gap-2">
-            <span class="flex-1">${escapeHtml(item.menu_item_name)}</span>
-            <span class="text-right">× ${item.quantity}</span>
-            <span class="text-right">${formatMoney(Number(item.subtotal))}</span>
-          </div>
-        `;
-      })
-      .join('');
-    subtotal = roundMoney(subtotal);
-    const discountType = String(order.discount_type || '').toLowerCase();
-    const discountValue = Number(order.discount_value) || 0;
-    const discountAmount = roundMoney(calculateOrderDiscountAmount(subtotal, discountType, discountValue));
-    const taxAmount = roundMoney(Number(order.tax_amount) || computeOrderLineTaxTotal(visibleItems));
-    if (rpItems) rpItems.innerHTML = rows || '<div class="text-sm text-slate-600">No items</div>';
-    if (rpSubtotal) rpSubtotal.textContent = formatMoney(subtotal);
-    if (rpDiscount) rpDiscount.textContent = formatMoneyNegative(discountAmount);
-    if (rpTax) rpTax.textContent = formatMoney(taxAmount);
-    if (rpTotal) rpTotal.textContent = formatMoney(Number(order.total_amount));
-  } catch (e) {
-    // Don't block checkout if printing fails.
-    console.error('Receipt print rendering failed:', e);
-  }
-}
-
 // Dynamic change calculation and payment processing
 const amountInputEl = document.getElementById('amount-tendered');
 const changeSpanEl = document.getElementById('change-amount');
@@ -1723,6 +1672,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
   const btn = document.getElementById('btn-process-payment');
   const amountInput = document.getElementById('amount-tendered');
   const paymentMethodInput = document.getElementById('payment-method');
+  const issueReceiptEl = document.getElementById('checkout-issue-receipt');
   const tendered = parseFloat((amountInput && amountInput.value) || '0');
   const { type: discountType, value: discountValue } = getCheckoutDiscountState();
   const currentFinalTotal = recalculateCheckoutTotals();
@@ -1737,6 +1687,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
   }
 
   const method = paymentMethodInput ? paymentMethodInput.value || 'cash' : 'cash';
+  const issueReceipt = issueReceiptEl ? !!issueReceiptEl.checked : true;
 
   btn.disabled = true;
   btn.textContent = t('processing', 'Processing...');
@@ -1749,6 +1700,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
         amount_tendered: tendered,
         discount_type: discountType === 'none' ? null : discountType,
         discount_value: discountType === 'none' ? 0 : discountValue,
+        issue_receipt: issueReceipt,
       }),
     });
     if (window.auth && window.auth.checkUnauthorized(res)) return;
@@ -1758,10 +1710,14 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
       return;
     }
     await dialogAlert(t('payment_success', 'Payment processed successfully.'), 'success', t('success', 'Success'));
-
-    // Populate printable receipt and trigger print
-    renderReceiptForPrint(data);
-    window.print();
+    if (data.warning && window.toast) {
+      window.toast.error(
+        t(
+          'receipt_printer_offline',
+          'Checkout successful, but receipt printer is offline!'
+        )
+      );
+    }
 
     clearCheckoutSelection();
     // Reload grid from backend after payment.
@@ -3442,6 +3398,8 @@ if (kitchenPrinterForm) {
     const drinksPort = Number(document.getElementById('printer-drinks-port')?.value || 9100);
     const foodHost = String(document.getElementById('printer-food-host')?.value || '').trim();
     const foodPort = Number(document.getElementById('printer-food-port')?.value || 9100);
+    const cashierHost = String(document.getElementById('printer-cashier-host')?.value || '').trim();
+    const cashierPort = Number(document.getElementById('printer-cashier-port')?.value || 9100);
     const payload = {
       backend,
       render_mode: renderMode,
@@ -3449,6 +3407,7 @@ if (kitchenPrinterForm) {
       routes: [
         { route_key: 'drinks', host: drinksHost || null, port: drinksPort || 9100 },
         { route_key: 'food', host: foodHost || null, port: foodPort || 9100 },
+        { route_key: 'cashier', host: cashierHost || null, port: cashierPort || 9100 },
       ],
     };
     try {
@@ -3491,14 +3450,19 @@ async function loadKitchenPrinterSettings() {
     const routeMap = Object.fromEntries((data.routes || []).map((r) => [r.route_key, r]));
     const drinks = routeMap.drinks || {};
     const food = routeMap.food || {};
+    const cashier = routeMap.cashier || {};
     const drinksHost = document.getElementById('printer-drinks-host');
     const drinksPort = document.getElementById('printer-drinks-port');
     const foodHost = document.getElementById('printer-food-host');
     const foodPort = document.getElementById('printer-food-port');
+    const cashierHost = document.getElementById('printer-cashier-host');
+    const cashierPort = document.getElementById('printer-cashier-port');
     if (drinksHost) drinksHost.value = drinks.host || '';
     if (drinksPort) drinksPort.value = drinks.port || 9100;
     if (foodHost) foodHost.value = food.host || '';
     if (foodPort) foodPort.value = food.port || 9100;
+    if (cashierHost) cashierHost.value = cashier.host || '';
+    if (cashierPort) cashierPort.value = cashier.port || 9100;
   } catch (err) {
     console.error(err);
   }

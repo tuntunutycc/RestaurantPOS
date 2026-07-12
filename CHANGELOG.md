@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-07-12 — System audit QA test plan
+
+### Summary
+Full automated baseline re-verified; added human E2E routine for System Analyst QA.
+
+### Spec
+- `specs/qa_test_plan.md`
+
+### Tests
+- `pytest`: 184 passed
+
+## 2026-07-12 — Cashier network receipt printing
+
+### Summary
+Checkout receipts print from the server over LAN (Pillow/ESC/POS image path shared with kitchen). Cashier UI **Print Receipt** (`issue_receipt`) gates printing; printer failures return `warning` without failing payment. Browser `window.print()` removed.
+
+### Spec
+- `specs/feature-cashier-receipt-printing/`
+- Updated `specs/tech-stack.md`, `specs/api-reference.md`, `specs/database-schema.md`
+
+### Backend / Frontend / Tests
+- `cashier` `PrinterRouteEndpoint`; `SHOP_NAME`; `OrderCheckoutResponse.warning`
+- Counter Print Receipt checkbox + toast; admin Cashier printer IP fields
+- `tests/test_cashier_receipt_printing.py`
+
 ## 2026-07-12 — Pre-E2E system audit (SDD sync)
 
 ### Summary

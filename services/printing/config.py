@@ -8,7 +8,13 @@ from typing import Literal
 PrinterBackendName = Literal["file", "escpos_network"]
 PrinterRenderModeName = Literal["text", "image"]
 DEFAULT_PRINTER_ROUTE = "food"
-KNOWN_PRINTER_ROUTES = frozenset({"drinks", "food"})
+CASHIER_PRINTER_ROUTE = "cashier"
+# Category menu routing (kitchen tickets only).
+CATEGORY_PRINTER_ROUTES = frozenset({"drinks", "food"})
+# All LAN/file endpoints seeded in PrinterRouteEndpoint.
+KNOWN_ENDPOINT_ROUTES = frozenset({"drinks", "food", "cashier"})
+# Backward-compatible alias used by older imports; prefer CATEGORY_PRINTER_ROUTES for kitchen.
+KNOWN_PRINTER_ROUTES = CATEGORY_PRINTER_ROUTES
 
 
 @dataclass(frozen=True)

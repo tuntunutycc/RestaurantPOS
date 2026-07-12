@@ -12,7 +12,7 @@ from schemas import (
     PrinterRouteEndpointResponse,
 )
 from rbac import ADMIN_PANEL_ROLES
-from services.printing.config import KNOWN_PRINTER_ROUTES
+from services.printing.config import KNOWN_ENDPOINT_ROUTES
 from services.printing.settings import seed_kitchen_printer_settings
 
 router = APIRouter(prefix="/api/admin")
@@ -24,7 +24,7 @@ def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
     endpoints = {
         row.route_key: row
         for row in db.query(PrinterRouteEndpoint)
-        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_PRINTER_ROUTES)))
+        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_ENDPOINT_ROUTES)))
         .all()
     }
     backend = (getattr(settings, "backend", None) or "file").strip().lower()
@@ -42,7 +42,7 @@ def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
             host=(endpoints[route_key].host or None) if route_key in endpoints else None,
             port=int(getattr(endpoints.get(route_key), "port", None) or 9100),
         )
-        for route_key in sorted(KNOWN_PRINTER_ROUTES)
+        for route_key in sorted(KNOWN_ENDPOINT_ROUTES)
     ]
     return KitchenPrinterSettingsResponse(
         backend=backend,
@@ -79,7 +79,7 @@ def update_kitchen_printer_settings(
     endpoints = {
         row.route_key: row
         for row in db.query(PrinterRouteEndpoint)
-        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_PRINTER_ROUTES)))
+        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_ENDPOINT_ROUTES)))
         .all()
     }
 

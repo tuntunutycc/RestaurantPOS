@@ -1,4 +1,4 @@
-"""Seed and load kitchen printer settings from database with env fallback."""
+"""Seed and load printer settings from database with env fallback."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from models import KitchenPrinterSettings, PrinterRouteEndpoint
 from services.printing.config import (
-    KNOWN_PRINTER_ROUTES,
+    KNOWN_ENDPOINT_ROUTES,
     PrinterBackendName,
     PrinterConfig,
     PrinterEndpoint,
@@ -45,10 +45,10 @@ def seed_kitchen_printer_settings(db: Session) -> None:
     existing_keys = {
         row.route_key
         for row in db.query(PrinterRouteEndpoint)
-        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_PRINTER_ROUTES)))
+        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_ENDPOINT_ROUTES)))
         .all()
     }
-    for route_key in sorted(KNOWN_PRINTER_ROUTES):
+    for route_key in sorted(KNOWN_ENDPOINT_ROUTES):
         if route_key not in existing_keys:
             db.add(PrinterRouteEndpoint(route_key=route_key, host=None, port=9100))
     db.commit()
@@ -91,12 +91,12 @@ def _load_printer_config_from_db(db: Session) -> PrinterConfig:
     endpoint_rows = {
         row.route_key: row
         for row in db.query(PrinterRouteEndpoint)
-        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_PRINTER_ROUTES)))
+        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_ENDPOINT_ROUTES)))
         .all()
     }
 
     routes: dict[str, PrinterEndpoint] = {}
-    for route in sorted(KNOWN_PRINTER_ROUTES):
+    for route in sorted(KNOWN_ENDPOINT_ROUTES):
         row = endpoint_rows.get(route)
         host = (getattr(row, "host", None) or "").strip() if row else ""
         if host:

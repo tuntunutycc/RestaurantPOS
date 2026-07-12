@@ -125,8 +125,8 @@ This POS system is currently built with:
   - reports still compute successfully,
   - UI/API fallback labels are returned for missing relations.
 
-## Kitchen Printing
-- Kitchen printing is a server-side side effect after successful order persistence.
+## Kitchen & Cashier Printing
+- Printing is a **server-side** side effect (kitchen after order submit; cashier receipt after checkout commit).
 - Supported backends:
   - `file` for local/dev validation without physical printers
   - `escpos_network` for LAN Xprinter/ESC/POS devices
@@ -134,8 +134,11 @@ This POS system is currently built with:
   - `text`: ESC/POS text payload (compatible fallback)
   - `image`: server-rendered raster image payload for Myanmar text compatibility
 - Image mode auto-loads bundled Myanmar and Latin fallback fonts from `assets/fonts/`, with `KITCHEN_PRINT_FONT_PATH` available only as an override.
+- Endpoint routes in `PrinterRouteEndpoint`: **`drinks`**, **`food`** (kitchen tickets), **`cashier`** (checkout receipts). Category `printer_route` remains drinks|food only.
+- Env seed/fallback hosts: `PRINTER_DRINKS_HOST`, `PRINTER_FOOD_HOST`, `PRINTER_CASHIER_HOST` (+ `_PORT`). Receipt shop header: `SHOP_NAME` (default `My Restaurant`).
 - Admin printer settings live in the counter menu management screen and are exposed through `GET/PUT /api/admin/kitchen-printers`.
-- Print failures must not roll back order submit.
+- Kitchen print failures must not roll back order submit. Cashier receipt print failures must not roll back checkout; API may return `warning`.
+- See `specs/feature-kitchen-printing/` and `specs/feature-cashier-receipt-printing/`.
 
 ## Test Strategy (required for SDD merge gate)
 - Introduce automated tests with a backend test runner (e.g., `pytest`) for each feature.

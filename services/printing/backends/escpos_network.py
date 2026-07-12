@@ -9,20 +9,49 @@ from services.printing.config import PrinterConfig, PrinterEndpoint
 
 logger = logging.getLogger(__name__)
 SOCKET_TIMEOUT_SECONDS = 5.0
+CASHIER_SOCKET_TIMEOUT_SECONDS = 3.0
 
 
-def _send_tcp(endpoint: PrinterEndpoint, payload: bytes) -> None:
+def _send_tcp(
+    endpoint: PrinterEndpoint,
+    payload: bytes,
+    *,
+    timeout_seconds: float = SOCKET_TIMEOUT_SECONDS,
+) -> None:
     with socket.create_connection(
         (endpoint.host, endpoint.port),
-        timeout=SOCKET_TIMEOUT_SECONDS,
+        timeout=timeout_seconds,
     ) as conn:
         conn.sendall(payload)
+
+
+def print_image_to_network(
+    endpoint: PrinterEndpoint,
+    escpos_payload: bytes,
+    *,
+    timeout_seconds: float = SOCKET_TIMEOUT_SECONDS,
+    route_label: str = "printer",
+) -> None:
+    """Send a pre-built ESC/POS payload to a LAN endpoint (generic helper)."""
+    try:
+        _send_tcp(endpoint, escpos_payload, timeout_seconds=timeout_seconds)
+    except OSError as exc:
+        logger.error(
+            "Network print failed for %s at %s:%s — %s",
+            route_label,
+            endpoint.host,
+            endpoint.port,
+            exc,
+        )
+        raise
 
 
 def send_network_ticket(
     config: PrinterConfig,
     route: str,
     escpos_payload: bytes,
+    *,
+    timeout_seconds: float | None = None,
 ) -> None:
     endpoint = config.routes.get(route)
     if endpoint is None:
@@ -30,14 +59,14 @@ def send_network_ticket(
             f"No LAN endpoint configured for printer route '{route}'. "
             f"Set PRINTER_{route.upper()}_HOST and PRINTER_{route.upper()}_PORT."
         )
-    try:
-        _send_tcp(endpoint, escpos_payload)
-    except OSError as exc:
-        logger.error(
-            "Kitchen print failed for route %s at %s:%s — %s",
-            route,
-            endpoint.host,
-            endpoint.port,
-            exc,
-        )
-        raise
+    effective_timeout = (
+        CASHIER_SOCKET_TIMEOUT_SECONDS
+        if route == "cashier" and timeout_seconds is None
+        else (timeout_seconds if timeout_seconds is not None else SOCKET_TIMEOUT_SECONDS)
+    )
+    print_image_to_network(
+        endpoint,
+        escpos_payload,
+        timeout_seconds=effective_timeout,
+        route_label=route,
+    )
