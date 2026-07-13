@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-13 — Fix ghost table named "None" on startup
+
+### Summary
+Startup legacy backfill no longer turns walk-in takeaways (`table_id`/`table_number` null) into a physical table named `"None"`. Existing ghost tables are removed and unlinked.
+
+### Backend / Tests
+- `services/legacy_table_backfill.py` — safe backfill + ghost cleanup
+- `main.py` lifespan uses the repair helper
+- `tests/test_legacy_table_backfill.py`
+
 ## 2026-07-13 — Waiter pane color swap (Menu rose / Floor green)
 
 ### Summary

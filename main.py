@@ -583,35 +583,12 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE orders ADD COLUMN created_by_id INTEGER"))
     except Exception:
         pass
-    # Ensure default zone exists for table management.
+    # Ensure default zone + safe legacy table_id backfill (never create "None" tables).
     db = SessionLocal()
     try:
-        default_zone = db.query(Zone).filter(Zone.name == "Main").first()
-        if not default_zone:
-            default_zone = Zone(name="Main")
-            db.add(default_zone)
-            db.commit()
-            db.refresh(default_zone)
+        from services.legacy_table_backfill import repair_legacy_table_links
 
-        # Backfill tables from legacy orders.table_number where table_id is null.
-        legacy_orders = db.query(Order).filter(Order.table_id.is_(None)).all()
-        for legacy_order in legacy_orders:
-            name_or_number = str(getattr(legacy_order, "table_number", legacy_order.id))
-            table = db.query(Table).filter(Table.name_or_number == name_or_number).first()
-            if not table:
-                table = Table(
-                    name_or_number=name_or_number,
-                    zone_id=default_zone.id,
-                    status=(
-                        "occupied"
-                        if legacy_order.status in ("open", "dining", "pending", "completed")
-                        else "available"
-                    ),
-                )
-                db.add(table)
-                db.flush()
-            legacy_order.table_id = table.id
-        db.commit()
+        repair_legacy_table_links(db)
     except Exception:
         db.rollback()
         pass
