@@ -105,8 +105,8 @@ Log in as **waiter** → `/waiter`
 
 ### 3.1 Layout smoke
 
-- [ ] Left pane: Menu + Cart (green-tinted)
-- [ ] Right pane: Zone tabs + table floor / takeaways (rose-tinted)
+- [ ] Left pane: Menu + Cart (rose/red tint)
+- [ ] Right pane: Zone tabs + table floor / takeaways (green/emerald tint)
 - [ ] **Expected:** Both panes visible on desktop; cart does not occupy the whole screen
 
 ### 3.2 New dine-in order

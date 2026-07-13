@@ -36,10 +36,9 @@ When `table_id` is null (walk-in takeaway), **do not** show a table name, "Delet
 | Cashier active takeaway list | Same as above, or **🛍️ \<customer_name\>** when `customer_name` is set |
 | Cashier checkout header | `Checkout - {label}` where `{label}` follows the cashier rule below |
 
-**Cashier label (`static/counter.js`):**
-- If order has a linked table → table display name (strip leading `Table ` prefix).
-- Else if `customer_name` → **🛍️ {customer_name}**
-- Else → **Takeaway #{order_id}**
+**Cashier label (`static/counter.js` `cashierOrderDisplayLabel`):**
+- **Dine-in** (`order_type != takeaway` / has `table_id`): resolve the **table display name** from (1) click `source.name`, (2) nested `order.table`, or (3) lookup `table_id` in the loaded `/api/tables/grid` cache. **Do not** display legacy integer `order.table_number` as the name when the table is labeled non-numerically (e.g. `F1`) — that field often stores `table.id` after `int(name)` fails server-side.
+- **Takeaway** (`order_type == takeaway` or null table): if `customer_name` → **🛍️ {customer_name}**; else → **🛍️ Takeaway #{order_id}**.
 
 ## FR-W3b: Cashier "Served by"
 Cashier Check Out pane (`#pane-checkout`) and receipt print must show **Served by: {waiter_name}** where `waiter_name` comes from `Order.created_by_id` (resolved server-side). Fallback display: **Unknown** when unset. Latest-batch staff remains available as `served_by_name` on full order payloads for add-on scenarios.

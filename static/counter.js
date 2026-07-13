@@ -1459,7 +1459,7 @@ function renderCashierTablesGrid() {
       }
       try {
         const order = await fetchActiveOrderByTable(tableId);
-        selectOrder(order, { type: 'table', id: tableId });
+        selectOrder(order, { type: 'table', id: tableId, name: tableName });
       } catch (e) {
         await dialogAlert(e.message || `${t('no_active_order_for_table', 'No active order found for this table.')}`, 'error', t('load_failed', 'Load Failed'));
       }
@@ -1585,7 +1585,11 @@ function selectOrder(order, source = null) {
   selectedOrderId = order.id;
   selectedTableNumber = order.table_number;
   if (source?.type && source?.id != null) {
-    cashierCheckoutSource = { type: source.type, id: Number(source.id) };
+    cashierCheckoutSource = {
+      type: source.type,
+      id: Number(source.id),
+      name: source.name != null ? String(source.name) : undefined,
+    };
   } else if (String(order.order_type || '').toLowerCase() === 'takeaway') {
     cashierCheckoutSource = { type: 'takeaway', id: Number(order.id) };
   } else if (order.table_id != null) {
@@ -1602,7 +1606,7 @@ function selectOrder(order, source = null) {
   if (container) container.classList.remove('hidden');
   const checkoutHeaderEl = document.getElementById('checkout-header');
   if (checkoutHeaderEl) {
-    checkoutHeaderEl.textContent = `${t('checkout', 'Checkout')} - ${cashierOrderDisplayLabel(order)}`;
+    checkoutHeaderEl.textContent = `${t('checkout', 'Checkout')} - ${cashierOrderDisplayLabel(order, cashierCheckoutSource)}`;
   }
   const itemsRows = visibleItems
     .map(
@@ -2402,20 +2406,49 @@ function isTakeawayOrder(order) {
   return order.table_id == null && order.table_number == null;
 }
 
-function cashierOrderDisplayLabel(order) {
-  if (order?.table?.name) {
-    return String(order.table.name).replace(/^table\s+/i, '').trim();
+/**
+ * Resolve dine-in display name. Never treat legacy integer `order.table_number`
+ * as the label when the real name is non-numeric (e.g. "F1") — backend stores
+ * table.id in table_number when name_or_number is not an int.
+ */
+function findCashierTableById(tableId) {
+  const id = Number(tableId);
+  if (!Number.isFinite(id)) return null;
+  for (const zone of cashierZones || []) {
+    const match = (zone.tables || []).find((t) => Number(t.id) === id);
+    if (match) return match;
   }
-  if (!isTakeawayOrder(order) && order?.table_number != null) {
-    if (window.tableDisplay?.displayTableName) {
-      return window.tableDisplay.displayTableName(order.table_number);
-    }
-    return String(order.table_number).replace(/^table\s+/i, '').trim() || String(order.table_number);
+  return null;
+}
+
+function resolveCashierDineInTableLabel(order, source = null) {
+  if (source?.type === 'table' && source.name) {
+    return cashierTableName({ name: source.name, id: source.id });
   }
-  const customer = String(order?.customer_name || '').trim();
-  if (customer) return `🛍️ ${customer}`;
-  if (order?.id != null) return `Takeaway #${order.id}`;
-  return t('takeaway', 'Takeaway');
+  if (order?.table && (order.table.name || order.table.name_or_number)) {
+    return cashierTableName(order.table);
+  }
+  const tableId = order?.table_id != null ? Number(order.table_id) : null;
+  const fromGrid = tableId != null ? findCashierTableById(tableId) : null;
+  if (fromGrid) return cashierTableName(fromGrid);
+
+  // Numeric-only legacy names may equal table_number; prefer that string only if
+  // it matches a known grid name, otherwise show #table_id.
+  if (tableId != null) return `#${tableId}`;
+  if (order?.table_number != null && String(order.table_number).trim() !== '') {
+    return String(order.table_number);
+  }
+  return t('table', 'Table');
+}
+
+function cashierOrderDisplayLabel(order, source = null) {
+  if (isTakeawayOrder(order)) {
+    const customer = String(order?.customer_name || '').trim();
+    if (customer) return `🛍️ ${customer}`;
+    if (order?.id != null) return formatTakeawayOrderLabel(order.id);
+    return `🛍️ ${t('takeaway', 'Takeaway')}`;
+  }
+  return resolveCashierDineInTableLabel(order, source);
 }
 
 function orderServedByLabel(order) {
@@ -2423,7 +2456,7 @@ function orderServedByLabel(order) {
 }
 
 function orderTableLabel(order) {
-  return cashierOrderDisplayLabel(order);
+  return cashierOrderDisplayLabel(order, cashierCheckoutSource);
 }
 
 function renderTableKanbanBoard(zones) {

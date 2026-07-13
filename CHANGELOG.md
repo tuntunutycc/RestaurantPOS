@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-07-13 — Waiter pane color swap (Menu rose / Floor green)
+
+### Summary
+Waiter two-pane tints: left Menu+Cart = subtle rose/red; right Tables = subtle emerald/green. Active-order modal + cart qty isolation unchanged.
+
+### Spec / Frontend
+- `specs/feature-waiter-two-pane-layout/`
+- `static/waiter.html` pane background classes
+
+## 2026-07-13 — Fix Cashier dine-in table name display
+
+### Summary
+Check Out header no longer shows a random/numeric id for tables named like `F1`. Labels resolve from the floor-grid table name / `table_id` lookup instead of legacy integer `order.table_number`. Takeaway labels unchanged.
+
+### Spec
+- `specs/feature-walk-in-takeaway/requirements.md` — Cashier label rules clarified
+
+### Frontend
+- `static/counter.js` — `resolveCashierDineInTableLabel`, `selectOrder` passes `source.name`
+
 ## 2026-07-12 — Waiter qty-adjuster isolation audit
 
 ### Summary
