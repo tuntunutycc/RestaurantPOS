@@ -48,10 +48,12 @@ class TokenResponse(BaseModel):
 StaffRole = Literal["root", "admin", "account", "cashier", "waiter"]
 AdminStaffRole = Literal["cashier", "waiter", "account"]
 RootAdminRole = Literal["admin"]
+PrinterRoleLiteral = Literal["cashier", "kitchen", "bar", "other"]
 PrinterRouteLiteral = Literal["drinks", "food"]
 PrinterEndpointRouteLiteral = Literal["drinks", "food", "cashier"]
 PrinterBackendLiteral = Literal["file", "escpos_network"]
 PrinterRenderModeLiteral = Literal["text", "image"]
+
 TableStatusLiteral = Literal["available", "occupied"]
 OrderItemStatusLiteral = Literal["pending", "cooking", "served", "cancelled"]
 OrderStatusLiteral = Literal["pending", "open", "dining", "completed", "paid", "cancelled"]
@@ -160,30 +162,60 @@ class PrinterRouteEndpointUpdate(BaseModel):
 
 
 class KitchenPrinterSettingsResponse(BaseModel):
-    """Admin view of kitchen printer backend + route endpoints."""
+    """Admin view of global print backend settings (hosts live on Printer CRUD)."""
 
     backend: PrinterBackendLiteral = "file"
     render_mode: PrinterRenderModeLiteral = "text"
     paper_width_px: int = 576
-    routes: list[PrinterRouteEndpointResponse]
+    routes: list[PrinterRouteEndpointResponse] = Field(default_factory=list)
 
 
 class KitchenPrinterSettingsUpdate(BaseModel):
-    """Admin update for kitchen printer backend + route endpoints."""
+    """Admin update for global print backend settings."""
 
     backend: PrinterBackendLiteral
     render_mode: PrinterRenderModeLiteral = "text"
     paper_width_px: int = Field(default=576)
-    routes: list[PrinterRouteEndpointUpdate]
+    routes: list[PrinterRouteEndpointUpdate] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def settings_must_be_valid(self):
-        keys = {route.route_key for route in self.routes}
-        if keys != {"drinks", "food", "cashier"}:
-            raise ValueError("routes must include exactly drinks, food, and cashier")
         if self.paper_width_px not in (384, 576):
             raise ValueError("paper_width_px must be 384 or 576")
         return self
+
+
+class PrinterResponse(BaseModel):
+    """Named printer with role for Admin CRUD and terminal selection."""
+
+    id: int
+    name: str
+    host: str | None = None
+    port: int = 9100
+    role: PrinterRoleLiteral
+    is_active: bool = True
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PrinterCreate(BaseModel):
+    """Create a printer."""
+
+    name: str = Field(min_length=1, max_length=64)
+    host: str | None = None
+    port: int = Field(default=9100, ge=1, le=65535)
+    role: PrinterRoleLiteral
+    is_active: bool = True
+
+
+class PrinterUpdate(BaseModel):
+    """Update a printer (partial)."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    host: str | None = None
+    port: int | None = Field(default=None, ge=1, le=65535)
+    role: PrinterRoleLiteral | None = None
+    is_active: bool | None = None
 
 
 class ZoneCreate(BaseModel):
@@ -527,8 +559,12 @@ class OrderResponseDetail(BaseModel):
     waiter_name: str | None = None
     # Latest batch submitter (may differ when another staff adds items).
     served_by_name: str | None = None
+    # Free-text cashier label captured at checkout (receipt).
+    cashier_name: str | None = None
     # Payment information for cashier
     payment_method: str | None = None
+    cash_amount: float | None = None
+    mobile_money_amount: float | None = None
     amount_tendered: float | None = None
     change_amount: float | None = None
     tax_amount: float | None = 0.0
@@ -618,7 +654,10 @@ class OrderResponseDetail(BaseModel):
                 items=items,
                 waiter_name=waiter_name,
                 served_by_name=served_by_name,
+                cashier_name=getattr(order, "cashier_name", None),
                 payment_method=getattr(order, "payment_method", None),
+                cash_amount=getattr(order, "cash_amount", None),
+                mobile_money_amount=getattr(order, "mobile_money_amount", None),
                 amount_tendered=getattr(order, "amount_tendered", None),
                 change_amount=getattr(order, "change_amount", None),
                 tax_amount=getattr(order, "tax_amount", 0.0),
@@ -635,23 +674,41 @@ class OrderRead(OrderResponseDetail):
 
 
 class OrderCheckoutRequest(BaseModel):
-    """Request body for cashier checkout with optional order-level discount."""
+    """Checkout body: single-method (legacy) or explicit cash/mobile amounts (split)."""
 
-    payment_method: str
-    amount_tendered: float
+    payment_method: str | None = None
+    amount_tendered: float | None = None
+    cash_amount: float | None = None
+    mobile_money_amount: float | None = None
     discount_type: Literal["percentage", "amount"] | None = None
     discount_value: float | None = 0.0
     issue_receipt: bool = True
+    printer_id: int | None = None
+    cashier_name: str | None = None
+
+    @field_validator("cashier_name", mode="before")
+    @classmethod
+    def normalize_cashier_name(cls, v):
+        if v is None:
+            return None
+        name = str(v).strip()
+        if not name:
+            return None
+        return name[:128]
 
     @field_validator("payment_method", mode="before")
     @classmethod
     def normalize_payment_method(cls, v):
-        raw = str(v or "").strip().lower().replace(" ", "_")
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return None
+        raw = str(v).strip().lower().replace(" ", "_")
         if raw in ("cash",):
             return "cash"
         if raw in ("mobile_money", "mobilemoney"):
             return "mobile_money"
-        raise ValueError("payment_method must be 'cash' or 'mobile_money'")
+        if raw in ("split",):
+            return "split"
+        raise ValueError("payment_method must be 'cash', 'mobile_money', or 'split'")
 
 
 class OrderCheckoutResponse(OrderResponseDetail):
@@ -666,6 +723,10 @@ class PaymentMethodTotalsResponse(BaseModel):
     cash: float = 0.0
     mobile_money: float = 0.0
     total: float = 0.0
+    # Order revenue (tax-aware). `total` remains cash + mobile for backward compatibility.
+    subtotal_revenue: float = 0.0
+    total_tax: float = 0.0
+    grand_total_revenue: float = 0.0
 
 
 class SalesBreakdownResponse(BaseModel):
@@ -675,12 +736,28 @@ class SalesBreakdownResponse(BaseModel):
     month: PaymentMethodTotalsResponse
 
 
+class SalesPeriodReportResponse(BaseModel):
+    """Aggregated sales for one daily or monthly period (tax-aware)."""
+
+    period: Literal["daily", "monthly"]
+    date: str
+    total_orders: int = 0
+    subtotal_revenue: float = 0.0
+    total_tax: float = 0.0
+    grand_total_revenue: float = 0.0
+    total_cash: float = 0.0
+    total_mobile: float = 0.0
+
+
 class TodaySalesSummaryResponse(BaseModel):
     """Today's sales summary for analytics dashboard."""
 
-    total_sales: float
+    total_sales: float  # tax-inclusive (grand); kept for backward compatibility
     total_orders: int
     average_order_value: float
+    subtotal_revenue: float = 0.0
+    total_tax: float = 0.0
+    grand_total_revenue: float = 0.0
 
 
 class TopSellingItemResponse(BaseModel):

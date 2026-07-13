@@ -7,14 +7,16 @@ Enable restaurant owners and cashiers to reconcile daily and monthly sales by **
 
 | Field | Rule |
 |-------|------|
-| `Order.payment_method` | Set at checkout only. Canonical values: `cash` \| `mobile_money` (stored lowercase snake_case). |
-| Display labels | UI shows **Cash** and **Mobile Money**; API accepts common aliases and normalizes to canonical values. |
+| `Order.payment_method` | Set at checkout. Canonical: `cash` \| `mobile_money` \| `split`. |
+| `Order.cash_amount` / `mobile_money_amount` | Applied bill portions per method (split-aware). |
+| Display labels | UI shows **Cash**, **Mobile Money**, **Split**; API accepts aliases. |
 
-## FR-PM1: Checkout requires payment method
-- `PUT /api/orders/{order_id}/checkout` body **must** include `payment_method`.
-- Allowed values (after normalization): `cash`, `mobile_money`.
-- Invalid or missing value → **422**.
+## FR-PM1: Checkout payment method
+- `PUT /api/orders/{order_id}/checkout` accepts `payment_method` and/or explicit `cash_amount` / `mobile_money_amount`.
+- Allowed method values: `cash`, `mobile_money`, `split`.
+- Invalid method → **422**.
 - Persisted on `Order.payment_method` when status becomes `paid`.
+- Prefer summing `cash_amount` / `mobile_money_amount` for reports (see split-payment feature).
 
 ## FR-PM2: Sales breakdown API
 - `GET /api/analytics/sales-breakdown`
@@ -30,11 +32,12 @@ Enable restaurant owners and cashiers to reconcile daily and monthly sales by **
 
 - **Today:** UTC calendar day, `Order.status IN ('paid','completed')`.
 - **Month:** current UTC calendar month (1st 00:00 through next month 1st 00:00).
-- Invariant: `total == cash + mobile_money` (orders with null/unknown `payment_method` excluded from both buckets).
+- Invariant: `total == cash + mobile_money` (uses applied amount columns; legacy rows fall back to `payment_method` + `total_amount`).
 
 ## FR-PM3: Cashier checkout UI
-- Counter Check Out pane (`#pane-checkout`) shows two large toggle buttons: **💵 Cash** (default) and **📱 Mobile Money**.
-- Selected value sent as `payment_method` in checkout payload (`cash` or `mobile_money`).
+- Counter Check Out pane shows **Cash**, **Mobile Money**, and **Split** toggles.
+- Single-method: amount tendered + `payment_method`.
+- Split: cash + mobile inputs (auto-fill remainder); see `specs/feature-split-payment/`.
 
 ## FR-PM4: Dashboard UI (Counter — `static/counter.js`)
 - Overview tab shows payment breakdown cards:

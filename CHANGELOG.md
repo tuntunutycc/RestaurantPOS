@@ -1,5 +1,137 @@
 # Changelog
 
+## 2026-07-13 — Cashier name on checkout receipt
+
+### Summary
+Checkout stores an optional free-text `cashier_name` and prints `Cashier: …` on the receipt. Counter UI persists the name in `localStorage` (`currentCashierName`).
+
+### Spec
+- `specs/feature-cashier-name-on-receipt/`
+
+### Backend / Frontend / Tests
+- `Order.cashier_name`; checkout request/response; receipt builder
+- Cashier pane name input + checkout payload
+- `tests/test_cashier_name_receipt.py`
+
+## 2026-07-13 — Revenue breakdown replaces Include Tax toggle
+
+### Summary
+Sales Reports (and Overview) show Net Sales, Tax Collected, and Gross Sales together instead of hiding one view behind a toggle. Cash/Mobile remain visible as payment received.
+
+### Frontend / Spec
+- `static/counter.html` / `counter.js` — remove Include Tax toggles; bind `subtotal_revenue`, `total_tax`, `grand_total_revenue`
+- Specs + CHANGELOG updated
+
+## 2026-07-13 — Overview Include Tax toggle
+
+### Summary
+Today's Overview can switch Gross (with tax) vs Net (without tax) revenue via Include Tax. Cash/Mobile stay as received amounts.
+
+### Backend / Frontend / Spec
+- `summary/today` + `sales-breakdown` return subtotal / tax / grand fields
+- Overview toggle in `counter.html` / `counter.js`
+- Specs + CHANGELOG for sales period reports
+
+## 2026-07-13 — Sales period reports (tax inclusive / exclusive)
+
+### Summary
+Admins can load Daily or Monthly paid-order aggregates via `GET /api/reports/sales`, and the Dashboard **Sales Reports** tab toggles Gross (with tax) vs Net (without tax) revenue without re-fetching.
+
+### Spec
+- `specs/feature-sales-period-reports/`
+- Updated `specs/api-reference.md`, account reports matrix
+
+### Backend
+- `SalesPeriodReportResponse`; `GET /api/reports/sales?period=&date=`
+- Aggregates orders, subtotal (tax-exclusive), tax, grand total, cash, mobile
+
+### Frontend
+- Dashboard sub-tab **Sales Reports** with period picker and Include Tax toggle
+
+### Tests
+- `tests/test_sales_period_reports.py`
+
+## 2026-07-13 — E2E release audit tests
+
+### Summary
+Added integration coverage for waiter multi-qty submit + table occupied, mixed food/drinks → kitchen/bar hosts, split change due 5000/3000/3000, and admin printer create/404-delete.
+
+### Tests
+- `tests/test_e2e_release_audit.py` (4 cases); full suite **204 passed**
+
+## 2026-07-13 — Split payment Change Due display
+
+### Summary
+Split checkout shows a highlighted **Change Due** when cash is over-tendered; receipts print Paid via Mobile, Tendered Cash, and Change Due. Mobile input still auto-fills exact cash remaining; cash can be raised for change.
+
+### Frontend / Backend / Tests
+- `static/counter.html` / `counter.js` — Change Due box + autofill rules
+- `services/printing/receipt.py` — split receipt lines
+- `tests/test_split_payment.py` — 5000 / 3000 / 3000 → change 1000
+
+## 2026-07-13 — Split payment checkout
+
+### Summary
+Cashiers can split one bill across Cash and Mobile Money. Orders store `cash_amount` and `mobile_money_amount` for accurate reports; single-method checkout remains unchanged.
+
+### Spec
+- `specs/feature-split-payment/`
+- Updated payment analytics, api-reference, database-schema
+
+### Backend
+- `Order.cash_amount` / `mobile_money_amount`; `payment_method` may be `split`
+- Checkout validates sum ≥ total; change from excess cash
+- Analytics sums applied amounts
+
+### Frontend
+- Check Out: Cash / Mobile / Split; split inputs with auto-fill remainder
+
+### Tests
+- `tests/test_split_payment.py`
+
+## 2026-07-13 — Dynamic printer management (unified Printer CRUD)
+
+### Summary
+Admins create/edit/delete unlimited named printers with roles (`cashier`, `kitchen`, `bar`, `other`). Fresh installs seed only Default Cashier + Default Kitchen. Category tickets map `food`→kitchen and `drinks`→bar (fallback kitchen). Fixed host cards removed from Menu Management.
+
+### Spec
+- `specs/feature-dynamic-printer-management/`
+- Updated tech-stack, api-reference, database-schema
+
+### Backend
+- `models.Printer` replaces `CashierPrinter`
+- `GET/POST/PUT/DELETE /api/printers`
+- `seed_default_printers` + `scripts/seed_root.py` seed
+- Kitchen-printers API = print mode only
+
+### Frontend
+- Printer table + Add/Edit modal in `counter.html` Menu Management
+- Cashier dropdown still loads `GET /api/printers?role=cashier` on refresh
+
+### Tests
+- CRUD + seed + drinks→bar fallback coverage
+
+## 2026-07-13 — Terminal-based cashier printer selection
+
+### Summary
+Cashiers pick a dedicated receipt printer per terminal. Selection persists in `localStorage` and is sent as checkout `printer_id`. Backend resolves named `cashier_printers` (fallback: first active / legacy `cashier` route).
+
+### Spec
+- `specs/feature-cashier-receipt-printing/` — multi-cashier architecture
+- `specs/api-reference.md`, `tech-stack.md`, `database-schema.md`
+
+### Backend
+- `CashierPrinter` model + seed from legacy cashier route
+- `OrderCheckoutRequest.printer_id`
+- `GET /api/printers?role=cashier`, `GET/PUT /api/admin/cashier-printers`
+- Checkout print target by `printer_id`
+
+### Frontend
+- `#cashier-printer-select` + `localStorage.selectedCashierPrinterId`
+
+### Tests
+- `tests/test_cashier_receipt_printing.py` — list API, `printer_id` targeting, invalid id
+
 ## 2026-07-13 — Fix ghost table named "None" on startup
 
 ### Summary

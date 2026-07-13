@@ -26,6 +26,7 @@ from schemas import (
     HourlySalesTrendResponse,
     MonthlySalesPointResponse,
     PromotedStaffSalesResponse,
+    SalesPeriodReportResponse,
     StaffSalesPointResponse,
     TopSellingItemResponse,
     TodaySalesSummaryResponse,
@@ -62,6 +63,112 @@ def _historical_category_name_expr():
 
 _DASHBOARD_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT]
 _SUMMARY_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT, ROLE_CASHIER]
+_PAID_STATUSES = ("paid", "completed")
+
+
+def _parse_sales_period_bounds(period: str, date_value: str) -> tuple[date, date, str]:
+    """Return (start_date, end_date, normalized_date_echo) for daily/monthly."""
+    normalized_period = (period or "").strip().lower()
+    raw = (date_value or "").strip()
+    if normalized_period == "daily":
+        try:
+            day = datetime.strptime(raw, "%Y-%m-%d").date()
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="date must be YYYY-MM-DD for period=daily",
+            ) from exc
+        return day, day, day.isoformat()
+    if normalized_period == "monthly":
+        try:
+            parsed = datetime.strptime(raw, "%Y-%m")
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="date must be YYYY-MM for period=monthly",
+            ) from exc
+        year, month = parsed.year, parsed.month
+        start = date(year, month, 1)
+        last_day = calendar.monthrange(year, month)[1]
+        end = date(year, month, last_day)
+        return start, end, f"{year:04d}-{month:02d}"
+    raise HTTPException(status_code=400, detail="period must be 'daily' or 'monthly'")
+
+
+@router.get("/reports/sales", response_model=SalesPeriodReportResponse)
+def get_sales_period_report(
+    period: str = Query(..., description="daily or monthly"),
+    report_date: str = Query(
+        ...,
+        alias="date",
+        description="YYYY-MM-DD (daily) or YYYY-MM (monthly)",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(_DASHBOARD_ROLES)),
+):
+    """
+    Aggregate paid-order sales for one day or one calendar month.
+    subtotal_revenue is tax-exclusive (grand_total − tax); grand_total_revenue is tax-inclusive.
+    """
+    start_day, end_day, date_echo = _parse_sales_period_bounds(period, report_date)
+    assert_report_date_range(current_user, start_day, end_day)
+    start_dt, end_dt = dt_range_for_dates(start_day, end_day)
+
+    cash_expr = func.coalesce(
+        func.sum(
+            case(
+                (Order.cash_amount.isnot(None), Order.cash_amount),
+                (func.lower(Order.payment_method) == "cash", Order.total_amount),
+                else_=0.0,
+            )
+        ),
+        0.0,
+    )
+    mobile_expr = func.coalesce(
+        func.sum(
+            case(
+                (Order.mobile_money_amount.isnot(None), Order.mobile_money_amount),
+                (func.lower(Order.payment_method) == "mobile_money", Order.total_amount),
+                else_=0.0,
+            )
+        ),
+        0.0,
+    )
+    tax_expr = func.coalesce(func.sum(func.coalesce(Order.tax_amount, 0.0)), 0.0)
+    grand_expr = func.coalesce(func.sum(Order.total_amount), 0.0)
+
+    row = (
+        db.query(
+            func.count(Order.id),
+            grand_expr,
+            tax_expr,
+            cash_expr,
+            mobile_expr,
+        )
+        .filter(
+            Order.created_at >= start_dt,
+            Order.created_at < end_dt,
+            Order.status.in_(_PAID_STATUSES),
+        )
+        .one()
+    )
+    total_orders = int(row[0] or 0)
+    grand_total = round(float(row[1] or 0.0), 2)
+    total_tax = round(float(row[2] or 0.0), 2)
+    total_cash = round(float(row[3] or 0.0), 2)
+    total_mobile = round(float(row[4] or 0.0), 2)
+    subtotal_revenue = round(grand_total - total_tax, 2)
+
+    return SalesPeriodReportResponse(
+        period="monthly" if (period or "").strip().lower() == "monthly" else "daily",
+        date=date_echo,
+        total_orders=total_orders,
+        subtotal_revenue=subtotal_revenue,
+        total_tax=total_tax,
+        grand_total_revenue=grand_total,
+        total_cash=total_cash,
+        total_mobile=total_mobile,
+    )
 
 
 @router.get("/reports/summary/today", response_model=TodaySalesSummaryResponse)
@@ -81,6 +188,7 @@ def get_today_sales_summary(
     q = db.query(
         func.coalesce(func.sum(Order.total_amount), 0.0),
         func.count(Order.id),
+        func.coalesce(func.sum(func.coalesce(Order.tax_amount, 0.0)), 0.0),
     ).filter(
         Order.created_at >= start_of_day,
         Order.created_at < end_of_day,
@@ -89,16 +197,21 @@ def get_today_sales_summary(
     if current_user.role == ROLE_CASHIER:
         q = q.filter(Order.checked_out_by_id == current_user.id)
 
-    total_sales, total_orders = q.one()
+    total_sales, total_orders, total_tax = q.one()
 
     total_sales = float(total_sales or 0.0)
     total_orders = int(total_orders or 0)
+    total_tax = float(total_tax or 0.0)
+    subtotal_revenue = round(total_sales - total_tax, 2)
     average_order_value = (total_sales / total_orders) if total_orders > 0 else 0.0
 
     return TodaySalesSummaryResponse(
         total_sales=total_sales,
         total_orders=total_orders,
         average_order_value=average_order_value,
+        subtotal_revenue=subtotal_revenue,
+        total_tax=round(total_tax, 2),
+        grand_total_revenue=round(total_sales, 2),
     )
 
 

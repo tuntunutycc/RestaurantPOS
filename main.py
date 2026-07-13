@@ -19,6 +19,7 @@ from routers import (
     menu,
     orders,
     predefined_instructions,
+    printers,
     reports,
     root_users,
     setup,
@@ -484,6 +485,18 @@ async def lifespan(app: FastAPI):
     try:
         from sqlalchemy import text
         with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN cash_amount FLOAT"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN mobile_money_amount FLOAT"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
             conn.execute(text("ALTER TABLE orders ADD COLUMN amount_tendered FLOAT"))
     except Exception:
         pass
@@ -526,6 +539,12 @@ async def lifespan(app: FastAPI):
         from sqlalchemy import text
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE orders ADD COLUMN customer_name VARCHAR(255)"))
+    except Exception:
+        pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE orders ADD COLUMN cashier_name VARCHAR(128)"))
     except Exception:
         pass
     # One active order per table: at most one row per table_number with status open/dining
@@ -666,6 +685,7 @@ app.include_router(analytics.router)
 app.include_router(users.router)
 app.include_router(tables.router)
 app.include_router(kitchen_printers.router)
+app.include_router(printers.router)
 app.include_router(predefined_instructions.router)
 
 

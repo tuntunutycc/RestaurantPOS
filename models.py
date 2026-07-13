@@ -46,13 +46,26 @@ class KitchenPrinterSettings(Base):
 
 
 class PrinterRouteEndpoint(Base):
-    """LAN host/port for a kitchen printer route (drinks, food, ...)."""
+    """Legacy LAN host/port by route_key (kept for DB compat; prefer `Printer`)."""
 
     __tablename__ = "printer_route_endpoints"
 
     route_key = Column(String(32), primary_key=True)
     host = Column(String(255), nullable=True)
     port = Column(Integer, nullable=False, default=9100)
+
+
+class Printer(Base):
+    """Named LAN printer with a role (cashier, kitchen, bar, other)."""
+
+    __tablename__ = "printers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(64), nullable=False)
+    host = Column(String(255), nullable=True)
+    port = Column(Integer, nullable=False, default=9100)
+    role = Column(String(32), nullable=False, default="kitchen", index=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
 
 
 class MenuItem(Base):
@@ -153,7 +166,9 @@ class Order(Base):
     total_amount = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     # Payment information (filled at checkout)
-    payment_method = Column(String(32), nullable=True)  # checkout: 'cash' | 'mobile_money'
+    payment_method = Column(String(32), nullable=True)  # cash | mobile_money | split
+    cash_amount = Column(Float, nullable=True)  # applied bill portion paid in cash
+    mobile_money_amount = Column(Float, nullable=True)  # applied bill portion paid via mobile
     amount_tendered = Column(Float, nullable=True)
     change_amount = Column(Float, nullable=True)
     tax_amount = Column(Float, nullable=True, default=0.0)
@@ -161,6 +176,8 @@ class Order(Base):
     discount_value = Column(Float, nullable=True, default=0.0)
     # Cashier who finalized payment (for per-cashier sales reporting).
     checked_out_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # Free-text cashier label for receipt / terminal (may differ from login username).
+    cashier_name = Column(String(128), nullable=True)
     # Staff who opened / took the order (waiter or cashier at first submit).
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 

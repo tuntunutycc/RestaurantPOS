@@ -16,6 +16,7 @@ from routers import kitchen_printers as kitchen_printers_router
 from routers import menu as menu_router
 from routers import orders as orders_router
 from routers import predefined_instructions as predefined_instructions_router
+from routers import printers as printers_router
 from routers import reports as reports_router
 from routers import analytics as analytics_router
 from routers import root_users as root_users_router
@@ -77,6 +78,7 @@ def app(db_session: Session) -> FastAPI:
     app.include_router(tables_router.router)
     app.include_router(users_router.router)
     app.include_router(kitchen_printers_router.router)
+    app.include_router(printers_router.router)
     app.include_router(predefined_instructions_router.router)
 
     app.dependency_overrides[get_db] = _override_get_db(db_session)

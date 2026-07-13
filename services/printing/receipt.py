@@ -20,6 +20,8 @@ def _payment_label(method: str | None) -> str:
         return "Mobile Money"
     if raw == "cash":
         return "Cash"
+    if raw == "split":
+        return "Split (Cash + Mobile)"
     return (method or "").strip() or "—"
 
 
@@ -36,7 +38,10 @@ def build_receipt_text(
     payment_method: str | None,
     amount_tendered: float | None = None,
     change_amount: float | None = None,
+    cash_amount: float | None = None,
+    mobile_money_amount: float | None = None,
     created_at: str | None = None,
+    cashier_name: str | None = None,
 ) -> str:
     """Build a plain-text cashier receipt for Pillow/ESC/POS rendering."""
     lines = [
@@ -47,6 +52,9 @@ def build_receipt_text(
         f"Location: {location_label}",
         f"Served by: {(served_by or '').strip() or 'Unknown'}",
     ]
+    cashier_label = (cashier_name or "").strip()
+    if cashier_label:
+        lines.append(f"Cashier: {cashier_label}")
     if created_at:
         lines.append(f"Time: {created_at}")
     lines.append("---------------------------------")
@@ -66,10 +74,22 @@ def build_receipt_text(
             f"Payment:      {_payment_label(payment_method)}",
         ]
     )
-    if amount_tendered is not None:
-        lines.append(f"Tendered:     {_money(amount_tendered)}")
-    if change_amount is not None:
-        lines.append(f"Change:       {_money(change_amount)}")
+    method = (payment_method or "").strip().lower().replace(" ", "_")
+    if method == "split":
+        mobile_paid = float(mobile_money_amount or 0.0)
+        tendered_cash = amount_tendered
+        if tendered_cash is None:
+            tendered_cash = cash_amount
+        lines.append(f"Paid via Mobile: {_money(mobile_paid)}")
+        if tendered_cash is not None:
+            lines.append(f"Tendered Cash:   {_money(tendered_cash)}")
+        if change_amount is not None:
+            lines.append(f"Change Due:      {_money(change_amount)}")
+    else:
+        if amount_tendered is not None:
+            lines.append(f"Tendered:     {_money(amount_tendered)}")
+        if change_amount is not None:
+            lines.append(f"Change Due:   {_money(change_amount)}")
     lines.extend(
         [
             "---------------------------------",

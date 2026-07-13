@@ -108,6 +108,15 @@ function applyDashboardTabState(nextTab) {
     if (filterBtn) filterBtn.click();
     hasLoadedSalesHistoryTab = true;
   }
+  if (nextTab === 'reports') {
+    syncSalesReportPeriodInputs();
+    if (!hasLoadedSalesReportsTab) {
+      loadSalesPeriodReport();
+      hasLoadedSalesReportsTab = true;
+    } else {
+      renderSalesReportMetrics();
+    }
+  }
   if (nextTab === 'insights' && !hasLoadedInsightsTab) {
     Promise.allSettled([loadCategorySalesChart(), loadCancellationsReport()]).then((results) => {
       if (results.some((r) => r.status === 'rejected')) {
@@ -158,11 +167,97 @@ if (tabTables && panelTables) tabTables.addEventListener('click', () => showPane
 window.addEventListener('DOMContentLoaded', () => {
   setSalesHistoryDefaultDates();
   setStaffFilterDefaultDate();
+  setSalesReportDefaultDates();
   bindSalesHistoryFilters();
   bindStaffBreakdownFilters();
   bindIncentivesFilters();
+  bindSalesReportControls();
   bindDashboardSubTabs();
+  initCashierNameInput();
+  initCashierPrinterSelect();
 });
+
+const CASHIER_PRINTER_STORAGE_KEY = 'selectedCashierPrinterId';
+const CASHIER_NAME_STORAGE_KEY = 'currentCashierName';
+
+function getCurrentCashierName() {
+  const input = document.getElementById('cashier-name-input');
+  const fromInput = (input && input.value ? String(input.value) : '').trim();
+  if (fromInput) return fromInput;
+  return (localStorage.getItem(CASHIER_NAME_STORAGE_KEY) || '').trim();
+}
+
+function initCashierNameInput() {
+  const input = document.getElementById('cashier-name-input');
+  if (!input) return;
+  const stored = (localStorage.getItem(CASHIER_NAME_STORAGE_KEY) || '').trim();
+  if (stored) input.value = stored;
+  const persist = () => {
+    const value = String(input.value || '').trim();
+    if (value) localStorage.setItem(CASHIER_NAME_STORAGE_KEY, value);
+    else localStorage.removeItem(CASHIER_NAME_STORAGE_KEY);
+  };
+  input.addEventListener('change', persist);
+  input.addEventListener('blur', persist);
+}
+async function initCashierPrinterSelect() {
+  const select = document.getElementById('cashier-printer-select');
+  if (!select) return;
+
+  const applyStored = () => {
+    const stored = localStorage.getItem(CASHIER_PRINTER_STORAGE_KEY);
+    if (stored && [...select.options].some((o) => o.value === stored)) {
+      select.value = stored;
+    }
+  };
+
+  select.addEventListener('change', () => {
+    const value = select.value;
+    if (value) {
+      localStorage.setItem(CASHIER_PRINTER_STORAGE_KEY, value);
+    } else {
+      localStorage.removeItem(CASHIER_PRINTER_STORAGE_KEY);
+    }
+  });
+
+  try {
+    const res = await fetch(`${API_BASE}/api/printers?role=cashier`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    if (!res.ok) return;
+    const printers = await res.json();
+    select.innerHTML = '';
+    if (!Array.isArray(printers) || printers.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Default';
+      select.appendChild(opt);
+      return;
+    }
+    printers.forEach((p) => {
+      const opt = document.createElement('option');
+      opt.value = String(p.id);
+      const host = (p.host || '').trim();
+      opt.textContent = host ? `${p.name} (${host})` : p.name;
+      select.appendChild(opt);
+    });
+    applyStored();
+    if (select.value) {
+      localStorage.setItem(CASHIER_PRINTER_STORAGE_KEY, select.value);
+    }
+  } catch (e) {
+    console.error('Failed to load cashier printers', e);
+  }
+}
+
+function getSelectedCashierPrinterId() {
+  const select = document.getElementById('cashier-printer-select');
+  if (select && select.value) return Number(select.value);
+  const stored = localStorage.getItem(CASHIER_PRINTER_STORAGE_KEY);
+  if (stored && /^\d+$/.test(stored)) return Number(stored);
+  return null;
+}
 
 // Fallback delegated tab handler (handles dynamic/edge cases where direct listeners fail).
 document.addEventListener('click', (e) => {
@@ -270,6 +365,10 @@ let topItemsChart = null;
 let dailySalesChart = null;
 let monthlySalesChart = null;
 let hasLoadedSalesHistoryTab = false;
+let hasLoadedSalesReportsTab = false;
+let salesPeriodReportCache = null;
+let overviewSummaryCache = null;
+let overviewPaymentCache = null;
 let categoryChart = null;
 let cancelledItemsChart = null;
 let hasLoadedInsightsTab = false;
@@ -337,10 +436,6 @@ function applyDashboardRoleVisibility(role) {
     el.classList.toggle('hidden', !visible);
   });
 
-  const salesLabel = document.querySelector('#dashboard-tab-overview .border-emerald-500 p.text-sm');
-  if (salesLabel) {
-    salesLabel.textContent = isCashier ? 'My Checkout Sales (Today)' : "Today's Sales";
-  }
   const pmTodayHeading = document.getElementById('pm-today-heading');
   if (pmTodayHeading) {
     pmTodayHeading.textContent = isCashier ? 'My Checkout Sales (Today)' : "Today's Sales";
@@ -410,6 +505,153 @@ function setSalesHistoryDefaultDates() {
   start.setDate(today.getDate() - 29);
   endInput.value = formatDateInputValue(today);
   startInput.value = formatDateInputValue(start);
+}
+
+function formatMonthInputValue(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function setSalesReportDefaultDates() {
+  const today = new Date();
+  const dayInput = document.getElementById('sales-report-date');
+  const monthInput = document.getElementById('sales-report-month');
+  if (dayInput && !dayInput.value) dayInput.value = formatDateInputValue(today);
+  if (monthInput && !monthInput.value) monthInput.value = formatMonthInputValue(today);
+}
+
+function syncSalesReportPeriodInputs() {
+  const periodEl = document.getElementById('sales-report-period');
+  const dayWrap = document.getElementById('sales-report-day-wrap');
+  const monthWrap = document.getElementById('sales-report-month-wrap');
+  if (!periodEl || !dayWrap || !monthWrap) return;
+  const isMonthly = periodEl.value === 'monthly';
+  dayWrap.classList.toggle('hidden', isMonthly);
+  monthWrap.classList.toggle('hidden', !isMonthly);
+}
+
+function moneyOrZero(value) {
+  const n = Number(value);
+  return formatMoney(Number.isFinite(n) ? n : 0);
+}
+
+function renderSalesReportMetrics() {
+  const data = salesPeriodReportCache || {};
+  const netEl = document.getElementById('sales-report-net');
+  const taxEl = document.getElementById('sales-report-tax');
+  const grossEl = document.getElementById('sales-report-gross');
+  const ordersEl = document.getElementById('sales-report-orders');
+  const cashEl = document.getElementById('sales-report-cash');
+  const mobileEl = document.getElementById('sales-report-mobile');
+  if (netEl) netEl.textContent = moneyOrZero(data.subtotal_revenue);
+  if (taxEl) taxEl.textContent = moneyOrZero(data.total_tax);
+  if (grossEl) grossEl.textContent = moneyOrZero(data.grand_total_revenue);
+  if (ordersEl) ordersEl.textContent = String(Math.max(0, Math.floor(Number(data.total_orders) || 0)));
+  if (cashEl) cashEl.textContent = moneyOrZero(data.total_cash);
+  if (mobileEl) mobileEl.textContent = moneyOrZero(data.total_mobile);
+}
+
+async function loadSalesPeriodReport() {
+  const statusEl = document.getElementById('sales-report-status');
+  const periodEl = document.getElementById('sales-report-period');
+  const dayInput = document.getElementById('sales-report-date');
+  const monthInput = document.getElementById('sales-report-month');
+  if (!periodEl) return;
+  const period = periodEl.value === 'monthly' ? 'monthly' : 'daily';
+  const dateValue = period === 'monthly' ? (monthInput?.value || '') : (dayInput?.value || '');
+  if (!dateValue) {
+    if (statusEl) statusEl.textContent = 'Choose a date or month first.';
+    return;
+  }
+  if (statusEl) statusEl.textContent = 'Loading…';
+  const params = new URLSearchParams({ period, date: dateValue });
+  const res = await fetch(`${API_BASE}/api/reports/sales?${params.toString()}`, {
+    headers: { ...window.auth.getAuthHeaders() },
+  });
+  if (window.auth && window.auth.checkUnauthorized(res)) return;
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    salesPeriodReportCache = null;
+    renderSalesReportMetrics();
+    if (statusEl) {
+      statusEl.textContent = typeof body.detail === 'string' ? body.detail : 'Failed to load sales report.';
+    }
+    return;
+  }
+  salesPeriodReportCache = body;
+  renderSalesReportMetrics();
+  if (statusEl) {
+    statusEl.textContent = `Showing ${body.period} report for ${body.date}. Net + Tax = Gross.`;
+  }
+}
+
+function bindSalesReportControls() {
+  const periodEl = document.getElementById('sales-report-period');
+  const loadBtn = document.getElementById('btn-load-sales-report');
+  if (periodEl) {
+    periodEl.addEventListener('change', () => {
+      syncSalesReportPeriodInputs();
+    });
+  }
+  if (loadBtn) {
+    loadBtn.addEventListener('click', () => {
+      loadSalesPeriodReport().catch((err) => console.error(err));
+    });
+  }
+  syncSalesReportPeriodInputs();
+}
+
+function renderOverviewSummaryMetrics() {
+  const netEl = document.getElementById('kpi-net-sales');
+  const taxEl = document.getElementById('kpi-total-tax');
+  const salesEl = document.getElementById('kpi-total-sales');
+  const ordersEl = document.getElementById('kpi-total-orders');
+  const avgEl = document.getElementById('kpi-average-order-value');
+  if (!salesEl || !ordersEl || !avgEl) return;
+  const data = overviewSummaryCache || {};
+  const orders = Math.max(0, Math.floor(Number(data.total_orders) || 0));
+  const grand = Number(data.grand_total_revenue ?? data.total_sales) || 0;
+  const tax = Number(data.total_tax) || 0;
+  const net = Number(data.subtotal_revenue ?? (grand - tax)) || 0;
+  const avg = orders > 0 ? grand / orders : 0;
+  if (netEl) netEl.textContent = moneyOrZero(net);
+  if (taxEl) taxEl.textContent = moneyOrZero(tax);
+  salesEl.textContent = moneyOrZero(grand);
+  ordersEl.textContent = String(orders);
+  avgEl.textContent = moneyOrZero(avg);
+}
+
+function renderOverviewPaymentMetrics() {
+  const todayNetEl = document.getElementById('pm-today-net');
+  const todayTaxEl = document.getElementById('pm-today-tax');
+  const todayTotalEl = document.getElementById('pm-today-total');
+  const todayCashEl = document.getElementById('pm-today-cash');
+  const todayMobileEl = document.getElementById('pm-today-mobile');
+  const monthNetEl = document.getElementById('pm-month-net');
+  const monthTaxEl = document.getElementById('pm-month-tax');
+  const monthTotalEl = document.getElementById('pm-month-total');
+  const monthCashEl = document.getElementById('pm-month-cash');
+  const monthMobileEl = document.getElementById('pm-month-mobile');
+  if (!todayTotalEl || !todayCashEl || !todayMobileEl) return;
+
+  const today = (overviewPaymentCache && overviewPaymentCache.today) || {};
+  const month = (overviewPaymentCache && overviewPaymentCache.month) || {};
+  const todayGrand = Number(today.grand_total_revenue ?? today.total) || 0;
+  const todayTax = Number(today.total_tax) || 0;
+  const todayNet = Number(today.subtotal_revenue ?? (todayGrand - todayTax)) || 0;
+  const monthGrand = Number(month.grand_total_revenue ?? month.total) || 0;
+  const monthTax = Number(month.total_tax) || 0;
+  const monthNet = Number(month.subtotal_revenue ?? (monthGrand - monthTax)) || 0;
+
+  if (todayNetEl) todayNetEl.textContent = moneyOrZero(todayNet);
+  if (todayTaxEl) todayTaxEl.textContent = moneyOrZero(todayTax);
+  todayTotalEl.textContent = moneyOrZero(todayGrand);
+  todayCashEl.textContent = moneyOrZero(today.cash);
+  todayMobileEl.textContent = moneyOrZero(today.mobile_money);
+  if (monthNetEl) monthNetEl.textContent = moneyOrZero(monthNet);
+  if (monthTaxEl) monthTaxEl.textContent = moneyOrZero(monthTax);
+  if (monthTotalEl) monthTotalEl.textContent = moneyOrZero(monthGrand);
+  if (monthCashEl) monthCashEl.textContent = moneyOrZero(month.cash);
+  if (monthMobileEl) monthMobileEl.textContent = moneyOrZero(month.mobile_money);
 }
 
 async function loadDailySalesChart(startDate, endDate) {
@@ -1149,9 +1391,8 @@ async function loadDashboardSummary() {
   const avgEl = document.getElementById('kpi-average-order-value');
   if (!salesEl || !ordersEl || !avgEl) return;
 
-  salesEl.textContent = formatMoney(0);
-  ordersEl.textContent = '0';
-  avgEl.textContent = formatMoney(0);
+  overviewSummaryCache = null;
+  renderOverviewSummaryMetrics();
 
   try {
     const res = await fetch(`${API_BASE}/api/reports/summary/today`, {
@@ -1161,13 +1402,8 @@ async function loadDashboardSummary() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'Failed to load dashboard summary');
 
-    const totalSales = Number(data.total_sales) || 0;
-    const totalOrders = Number(data.total_orders) || 0;
-    const averageOrderValue = Number(data.average_order_value) || 0;
-
-    salesEl.textContent = formatMoney(totalSales);
-    ordersEl.textContent = String(Math.max(0, Math.floor(totalOrders)));
-    avgEl.textContent = formatMoney(averageOrderValue);
+    overviewSummaryCache = data;
+    renderOverviewSummaryMetrics();
   } catch (err) {
     console.error(err);
     if (window.toast) window.toast.error('Failed to load dashboard summary');
@@ -1192,18 +1428,10 @@ async function loadPaymentMethodBreakdown() {
   const todayTotalEl = document.getElementById('pm-today-total');
   const todayCashEl = document.getElementById('pm-today-cash');
   const todayMobileEl = document.getElementById('pm-today-mobile');
-  const monthTotalEl = document.getElementById('pm-month-total');
-  const monthCashEl = document.getElementById('pm-month-cash');
-  const monthMobileEl = document.getElementById('pm-month-mobile');
   if (!todayTotalEl || !todayCashEl || !todayMobileEl) return;
 
-  const zero = formatMoney(0);
-  todayTotalEl.textContent = zero;
-  todayCashEl.textContent = zero;
-  todayMobileEl.textContent = zero;
-  if (monthTotalEl) monthTotalEl.textContent = zero;
-  if (monthCashEl) monthCashEl.textContent = zero;
-  if (monthMobileEl) monthMobileEl.textContent = zero;
+  overviewPaymentCache = null;
+  renderOverviewPaymentMetrics();
 
   try {
     const res = await fetch(`${API_BASE}/api/analytics/sales-breakdown`, {
@@ -1213,21 +1441,16 @@ async function loadPaymentMethodBreakdown() {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail || 'Failed to load payment breakdown');
 
-    const today = data.today || {};
-    const month = data.month || {};
-    todayTotalEl.textContent = formatMoney(Number(today.total) || 0);
-    todayCashEl.textContent = formatMoney(Number(today.cash) || 0);
-    todayMobileEl.textContent = formatMoney(Number(today.mobile_money) || 0);
-    if (monthTotalEl) monthTotalEl.textContent = formatMoney(Number(month.total) || 0);
-    if (monthCashEl) monthCashEl.textContent = formatMoney(Number(month.cash) || 0);
-    if (monthMobileEl) monthMobileEl.textContent = formatMoney(Number(month.mobile_money) || 0);
+    overviewPaymentCache = data;
+    renderOverviewPaymentMetrics();
   } catch (err) {
     console.error(err);
   }
 }
 
 function setCheckoutPaymentMethod(method) {
-  const normalized = method === 'mobile_money' ? 'mobile_money' : 'cash';
+  const normalized =
+    method === 'mobile_money' ? 'mobile_money' : method === 'split' ? 'split' : 'cash';
   const hidden = document.getElementById('payment-method');
   if (hidden) hidden.value = normalized;
   document.querySelectorAll('.payment-method-btn').forEach((btn) => {
@@ -1240,6 +1463,85 @@ function setCheckoutPaymentMethod(method) {
     btn.classList.toggle('bg-white', !isActive);
     btn.classList.toggle('text-slate-700', !isActive);
   });
+  const singleBlock = document.getElementById('checkout-single-tender-block');
+  const splitBlock = document.getElementById('checkout-split-block');
+  const singleChangeRow = document.getElementById('checkout-single-change-row');
+  const isSplit = normalized === 'split';
+  if (singleBlock) singleBlock.classList.toggle('hidden', isSplit);
+  if (splitBlock) splitBlock.classList.toggle('hidden', !isSplit);
+  if (singleChangeRow) singleChangeRow.classList.toggle('hidden', isSplit);
+  if (isSplit) {
+    const total = Number.isFinite(selectedOrderTotal) ? selectedOrderTotal : 0;
+    const cashEl = document.getElementById('split-cash-amount');
+    const mobileEl = document.getElementById('split-mobile-amount');
+    if (mobileEl && !mobileEl.value) mobileEl.value = '0';
+    if (cashEl && !cashEl.value) cashEl.value = String(total || '');
+  }
+  recalculateCheckoutTotals();
+  updateCheckoutConfirmEnabled();
+}
+
+let splitAutofillLock = false;
+
+function parseMoneyInput(el) {
+  const n = parseFloat(el?.value || '0');
+  return Number.isFinite(n) && n >= 0 ? roundMoney(n) : 0;
+}
+
+function getSplitPaymentAmounts() {
+  return {
+    cash: parseMoneyInput(document.getElementById('split-cash-amount')),
+    mobile: parseMoneyInput(document.getElementById('split-mobile-amount')),
+  };
+}
+
+function updateCheckoutConfirmEnabled() {
+  const btn = document.getElementById('btn-process-payment');
+  if (!btn) return;
+  const method = document.getElementById('payment-method')?.value || 'cash';
+  const total = Number.isFinite(selectedOrderTotal) ? selectedOrderTotal : 0;
+  if (selectedOrderId == null) {
+    btn.disabled = true;
+    return;
+  }
+  if (method === 'split') {
+    const { cash, mobile } = getSplitPaymentAmounts();
+    btn.disabled = roundMoney(cash + mobile) < total;
+    return;
+  }
+  const tendered = parseFloat(document.getElementById('amount-tendered')?.value || '0');
+  btn.disabled = Number.isNaN(tendered) || tendered < total;
+}
+
+function updateSplitChangeDueDisplay(finalTotal) {
+  const cash = parseMoneyInput(document.getElementById('split-cash-amount'));
+  const mobile = parseMoneyInput(document.getElementById('split-mobile-amount'));
+  const dueBox = document.getElementById('split-change-due-box');
+  const dueEl = document.getElementById('split-change-due');
+  const changeSpan = document.getElementById('change-amount');
+  const paid = roundMoney(cash + mobile);
+  // Change is excess cash after mobile covers its share (same as backend).
+  const remainingAfterMobile = roundMoney(Math.max(finalTotal - mobile, 0));
+  const changeDue = roundMoney(cash - remainingAfterMobile);
+  const insufficient = paid < finalTotal;
+
+  let label = formatMoney(0);
+  if (insufficient) label = t('insufficient', 'Insufficient');
+  else label = formatMoney(Math.max(changeDue, 0));
+
+  if (dueEl) dueEl.textContent = label;
+  if (changeSpan) changeSpan.textContent = label;
+  if (dueBox) {
+    const hasChange = !insufficient && changeDue > 0;
+    dueBox.classList.toggle('border-emerald-300', hasChange);
+    dueBox.classList.toggle('bg-emerald-50', hasChange);
+    dueBox.classList.toggle('border-slate-200', !hasChange);
+    dueBox.classList.toggle('bg-slate-50', !hasChange);
+    if (dueEl) {
+      dueEl.classList.toggle('text-emerald-700', hasChange);
+      dueEl.classList.toggle('text-slate-800', !hasChange);
+    }
+  }
 }
 
 function initPaymentMethodToggle() {
@@ -1248,6 +1550,30 @@ function initPaymentMethodToggle() {
       setCheckoutPaymentMethod(btn.getAttribute('data-payment-method'));
     });
   });
+  const cashEl = document.getElementById('split-cash-amount');
+  const mobileEl = document.getElementById('split-mobile-amount');
+  // Cash tendered: manual override allowed (overpay → Change Due). Do not rewrite mobile.
+  if (cashEl) {
+    cashEl.addEventListener('input', () => {
+      recalculateCheckoutTotals();
+      updateCheckoutConfirmEnabled();
+    });
+  }
+  // Mobile entered → auto-fill Cash with exact remaining balance.
+  if (mobileEl) {
+    mobileEl.addEventListener('input', () => {
+      if (splitAutofillLock) return;
+      splitAutofillLock = true;
+      const total = Number.isFinite(selectedOrderTotal) ? selectedOrderTotal : 0;
+      const mobile = parseFloat(mobileEl.value || '0');
+      if (cashEl && Number.isFinite(mobile) && mobile >= 0) {
+        cashEl.value = String(roundMoney(Math.max(total - mobile, 0)));
+      }
+      splitAutofillLock = false;
+      recalculateCheckoutTotals();
+      updateCheckoutConfirmEnabled();
+    });
+  }
   setCheckoutPaymentMethod('cash');
 }
 
@@ -1309,14 +1635,25 @@ function recalculateCheckoutTotals() {
 
   selectedOrderTotal = finalTotal;
 
-  const amountInput = document.getElementById('amount-tendered');
+  const method = document.getElementById('payment-method')?.value || 'cash';
   const changeSpan = document.getElementById('change-amount');
+  if (method === 'split') {
+    updateSplitChangeDueDisplay(finalTotal);
+    updateCheckoutConfirmEnabled();
+    return finalTotal;
+  }
+
+  const amountInput = document.getElementById('amount-tendered');
   const tendered = parseFloat(amountInput?.value || '0');
   const change = tendered - finalTotal;
-  if (!changeSpan) return finalTotal;
+  if (!changeSpan) {
+    updateCheckoutConfirmEnabled();
+    return finalTotal;
+  }
   if (Number.isNaN(change)) changeSpan.textContent = formatMoney(0);
   else if (change >= 0) changeSpan.textContent = formatMoney(change);
   else changeSpan.textContent = t('insufficient', 'Insufficient');
+  updateCheckoutConfirmEnabled();
   return finalTotal;
 }
 
@@ -1631,6 +1968,10 @@ function selectOrder(order, source = null) {
   const discountValueInput = document.getElementById('checkout-discount-value');
   if (amountInput) amountInput.value = '';
   if (changeSpan) changeSpan.textContent = formatMoney(0);
+  const splitCash = document.getElementById('split-cash-amount');
+  const splitMobile = document.getElementById('split-mobile-amount');
+  if (splitCash) splitCash.value = '';
+  if (splitMobile) splitMobile.value = '';
   if (discountTypeSelect) discountTypeSelect.value = 'none';
   if (discountValueInput) {
     discountValueInput.value = '';
@@ -1680,18 +2021,44 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
   const tendered = parseFloat((amountInput && amountInput.value) || '0');
   const { type: discountType, value: discountValue } = getCheckoutDiscountState();
   const currentFinalTotal = recalculateCheckoutTotals();
-
-  if (Number.isNaN(tendered) || tendered <= 0) {
-    await dialogAlert(t('enter_valid_amount_tendered', 'Enter a valid amount tendered.'), 'error', t('error', 'Error'));
-    return;
-  }
-  if (tendered < currentFinalTotal) {
-    await dialogAlert(t('amount_less_than_total', 'Amount tendered is less than total.'), 'error', t('error', 'Error'));
-    return;
-  }
-
   const method = paymentMethodInput ? paymentMethodInput.value || 'cash' : 'cash';
   const issueReceipt = issueReceiptEl ? !!issueReceiptEl.checked : true;
+  const payload = {
+    discount_type: discountType === 'none' ? null : discountType,
+    discount_value: discountType === 'none' ? 0 : discountValue,
+    issue_receipt: issueReceipt,
+  };
+
+  if (method === 'split') {
+    const cash = parseMoneyInput(document.getElementById('split-cash-amount'));
+    const mobile = parseMoneyInput(document.getElementById('split-mobile-amount'));
+    if (roundMoney(cash + mobile) < currentFinalTotal) {
+      await dialogAlert(t('amount_less_than_total', 'Amount tendered is less than total.'), 'error', t('error', 'Error'));
+      return;
+    }
+    payload.payment_method = 'split';
+    payload.cash_amount = cash;
+    payload.mobile_money_amount = mobile;
+    payload.amount_tendered = cash;
+  } else {
+    if (Number.isNaN(tendered) || tendered <= 0) {
+      await dialogAlert(t('enter_valid_amount_tendered', 'Enter a valid amount tendered.'), 'error', t('error', 'Error'));
+      return;
+    }
+    if (tendered < currentFinalTotal) {
+      await dialogAlert(t('amount_less_than_total', 'Amount tendered is less than total.'), 'error', t('error', 'Error'));
+      return;
+    }
+    payload.payment_method = method;
+    payload.amount_tendered = tendered;
+  }
+
+  if (issueReceipt) {
+    const printerId = getSelectedCashierPrinterId();
+    if (printerId != null) payload.printer_id = printerId;
+  }
+  const cashierName = getCurrentCashierName();
+  if (cashierName) payload.cashier_name = cashierName;
 
   btn.disabled = true;
   btn.textContent = t('processing', 'Processing...');
@@ -1699,13 +2066,7 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     const res = await fetch(`${API_BASE}/api/orders/${selectedOrderId}/checkout`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-      body: JSON.stringify({
-        payment_method: method,
-        amount_tendered: tendered,
-        discount_type: discountType === 'none' ? null : discountType,
-        discount_value: discountType === 'none' ? 0 : discountValue,
-        issue_receipt: issueReceipt,
-      }),
+      body: JSON.stringify(payload),
     });
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
@@ -3427,21 +3788,11 @@ if (kitchenPrinterForm) {
     const backend = String(document.getElementById('printer-backend')?.value || 'file').trim();
     const renderMode = String(document.getElementById('printer-render-mode')?.value || 'text').trim();
     const paperWidth = Number(document.getElementById('printer-paper-width')?.value || 576);
-    const drinksHost = String(document.getElementById('printer-drinks-host')?.value || '').trim();
-    const drinksPort = Number(document.getElementById('printer-drinks-port')?.value || 9100);
-    const foodHost = String(document.getElementById('printer-food-host')?.value || '').trim();
-    const foodPort = Number(document.getElementById('printer-food-port')?.value || 9100);
-    const cashierHost = String(document.getElementById('printer-cashier-host')?.value || '').trim();
-    const cashierPort = Number(document.getElementById('printer-cashier-port')?.value || 9100);
     const payload = {
       backend,
       render_mode: renderMode,
       paper_width_px: paperWidth,
-      routes: [
-        { route_key: 'drinks', host: drinksHost || null, port: drinksPort || 9100 },
-        { route_key: 'food', host: foodHost || null, port: foodPort || 9100 },
-        { route_key: 'cashier', host: cashierHost || null, port: cashierPort || 9100 },
-      ],
+      routes: [],
     };
     try {
       const res = await fetch(`${API_BASE}/api/admin/kitchen-printers`, {
@@ -3456,7 +3807,7 @@ if (kitchenPrinterForm) {
         return;
       }
       await loadKitchenPrinterSettings();
-      await dialogAlert('Printer settings saved.', 'success', 'Printer Settings');
+      await dialogAlert('Print mode saved.', 'success', 'Printer Settings');
     } catch (err) {
       console.error(err);
       await dialogAlert('Failed to save printer settings', 'error', 'Printer Settings');
@@ -3480,25 +3831,175 @@ async function loadKitchenPrinterSettings() {
     if (backendEl) backendEl.value = data.backend || 'file';
     if (renderModeEl) renderModeEl.value = data.render_mode || 'text';
     if (paperWidthEl) paperWidthEl.value = String(data.paper_width_px || 576);
-    const routeMap = Object.fromEntries((data.routes || []).map((r) => [r.route_key, r]));
-    const drinks = routeMap.drinks || {};
-    const food = routeMap.food || {};
-    const cashier = routeMap.cashier || {};
-    const drinksHost = document.getElementById('printer-drinks-host');
-    const drinksPort = document.getElementById('printer-drinks-port');
-    const foodHost = document.getElementById('printer-food-host');
-    const foodPort = document.getElementById('printer-food-port');
-    const cashierHost = document.getElementById('printer-cashier-host');
-    const cashierPort = document.getElementById('printer-cashier-port');
-    if (drinksHost) drinksHost.value = drinks.host || '';
-    if (drinksPort) drinksPort.value = drinks.port || 9100;
-    if (foodHost) foodHost.value = food.host || '';
-    if (foodPort) foodPort.value = food.port || 9100;
-    if (cashierHost) cashierHost.value = cashier.host || '';
-    if (cashierPort) cashierPort.value = cashier.port || 9100;
   } catch (err) {
     console.error(err);
   }
+}
+
+function openPrinterModal(printer = null) {
+  const modal = document.getElementById('printer-modal');
+  if (!modal) return;
+  const title = document.getElementById('printer-modal-title');
+  const idEl = document.getElementById('printer-edit-id');
+  const nameEl = document.getElementById('printer-form-name');
+  const hostEl = document.getElementById('printer-form-host');
+  const portEl = document.getElementById('printer-form-port');
+  const roleEl = document.getElementById('printer-form-role');
+  const activeEl = document.getElementById('printer-form-active');
+  if (printer) {
+    if (title) title.textContent = 'Edit Printer';
+    if (idEl) idEl.value = String(printer.id);
+    if (nameEl) nameEl.value = printer.name || '';
+    if (hostEl) hostEl.value = printer.host || '';
+    if (portEl) portEl.value = printer.port || 9100;
+    if (roleEl) roleEl.value = printer.role || 'kitchen';
+    if (activeEl) activeEl.checked = printer.is_active !== false;
+  } else {
+    if (title) title.textContent = 'Add Printer';
+    if (idEl) idEl.value = '';
+    if (nameEl) nameEl.value = '';
+    if (hostEl) hostEl.value = '';
+    if (portEl) portEl.value = 9100;
+    if (roleEl) roleEl.value = 'cashier';
+    if (activeEl) activeEl.checked = true;
+  }
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function closePrinterModal() {
+  const modal = document.getElementById('printer-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function escapePrinterHtml(text) {
+  return String(text ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+async function loadPrintersAdmin() {
+  const tbody = document.getElementById('printers-table-body');
+  if (!tbody) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/printers`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    if (!res.ok) throw new Error('Failed to load printers');
+    const printers = await res.json();
+    if (!Array.isArray(printers) || printers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-slate-500">No printers yet. Add one to get started.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = printers
+      .map(
+        (p) => `
+      <tr data-printer-id="${p.id}">
+        <td class="px-3 py-2 font-medium text-slate-800">${escapePrinterHtml(p.name)}</td>
+        <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.role)}</td>
+        <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.host || '—')}</td>
+        <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.port || 9100)}</td>
+        <td class="px-3 py-2 text-slate-600">${p.is_active ? 'Yes' : 'No'}</td>
+        <td class="px-3 py-2 text-right space-x-2 whitespace-nowrap">
+          <button type="button" class="printer-edit-btn text-blue-600 hover:underline" data-id="${p.id}">Edit</button>
+          <button type="button" class="printer-delete-btn text-red-600 hover:underline" data-id="${p.id}">Delete</button>
+        </td>
+      </tr>`
+      )
+      .join('');
+
+    tbody.querySelectorAll('.printer-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.getAttribute('data-id'));
+        const printer = printers.find((x) => x.id === id);
+        if (printer) openPrinterModal(printer);
+      });
+    });
+    tbody.querySelectorAll('.printer-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = Number(btn.getAttribute('data-id'));
+        const ok = await dialogConfirm('Delete this printer?', 'Delete Printer');
+        if (!ok) return;
+        try {
+          const delRes = await fetch(`${API_BASE}/api/printers/${id}`, {
+            method: 'DELETE',
+            headers: { ...window.auth.getAuthHeaders() },
+          });
+          if (window.auth && window.auth.checkUnauthorized(delRes)) return;
+          if (!delRes.ok) {
+            const err = await delRes.json().catch(() => ({}));
+            await dialogAlert(err.detail || 'Failed to delete printer', 'error', 'Printers');
+            return;
+          }
+          await loadPrintersAdmin();
+        } catch (err) {
+          console.error(err);
+          await dialogAlert('Failed to delete printer', 'error', 'Printers');
+        }
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-red-600">Error loading printers.</td></tr>';
+  }
+}
+
+const btnAddPrinter = document.getElementById('btn-add-printer');
+if (btnAddPrinter) btnAddPrinter.addEventListener('click', () => openPrinterModal(null));
+const printerModalCancel = document.getElementById('printer-modal-cancel');
+if (printerModalCancel) printerModalCancel.addEventListener('click', closePrinterModal);
+const printerModal = document.getElementById('printer-modal');
+if (printerModal) {
+  printerModal.addEventListener('click', (e) => {
+    if (e.target === printerModal) closePrinterModal();
+  });
+}
+const printerModalSave = document.getElementById('printer-modal-save');
+if (printerModalSave) {
+  printerModalSave.addEventListener('click', async () => {
+    const id = String(document.getElementById('printer-edit-id')?.value || '').trim();
+    const name = String(document.getElementById('printer-form-name')?.value || '').trim();
+    const host = String(document.getElementById('printer-form-host')?.value || '').trim();
+    const port = Number(document.getElementById('printer-form-port')?.value || 9100);
+    const role = String(document.getElementById('printer-form-role')?.value || 'kitchen').trim();
+    const isActive = !!document.getElementById('printer-form-active')?.checked;
+    if (!name) {
+      await dialogAlert('Name is required.', 'error', 'Printers');
+      return;
+    }
+    const payload = {
+      name,
+      host: host || null,
+      port: port || 9100,
+      role,
+      is_active: isActive,
+    };
+    try {
+      const url = id ? `${API_BASE}/api/printers/${id}` : `${API_BASE}/api/printers`;
+      const method = id ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+        body: JSON.stringify(payload),
+      });
+      if (window.auth && window.auth.checkUnauthorized(res)) return;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        await dialogAlert(err.detail || 'Failed to save printer', 'error', 'Printers');
+        return;
+      }
+      closePrinterModal();
+      await loadPrintersAdmin();
+    } catch (err) {
+      console.error(err);
+      await dialogAlert('Failed to save printer', 'error', 'Printers');
+    }
+  });
 }
 
 async function loadPredefinedInstructionsAdmin() {
@@ -3562,6 +4063,11 @@ async function loadMenuData() {
       await loadKitchenPrinterSettings();
     } catch (e) {
       console.error('Kitchen printer settings failed:', e);
+    }
+    try {
+      await loadPrintersAdmin();
+    } catch (e) {
+      console.error('Printers admin failed:', e);
     }
     try {
       await loadPredefinedInstructionsAdmin();

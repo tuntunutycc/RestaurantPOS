@@ -57,6 +57,9 @@ def seed_root(username: str, password: str, db=None) -> User:
                 .first()
             )
             print(f"Root already exists (username={existing.username}, id={existing.id}). No changes made.")
+            from services.printing.settings import seed_kitchen_printer_settings
+
+            seed_kitchen_printer_settings(db)
             return existing
 
         if db.query(User).filter(User.username == username, User.is_deleted.is_(False)).first():
@@ -72,6 +75,11 @@ def seed_root(username: str, password: str, db=None) -> User:
         db.commit()
         db.refresh(user)
         print(f"Created root user: username={user.username}, id={user.id}")
+
+        from services.printing.settings import seed_kitchen_printer_settings
+
+        seed_kitchen_printer_settings(db)
+        print("Seeded default printers (cashier + kitchen) and print settings.")
         return user
     except Exception:
         db.rollback()

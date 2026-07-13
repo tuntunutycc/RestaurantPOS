@@ -35,9 +35,14 @@ def _aggregate_payment_totals(
     end_dt: datetime,
     checked_out_by_id: int | None = None,
 ) -> PaymentMethodTotalsResponse:
+    # Prefer stored per-method amounts; fall back to legacy payment_method + total.
     cash_expr = func.coalesce(
         func.sum(
             case(
+                (
+                    Order.cash_amount.isnot(None),
+                    Order.cash_amount,
+                ),
                 (func.lower(Order.payment_method) == "cash", Order.total_amount),
                 else_=0.0,
             )
@@ -47,13 +52,19 @@ def _aggregate_payment_totals(
     mobile_expr = func.coalesce(
         func.sum(
             case(
+                (
+                    Order.mobile_money_amount.isnot(None),
+                    Order.mobile_money_amount,
+                ),
                 (func.lower(Order.payment_method) == "mobile_money", Order.total_amount),
                 else_=0.0,
             )
         ),
         0.0,
     )
-    q = db.query(cash_expr, mobile_expr).filter(
+    tax_expr = func.coalesce(func.sum(func.coalesce(Order.tax_amount, 0.0)), 0.0)
+    grand_expr = func.coalesce(func.sum(Order.total_amount), 0.0)
+    q = db.query(cash_expr, mobile_expr, tax_expr, grand_expr).filter(
         Order.created_at >= start_dt,
         Order.created_at < end_dt,
         Order.status.in_(_PAID_STATUSES),
@@ -61,13 +72,18 @@ def _aggregate_payment_totals(
     if checked_out_by_id is not None:
         q = q.filter(Order.checked_out_by_id == checked_out_by_id)
 
-    cash_total, mobile_total = q.one()
+    cash_total, mobile_total, tax_total, grand_total = q.one()
     cash = float(cash_total or 0.0)
     mobile = float(mobile_total or 0.0)
+    tax = float(tax_total or 0.0)
+    grand = float(grand_total or 0.0)
     return PaymentMethodTotalsResponse(
         cash=round(cash, 2),
         mobile_money=round(mobile, 2),
         total=round(cash + mobile, 2),
+        subtotal_revenue=round(grand - tax, 2),
+        total_tax=round(tax, 2),
+        grand_total_revenue=round(grand, 2),
     )
 
 

@@ -134,11 +134,13 @@ This POS system is currently built with:
   - `text`: ESC/POS text payload (compatible fallback)
   - `image`: server-rendered raster image payload for Myanmar text compatibility
 - Image mode auto-loads bundled Myanmar and Latin fallback fonts from `assets/fonts/`, with `KITCHEN_PRINT_FONT_PATH` available only as an override.
-- Endpoint routes in `PrinterRouteEndpoint`: **`drinks`**, **`food`** (kitchen tickets), **`cashier`** (checkout receipts). Category `printer_route` remains drinks|food only.
-- Env seed/fallback hosts: `PRINTER_DRINKS_HOST`, `PRINTER_FOOD_HOST`, `PRINTER_CASHIER_HOST` (+ `_PORT`). Receipt shop header: `SHOP_NAME` (default `My Restaurant`).
-- Admin printer settings live in the counter menu management screen and are exposed through `GET/PUT /api/admin/kitchen-printers`.
+- Endpoint routes: menu categories stay **`drinks`** / **`food`**. Dispatch maps `food`→`kitchen` printer role and `drinks`→`bar` (fallback `kitchen`).
+- Unified **`printers`** table (`Printer`: name, host, port, role=`cashier|kitchen|bar|other`, is_active). Admins CRUD unlimited printers via `GET/POST/PUT/DELETE /api/printers`.
+- Fresh seed: **Default Cashier** + **Default Kitchen** only (`seed_default_printers` / `scripts/seed_root.py`).
+- Global print mode (backend/render/paper): `GET/PUT /api/admin/kitchen-printers` (no fixed host cards).
+- Checkout `printer_id` + Cashier UI `localStorage.selectedCashierPrinterId` for terminal selection.
 - Kitchen print failures must not roll back order submit. Cashier receipt print failures must not roll back checkout; API may return `warning`.
-- See `specs/feature-kitchen-printing/` and `specs/feature-cashier-receipt-printing/`.
+- See `specs/feature-kitchen-printing/`, `specs/feature-cashier-receipt-printing/`, `specs/feature-dynamic-printer-management/`.
 
 ## Test Strategy (required for SDD merge gate)
 - Introduce automated tests with a backend test runner (e.g., `pytest`) for each feature.

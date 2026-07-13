@@ -34,6 +34,7 @@ The `account` role may view **store-level** sales analytics within the time cap 
 | Capability | API | Allowed |
 |------------|-----|---------|
 | Today's store summary | `GET /api/reports/summary/today` | ✓ |
+| Period sales (daily/monthly, tax-aware) | `GET /api/reports/sales?period=&date=` | ✓ (≤ 90d) |
 | Daily sales trend | `GET /api/reports/daily-sales?start_date=&end_date=` | ✓ (≤ 90d) |
 | Monthly sales trend | `GET /api/reports/monthly-sales?year=` | ✓ (months within 90d window) |
 | Sales by cashier | `GET /api/reports/sales/by-cashier?start_date=&end_date=` | ✓ (≤ 90d) |

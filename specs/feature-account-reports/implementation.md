@@ -43,6 +43,7 @@ Used by date-ranged report handlers in `routers/reports.py`.
 | Endpoint | account | Date guard |
 |----------|---------|------------|
 | `GET /api/reports/summary/today` | ✓ | N/A (today) |
+| `GET /api/reports/sales` | ✓ | `assert_report_date_range` |
 | `GET /api/reports/daily-sales` | ✓ | `assert_report_date_range` |
 | `GET /api/reports/monthly-sales` | ✓ | Account-specific year clip |
 | `GET /api/reports/sales/by-cashier` | ✓ | `assert_report_date_range` |

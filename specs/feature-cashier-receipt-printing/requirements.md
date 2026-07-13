@@ -17,11 +17,18 @@ Multi-cashier terminals share one (or more) network receipt printers configured 
 | Cashier / checkout roles | Checkout with `issue_receipt`; see API `warning` if print fails |
 | System | After paid commit, optional in-request TCP print (short timeout) |
 
-## FR-CR1: Cashier printer endpoint
-- `PrinterRouteEndpoint.route_key = cashier`
-- Seeded on startup like drinks/food; env fallback:
-  - `PRINTER_CASHIER_HOST` / `PRINTER_CASHIER_PORT` (default port `9100`)
-- Shares `KitchenPrinterSettings.backend` / `render_mode` / `paper_width_px` with kitchen (image mode recommended for Myanmar).
+## FR-CR1: Cashier printers (via unified Printer table)
+- Rows in **`printers`** with `role=cashier`: `id`, `name`, `host`, `port`, `is_active`
+- Seeded as **Default Cashier Printer** on fresh install (with Default Kitchen)
+- Admin CRUD: `POST/PUT/DELETE /api/printers` (any role including cashier)
+- Shares `KitchenPrinterSettings` backend / render_mode / paper_width_px
+
+## FR-CR1b: Terminal printer selection
+- **API list:** `GET /api/printers?role=cashier` → active cashier printers for the terminal dropdown
+- **Checkout:** `OrderCheckoutRequest.printer_id: int | null` (optional)
+  - When `issue_receipt=true`: selected cashier printer, else first active cashier printer
+  - When `issue_receipt=false` → no print
+- **Frontend:** `#cashier-printer-select` + `localStorage.selectedCashierPrinterId`
 
 ## FR-CR2: Checkout request — `issue_receipt`
 - `OrderCheckoutRequest.issue_receipt: bool` (default **`true`**)
@@ -31,19 +38,18 @@ Multi-cashier terminals share one (or more) network receipt printers configured 
 ## FR-CR3: Checkout workflow
 1. Validate tender / discounts; persist `status=paid` + payment fields; free table if dine-in; WebSocket broadcasts
 2. If `issue_receipt`:
-   - Build receipt text (shop name, order id, served by, items, subtotal, discount, tax, grand total, payment method, tendered, change)
-   - Render via existing `render_ticket_image` when `render_mode=image`, else ESC/POS text
-   - Send to `cashier` route (`file` → `cashier_printer_output.txt|.png`; `escpos_network` → TCP)
-   - TCP timeout **3 seconds** for cashier receipt attempts
-3. Return **`200`** with checkout payload; on print failure set `warning` (e.g. `"Receipt printer offline or unreachable"`)
+   - Resolve target: `printer_id` → that cashier `Printer`, else first active `role=cashier`
+   - Build receipt text … render … send (file or TCP 3s)
+3. Return **`200`**; print failure → `warning` only
 
 ## FR-CR4: Shop name
 - `SHOP_NAME` env var; fallback **`My Restaurant`**
 
 ## FR-CR5: Frontend
-- Remove `#receipt-print` DOM and `@media print` CSS; remove `window.print()` / `renderReceiptForPrint`
-- On success + `warning`: toast (non-blocking) so cashier knows paper did not print
-- On success without warning: existing success feedback
+- Check Out pane / cashier header: printer `<select id="cashier-printer-select">` + Print Receipt checkbox
+- Persist selection in `localStorage.selectedCashierPrinterId`
+- Checkout body includes `printer_id` when printing
+- On success + `warning`: toast; no browser `window.print()`
 
 ## Related
 - `specs/feature-kitchen-printing/` — shared render/backends

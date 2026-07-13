@@ -165,6 +165,80 @@ def _round_money(value) -> float:
         return 0.0
 
 
+def _resolve_checkout_payment(body: OrderCheckoutRequest, final_total: float) -> dict:
+    """
+    Resolve applied cash/mobile amounts, tendered cash, change, and payment_method.
+    Supports legacy payment_method+amount_tendered and explicit cash/mobile amounts.
+    """
+    final_total = _round_money(final_total)
+    has_explicit_amounts = body.cash_amount is not None or body.mobile_money_amount is not None
+
+    if has_explicit_amounts:
+        cash_tendered = _round_money(max(float(body.cash_amount or 0.0), 0.0))
+        mobile_tendered = _round_money(max(float(body.mobile_money_amount or 0.0), 0.0))
+        paid_sum = _round_money(cash_tendered + mobile_tendered)
+        if paid_sum < final_total:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Payment amounts ({paid_sum:.2f}) are less than total ({final_total:.2f})"
+                ),
+            )
+        applied_mobile = _round_money(min(mobile_tendered, final_total))
+        applied_cash = _round_money(final_total - applied_mobile)
+        # Change Due comes strictly from excess cash tendered (not mobile overpay).
+        change = _round_money(cash_tendered - applied_cash)
+        if change < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cash amount is insufficient after applying mobile money",
+            )
+        if applied_cash > 0 and applied_mobile > 0:
+            method = "split"
+        elif applied_mobile > 0:
+            method = "mobile_money"
+        else:
+            method = "cash"
+        return {
+            "payment_method": method,
+            "cash_amount": applied_cash,
+            "mobile_money_amount": applied_mobile,
+            "amount_tendered": cash_tendered,
+            "change_amount": change,
+        }
+
+    method = body.payment_method
+    if method not in ("cash", "mobile_money"):
+        raise HTTPException(
+            status_code=422,
+            detail="payment_method must be 'cash' or 'mobile_money' when amounts are omitted",
+        )
+    if body.amount_tendered is None:
+        raise HTTPException(status_code=422, detail="amount_tendered is required")
+    tendered = _round_money(float(body.amount_tendered))
+    if tendered < final_total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amount tendered ({tendered:.2f}) is less than total ({final_total:.2f})",
+        )
+    change = _round_money(tendered - final_total)
+    if method == "cash":
+        return {
+            "payment_method": "cash",
+            "cash_amount": final_total,
+            "mobile_money_amount": 0.0,
+            "amount_tendered": tendered,
+            "change_amount": change,
+        }
+    return {
+        "payment_method": "mobile_money",
+        "cash_amount": 0.0,
+        "mobile_money_amount": final_total,
+        "amount_tendered": tendered,
+        "change_amount": change,
+    }
+
+
 def _display_menu_item_name(order_item: OrderItem) -> str:
     menu_item = getattr(order_item, "menu_item", None)
     if menu_item is not None and not bool(getattr(menu_item, "is_deleted", False)):
@@ -1205,6 +1279,26 @@ async def checkout_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    if body.issue_receipt and body.printer_id is not None:
+        from models import Printer
+        from services.printing.settings import seed_default_printers
+
+        seed_default_printers(db)
+        selected = (
+            db.query(Printer)
+            .filter(
+                Printer.id == body.printer_id,
+                Printer.role == "cashier",
+                Printer.is_active.is_(True),
+            )
+            .first()
+        )
+        if selected is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid or inactive cashier printer",
+            )
+
     subtotal = _round_money(sum(
         float(getattr(i, "subtotal", 0.0) or 0.0)
         for i in (order.order_items or [])
@@ -1227,24 +1321,22 @@ async def checkout_order(
     tax_amount = _order_lines_tax_total(order)
     final_total = _round_money(max(subtotal - discount_amount, 0.0))
 
-    tendered = float(body.amount_tendered)
-    if tendered < final_total:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Amount tendered ({tendered:.2f}) is less than total ({final_total:.2f})",
-        )
-
-    change = _round_money(tendered - final_total)
+    payment = _resolve_checkout_payment(body, final_total)
+    tendered = payment["amount_tendered"]
+    change = payment["change_amount"]
 
     order.total_amount = _round_money(final_total)
     order.discount_type = normalized_discount_type
     order.discount_value = _round_money(discount_value) if normalized_discount_type else 0.0
-    order.payment_method = body.payment_method
+    order.payment_method = payment["payment_method"]
+    order.cash_amount = payment["cash_amount"]
+    order.mobile_money_amount = payment["mobile_money_amount"]
     order.amount_tendered = _round_money(tendered)
     order.change_amount = _round_money(change)
     order.tax_amount = _round_money(tax_amount)
     order.status = "paid"
     order.checked_out_by_id = current_user.id
+    order.cashier_name = body.cashier_name
     # For takeaway orders, table_id is NULL, so skip table status update safely.
     table = db.query(Table).filter(Table.id == order.table_id).first() if order.table_id is not None else None
     previous_status = table.status if table else None
@@ -1314,16 +1406,20 @@ async def checkout_order(
             await dispatch_cashier_receipt(
                 order_id=order.id,
                 served_by=detail.waiter_name,
+                cashier_name=getattr(order, "cashier_name", None),
                 location_label=location_label,
                 items=receipt_items,
                 subtotal=subtotal,
                 discount_amount=discount_amount,
                 tax_amount=_round_money(tax_amount),
                 grand_total=_round_money(final_total),
-                payment_method=body.payment_method,
+                payment_method=payment["payment_method"],
                 amount_tendered=_round_money(tendered),
                 change_amount=_round_money(change),
+                cash_amount=payment["cash_amount"],
+                mobile_money_amount=payment["mobile_money_amount"],
                 created_at=created_at_str,
+                printer_id=body.printer_id,
                 db=db,
             )
         except Exception as exc:

@@ -17,7 +17,8 @@ Category 1──* MenuItem
 User 1──* UserSession
 User (actor/target) → AdminAuditLog
 KitchenPrinterSettings (singleton id=1)
-PrinterRouteEndpoint (route_key PK)
+Printer (id PK) — dynamic named printers by role
+PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 ```
 
 ---
@@ -88,16 +89,19 @@ PrinterRouteEndpoint (route_key PK)
 | `status` | String(50) | `pending` | `open`, `dining`, `paid`, `cancelled`, etc. |
 | `total_amount` | Float | 0.0 | Sum of active line subtotals (open); finalized at checkout |
 | `created_at` | DateTime | utcnow | |
-| `payment_method` | String(32) nullable | | Set at checkout: `cash` \| `mobile_money` (canonical). Used for dashboard sales breakdown. |
-| `amount_tendered` | Float nullable | | |
+| `payment_method` | String(32) nullable | | `cash` \| `mobile_money` \| `split` at checkout |
+| `cash_amount` | Float nullable | | Applied cash portion of bill |
+| `mobile_money_amount` | Float nullable | | Applied mobile portion of bill |
+| `amount_tendered` | Float nullable | | Cash physically given |
 | `change_amount` | Float nullable | | |
 | `tax_amount` | Float nullable | 0.0 | Receipt tax breakdown (sum of line taxes) |
 | `discount_type` | String(32) nullable | | Order-level checkout discount: `percentage` \| `amount` |
 | `discount_value` | Float nullable | 0.0 | |
-| `checked_out_by_id` | FK → users nullable | | Cashier attribution |
+| `checked_out_by_id` | FK → users nullable | | Cashier attribution (login user) |
+| `cashier_name` | string nullable | | Free-text cashier label for receipt/terminal |
 | `created_by_id` | FK → users nullable | | **Order-taking staff** (waiter/cashier who opened the order). Set on first `POST /api/orders/submit` or `POST /api/orders/`. Immutable after create. API exposes as `waiter_name`. |
 
-**Attribution split:** `Order.created_by_id` = who **opened** the order; `OrderItem.created_by_id` = who submitted each batch; `Order.checked_out_by_id` = cashier at checkout.
+**Attribution split:** `Order.created_by_id` = who **opened** the order; `OrderItem.created_by_id` = who submitted each batch; `Order.checked_out_by_id` = authenticated cashier at checkout; `Order.cashier_name` = optional display name on the physical receipt.
 
 ---
 
@@ -174,7 +178,24 @@ Singleton row `id=1`: `backend`, `render_mode`, `paper_width_px`.
 
 ## `printer_route_endpoints`
 
-PK `route_key` (`drinks` | `food` | `cashier`): LAN `host`, `port` per print endpoint. Category routing uses only `drinks`/`food`; `cashier` is checkout receipts.
+Legacy PK `route_key` (`drinks` | `food` | `cashier`) — optional host fallback. Prefer unified `printers` table.
+
+---
+
+## `printers`
+
+Dynamic named LAN printers (Admin CRUD).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | Integer PK | Checkout `printer_id` for cashier role |
+| `name` | String(64) | Label e.g. "Cashier 2" |
+| `host` | String(255) nullable | LAN IP |
+| `port` | Integer | Default 9100 |
+| `role` | String(32) | `cashier` \| `kitchen` \| `bar` \| `other` |
+| `is_active` | Boolean | |
+
+Seed defaults: Default Cashier + Default Kitchen. Category map: `food`→kitchen, `drinks`→bar (fallback kitchen).
 
 ---
 

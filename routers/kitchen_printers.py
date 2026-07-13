@@ -1,18 +1,13 @@
-"""Admin API for kitchen printer settings (backend + LAN endpoints)."""
+"""Admin API for global kitchen printer backend settings (not per-host CRUD)."""
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from auth import require_roles
 from database import get_db
-from models import KitchenPrinterSettings, PrinterRouteEndpoint, User
-from schemas import (
-    KitchenPrinterSettingsResponse,
-    KitchenPrinterSettingsUpdate,
-    PrinterRouteEndpointResponse,
-)
+from models import KitchenPrinterSettings, User
+from schemas import KitchenPrinterSettingsResponse, KitchenPrinterSettingsUpdate
 from rbac import ADMIN_PANEL_ROLES
-from services.printing.config import KNOWN_ENDPOINT_ROUTES
 from services.printing.settings import seed_kitchen_printer_settings
 
 router = APIRouter(prefix="/api/admin")
@@ -21,12 +16,6 @@ router = APIRouter(prefix="/api/admin")
 def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
     seed_kitchen_printer_settings(db)
     settings = db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
-    endpoints = {
-        row.route_key: row
-        for row in db.query(PrinterRouteEndpoint)
-        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_ENDPOINT_ROUTES)))
-        .all()
-    }
     backend = (getattr(settings, "backend", None) or "file").strip().lower()
     if backend not in ("file", "escpos_network"):
         backend = "file"
@@ -36,19 +25,11 @@ def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
     paper_width_px = int(getattr(settings, "paper_width_px", None) or 576)
     if paper_width_px not in (384, 576):
         paper_width_px = 576
-    routes = [
-        PrinterRouteEndpointResponse(
-            route_key=route_key,
-            host=(endpoints[route_key].host or None) if route_key in endpoints else None,
-            port=int(getattr(endpoints.get(route_key), "port", None) or 9100),
-        )
-        for route_key in sorted(KNOWN_ENDPOINT_ROUTES)
-    ]
     return KitchenPrinterSettingsResponse(
         backend=backend,
         render_mode=render_mode,
         paper_width_px=paper_width_px,
-        routes=routes,
+        routes=[],
     )
 
 
@@ -57,7 +38,7 @@ def get_kitchen_printer_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
-    """Return kitchen printer backend mode and route LAN endpoints. Admin only."""
+    """Return global print backend mode. Hosts are managed via /api/printers CRUD."""
     return _build_settings_response(db)
 
 
@@ -67,7 +48,7 @@ def update_kitchen_printer_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
-    """Update kitchen printer backend mode and route LAN endpoints. Admin only."""
+    """Update global print backend mode. Route hosts in body are ignored (use Printer CRUD)."""
     seed_kitchen_printer_settings(db)
     settings = db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
     if not settings:
@@ -76,22 +57,5 @@ def update_kitchen_printer_settings(
     settings.backend = body.backend
     settings.render_mode = body.render_mode
     settings.paper_width_px = body.paper_width_px
-    endpoints = {
-        row.route_key: row
-        for row in db.query(PrinterRouteEndpoint)
-        .filter(PrinterRouteEndpoint.route_key.in_(sorted(KNOWN_ENDPOINT_ROUTES)))
-        .all()
-    }
-
-    for route_update in body.routes:
-        endpoint = endpoints.get(route_update.route_key)
-        if endpoint is None:
-            endpoint = PrinterRouteEndpoint(route_key=route_update.route_key)
-            db.add(endpoint)
-            endpoints[route_update.route_key] = endpoint
-        host = (route_update.host or "").strip() or None
-        endpoint.host = host
-        endpoint.port = int(route_update.port or 9100)
-
     db.commit()
     return _build_settings_response(db)

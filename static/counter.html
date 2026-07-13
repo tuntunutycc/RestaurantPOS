@@ -88,6 +88,9 @@
           <button type="button" data-dashboard-tab-btn="history" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700" data-role-section="history">
             Sales History
           </button>
+          <button type="button" data-dashboard-tab-btn="reports" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700" data-role-section="history">
+            Sales Reports
+          </button>
           <button type="button" data-dashboard-tab-btn="staff" class="dashboard-subtab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 hidden" data-role-section="staff">
             Staff Performance
           </button>
@@ -101,25 +104,53 @@
       </div>
 
       <div id="dashboard-tab-overview" data-dashboard-tab-content="overview">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <section class="bg-white rounded-lg shadow p-5 border-l-4 border-emerald-500">
-            <p class="text-sm text-slate-500 mb-2">Today's Sales</p>
-            <p id="kpi-total-sales" class="text-2xl font-bold text-slate-800">0 Ks</p>
+        <p class="text-sm text-slate-500 mb-4">Today’s store snapshot — Net Sales + Tax = Gross Sales.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <section class="bg-white rounded-lg shadow p-5 border-l-4 border-slate-400">
+            <p class="text-sm text-slate-500 mb-1">Net Sales</p>
+            <p class="text-xs text-slate-400 mb-1">Tax excluded</p>
+            <p id="kpi-net-sales" class="text-xl font-bold text-slate-800">0 Ks</p>
+          </section>
+          <section class="bg-white rounded-lg shadow p-5 border-l-4 border-amber-500">
+            <p class="text-sm text-slate-500 mb-1">Tax Collected</p>
+            <p class="text-xs text-amber-600 mb-1">VAT / tax total</p>
+            <p id="kpi-total-tax" class="text-xl font-bold text-slate-800">0 Ks</p>
+          </section>
+          <section class="bg-white rounded-lg shadow p-5 border-l-4 border-emerald-500 sm:col-span-2 xl:col-span-1">
+            <p class="text-sm text-slate-500 mb-1">Gross Sales</p>
+            <p class="text-xs text-emerald-600 mb-1">Tax included</p>
+            <p id="kpi-total-sales" class="text-2xl font-bold text-emerald-800">0 Ks</p>
           </section>
           <section class="bg-white rounded-lg shadow p-5 border-l-4 border-blue-500">
-            <p class="text-sm text-slate-500 mb-2">Total Orders</p>
-            <p id="kpi-total-orders" class="text-2xl font-bold text-slate-800">0</p>
+            <p class="text-sm text-slate-500 mb-1">Total Orders</p>
+            <p id="kpi-total-orders" class="text-2xl font-bold text-slate-800 mt-5">0</p>
           </section>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <section class="bg-white rounded-lg shadow p-5 border-l-4 border-purple-500">
-            <p class="text-sm text-slate-500 mb-2">Average Order Value</p>
+            <p class="text-sm text-slate-500 mb-1">Average Order Value</p>
+            <p class="text-xs text-purple-600 mb-1">Based on Gross Sales</p>
             <p id="kpi-average-order-value" class="text-2xl font-bold text-slate-800">0 Ks</p>
           </section>
         </div>
         <div id="payment-breakdown-section" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
           <section class="bg-white rounded-lg shadow p-5 border border-slate-100">
             <h3 class="text-base font-semibold text-slate-800 mb-1" id="pm-today-heading">Today's Sales</h3>
-            <p id="pm-today-total" class="text-2xl font-bold text-slate-800">0 Ks</p>
-            <ul class="mt-3 space-y-1.5 text-sm text-slate-600">
+            <dl class="mt-3 space-y-2 text-sm">
+              <div class="flex justify-between gap-2 text-slate-600">
+                <dt>Net Sales</dt>
+                <dd id="pm-today-net" class="font-semibold text-slate-800">0 Ks</dd>
+              </div>
+              <div class="flex justify-between gap-2 text-slate-600">
+                <dt>Tax Collected</dt>
+                <dd id="pm-today-tax" class="font-semibold text-slate-800">0 Ks</dd>
+              </div>
+              <div class="flex justify-between gap-2 border-t border-slate-100 pt-2">
+                <dt class="font-semibold text-emerald-700">Gross Sales</dt>
+                <dd id="pm-today-total" class="text-lg font-bold text-emerald-800">0 Ks</dd>
+              </div>
+            </dl>
+            <ul class="mt-4 space-y-1.5 text-sm text-slate-600 border-t border-slate-100 pt-3">
               <li class="flex justify-between gap-2">
                 <span>💵 Cash</span>
                 <span id="pm-today-cash" class="font-semibold text-slate-800">0 Ks</span>
@@ -132,8 +163,21 @@
           </section>
           <section class="bg-white rounded-lg shadow p-5 border border-slate-100" data-role-section="history">
             <h3 class="text-base font-semibold text-slate-800 mb-1">Monthly Sales</h3>
-            <p id="pm-month-total" class="text-2xl font-bold text-slate-800">0 Ks</p>
-            <ul class="mt-3 space-y-1.5 text-sm text-slate-600">
+            <dl class="mt-3 space-y-2 text-sm">
+              <div class="flex justify-between gap-2 text-slate-600">
+                <dt>Net Sales</dt>
+                <dd id="pm-month-net" class="font-semibold text-slate-800">0 Ks</dd>
+              </div>
+              <div class="flex justify-between gap-2 text-slate-600">
+                <dt>Tax Collected</dt>
+                <dd id="pm-month-tax" class="font-semibold text-slate-800">0 Ks</dd>
+              </div>
+              <div class="flex justify-between gap-2 border-t border-slate-100 pt-2">
+                <dt class="font-semibold text-emerald-700">Gross Sales</dt>
+                <dd id="pm-month-total" class="text-lg font-bold text-emerald-800">0 Ks</dd>
+              </div>
+            </dl>
+            <ul class="mt-4 space-y-1.5 text-sm text-slate-600 border-t border-slate-100 pt-3">
               <li class="flex justify-between gap-2">
                 <span>💵 Cash</span>
                 <span id="pm-month-cash" class="font-semibold text-slate-800">0 Ks</span>
@@ -292,6 +336,83 @@
         </div>
       </div>
 
+      <div id="dashboard-tab-reports" data-dashboard-tab-content="reports" class="hidden">
+        <section class="bg-white rounded-lg shadow p-5 border border-slate-100">
+          <div class="flex flex-col sm:flex-row sm:items-end gap-4">
+            <div class="w-full sm:w-40">
+              <label for="sales-report-period" class="block text-sm font-medium text-slate-700 mb-1">Period</label>
+              <select
+                id="sales-report-period"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="daily">Daily</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </div>
+            <div class="w-full sm:w-48" id="sales-report-day-wrap">
+              <label for="sales-report-date" class="block text-sm font-medium text-slate-700 mb-1">Date</label>
+              <input
+                id="sales-report-date"
+                type="date"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <div class="w-full sm:w-48 hidden" id="sales-report-month-wrap">
+              <label for="sales-report-month" class="block text-sm font-medium text-slate-700 mb-1">Month</label>
+              <input
+                id="sales-report-month"
+                type="month"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+            <button
+              type="button"
+              id="btn-load-sales-report"
+              class="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700"
+            >
+              Load Report
+            </button>
+          </div>
+
+          <div class="mt-6">
+            <h3 class="text-sm font-semibold text-slate-700 mb-3">Revenue Breakdown</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <section class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p class="text-xs font-medium uppercase tracking-wide text-slate-600">Net Sales</p>
+                <p class="text-xs text-slate-500 mt-0.5">Tax excluded</p>
+                <p id="sales-report-net" class="text-xl font-bold text-slate-900 mt-2">0 Ks</p>
+              </section>
+              <section class="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <p class="text-xs font-medium uppercase tracking-wide text-amber-700">Tax Collected</p>
+                <p class="text-xs text-amber-600 mt-0.5">VAT / tax total</p>
+                <p id="sales-report-tax" class="text-xl font-bold text-amber-900 mt-2">0 Ks</p>
+              </section>
+              <section class="rounded-lg border-2 border-emerald-400 bg-emerald-50 p-4 shadow-sm">
+                <p class="text-xs font-medium uppercase tracking-wide text-emerald-700">Gross Sales</p>
+                <p class="text-xs text-emerald-600 mt-0.5">Tax included · Net + Tax</p>
+                <p id="sales-report-gross" class="text-2xl font-bold text-emerald-900 mt-2">0 Ks</p>
+              </section>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+            <section class="rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <p class="text-xs font-medium uppercase tracking-wide text-blue-700">Total Orders</p>
+              <p id="sales-report-orders" class="text-2xl font-bold text-blue-900 mt-1">0</p>
+            </section>
+            <section class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-600">Cash Received</p>
+              <p id="sales-report-cash" class="text-2xl font-bold text-slate-900 mt-1">0 Ks</p>
+            </section>
+            <section class="rounded-lg border border-violet-200 bg-violet-50 p-4">
+              <p class="text-xs font-medium uppercase tracking-wide text-violet-700">Mobile Received</p>
+              <p id="sales-report-mobile" class="text-2xl font-bold text-violet-900 mt-1">0 Ks</p>
+            </section>
+          </div>
+          <p id="sales-report-status" class="mt-4 text-sm text-slate-500">Select a period and load the report.</p>
+        </section>
+      </div>
+
       <div id="dashboard-tab-insights" data-dashboard-tab-content="insights" class="hidden">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
           <section class="bg-white rounded-lg shadow p-5">
@@ -367,8 +488,29 @@
           id="pane-checkout"
           class="flex flex-col min-h-0 rounded-xl border border-emerald-100 bg-emerald-50/30 shadow-sm overflow-hidden"
         >
-          <div class="shrink-0 px-3 py-2.5 border-b border-emerald-100 bg-emerald-50">
+          <div class="shrink-0 px-3 py-2.5 border-b border-emerald-100 bg-emerald-50 flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-base font-semibold text-slate-800" data-i18n="checkout">Check Out</h2>
+            <div class="flex flex-wrap items-center gap-2 shrink-0">
+              <label class="flex items-center gap-1.5 text-xs text-slate-600" title="Name printed on receipts">
+                <span class="whitespace-nowrap">Cashier</span>
+                <input
+                  id="cashier-name-input"
+                  type="text"
+                  maxlength="128"
+                  placeholder="Name"
+                  class="w-[7.5rem] px-1.5 py-1 text-xs border border-slate-300 rounded-md bg-white text-slate-800 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </label>
+              <label class="flex items-center gap-1.5 text-xs text-slate-600" title="Receipt printer for this terminal">
+                <span class="whitespace-nowrap">Printer</span>
+                <select
+                  id="cashier-printer-select"
+                  class="max-w-[9.5rem] px-1.5 py-1 text-xs border border-slate-300 rounded-md bg-white text-slate-800 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                  <option value="">Default</option>
+                </select>
+              </label>
+            </div>
           </div>
           <div class="flex-1 overflow-y-auto p-3">
             <div id="receipt-container" class="bg-white rounded-lg border border-slate-100 shadow-sm p-4 hidden">
@@ -411,11 +553,11 @@
                 <div>
                   <label class="block text-sm font-medium text-slate-700 mb-2" data-i18n="payment_method">Payment Method</label>
                   <input type="hidden" id="payment-method" value="cash" />
-                  <div id="payment-method-toggle" class="grid grid-cols-2 gap-2">
+                  <div id="payment-method-toggle" class="grid grid-cols-3 gap-2">
                     <button
                       type="button"
                       data-payment-method="cash"
-                      class="payment-method-btn px-3 py-3 rounded-md border-2 border-emerald-500 bg-emerald-50 text-emerald-900 font-semibold text-sm hover:bg-emerald-100"
+                      class="payment-method-btn px-2 py-3 rounded-md border-2 border-emerald-500 bg-emerald-50 text-emerald-900 font-semibold text-sm hover:bg-emerald-100"
                       aria-pressed="true"
                     >
                       💵 Cash
@@ -423,14 +565,22 @@
                     <button
                       type="button"
                       data-payment-method="mobile_money"
-                      class="payment-method-btn px-3 py-3 rounded-md border-2 border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
+                      class="payment-method-btn px-2 py-3 rounded-md border-2 border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
                       aria-pressed="false"
                     >
-                      📱 Mobile Money
+                      📱 Mobile
+                    </button>
+                    <button
+                      type="button"
+                      data-payment-method="split"
+                      class="payment-method-btn px-2 py-3 rounded-md border-2 border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
+                      aria-pressed="false"
+                    >
+                      Split
                     </button>
                   </div>
                 </div>
-                <div>
+                <div id="checkout-single-tender-block">
                   <label class="block text-sm font-medium text-slate-700 mb-1" data-i18n="amount_tendered">Amount Tendered</label>
                   <input
                     type="number"
@@ -440,7 +590,37 @@
                     class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-                <p class="text-sm text-slate-700">
+                <div id="checkout-split-block" class="hidden space-y-3">
+                  <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1" for="split-mobile-amount">Mobile Money Amount</label>
+                    <input
+                      type="number"
+                      id="split-mobile-amount"
+                      min="0"
+                      step="0.01"
+                      class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1" for="split-cash-amount">Cash Tendered</label>
+                    <input
+                      type="number"
+                      id="split-cash-amount"
+                      min="0"
+                      step="0.01"
+                      class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p class="text-xs text-slate-500 mt-1">Auto-filled with remaining after mobile; increase for overpay / change.</p>
+                  </div>
+                  <div
+                    id="split-change-due-box"
+                    class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2"
+                  >
+                    <span class="text-sm font-medium text-slate-700">Change Due</span>
+                    <span id="split-change-due" class="text-base font-bold text-slate-800">0 Ks</span>
+                  </div>
+                </div>
+                <p id="checkout-single-change-row" class="text-sm text-slate-700">
                   <span data-i18n="change">Change</span>:
                   <span id="change-amount" class="font-semibold">0 Ks</span>
                 </p>
@@ -501,32 +681,86 @@
               </select>
             </div>
           </div>
-          <div class="grid md:grid-cols-3 gap-4">
-            <div class="border border-slate-200 rounded-md p-4 space-y-3">
-              <h3 class="font-medium text-slate-700">Drinks printer</h3>
-              <input type="text" id="printer-drinks-host" placeholder="LAN IP (e.g. 192.168.1.101)"
-                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-              <input type="number" id="printer-drinks-port" placeholder="Port" min="1" max="65535" value="9100"
-                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-            </div>
-            <div class="border border-slate-200 rounded-md p-4 space-y-3">
-              <h3 class="font-medium text-slate-700">Food counter printer</h3>
-              <input type="text" id="printer-food-host" placeholder="LAN IP (e.g. 192.168.1.102)"
-                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-              <input type="number" id="printer-food-port" placeholder="Port" min="1" max="65535" value="9100"
-                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-            </div>
-            <div class="border border-slate-200 rounded-md p-4 space-y-3">
-              <h3 class="font-medium text-slate-700">Cashier receipt printer</h3>
-              <input type="text" id="printer-cashier-host" placeholder="LAN IP (e.g. 192.168.1.103)"
-                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-              <input type="number" id="printer-cashier-port" placeholder="Port" min="1" max="65535" value="9100"
-                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" />
-            </div>
-          </div>
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">Save Printer Settings</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">Save Print Mode</button>
         </form>
       </section>
+
+      <section data-menu-admin-only class="bg-white rounded-lg shadow p-6 mb-8">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-lg font-semibold text-slate-700">Printers</h2>
+            <p class="text-sm text-slate-500 mt-1">Add as many cashier, kitchen, or bar printers as you need.</p>
+          </div>
+          <button
+            type="button"
+            id="btn-add-printer"
+            class="px-4 py-2 bg-emerald-600 text-white font-medium rounded-md hover:bg-emerald-700"
+          >
+            ➕ Add New Printer
+          </button>
+        </div>
+        <div class="overflow-x-auto border border-slate-200 rounded-md">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-50 text-left text-slate-600">
+              <tr>
+                <th class="px-3 py-2 font-medium">Name</th>
+                <th class="px-3 py-2 font-medium">Role</th>
+                <th class="px-3 py-2 font-medium">IP Address</th>
+                <th class="px-3 py-2 font-medium">Port</th>
+                <th class="px-3 py-2 font-medium">Active</th>
+                <th class="px-3 py-2 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="printers-table-body" class="divide-y divide-slate-100 bg-white">
+              <tr><td colspan="6" class="px-3 py-4 text-slate-500">Loading printers…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Printer create/edit modal -->
+      <div id="printer-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4">
+        <div class="w-full max-w-md rounded-lg bg-white shadow-xl p-5 space-y-4">
+          <h3 id="printer-modal-title" class="text-lg font-semibold text-slate-800">Add Printer</h3>
+          <input type="hidden" id="printer-edit-id" value="" />
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-name">Name</label>
+            <input id="printer-form-name" type="text" maxlength="64" placeholder="e.g. Cashier 2"
+              class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-host">IP Address</label>
+            <input id="printer-form-host" type="text" placeholder="e.g. 192.168.1.101"
+              class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-port">Port</label>
+              <input id="printer-form-port" type="number" min="1" max="65535" value="9100"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-role">Role</label>
+              <select id="printer-form-role"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                <option value="cashier">cashier</option>
+                <option value="kitchen">kitchen</option>
+                <option value="bar">bar</option>
+                <option value="other">other</option>
+              </select>
+            </div>
+          </div>
+          <label class="flex items-center gap-2 text-sm text-slate-700">
+            <input id="printer-form-active" type="checkbox" checked class="rounded border-slate-300 text-emerald-600" />
+            Active
+          </label>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" id="printer-modal-cancel" class="px-4 py-2 rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50">Cancel</button>
+            <button type="button" id="printer-modal-save" class="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">Save</button>
+          </div>
+        </div>
+      </div>
+
       <section data-menu-admin-only class="bg-white rounded-lg shadow p-6 mb-8">
         <h2 class="text-lg font-semibold text-slate-700 mb-4">Quick Instruction Tags</h2>
         <p class="text-sm text-slate-500 mb-4">Predefined chips shown to waiters in the special-instructions modal.</p>

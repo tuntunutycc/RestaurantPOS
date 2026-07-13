@@ -101,6 +101,15 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 |--------|------|
 | GET/PUT | `/api/admin/kitchen-printers` |
 
+## Cashier / terminal printers (dynamic)
+
+| Method | Path | Roles | Notes |
+|--------|------|-------|-------|
+| GET | `/api/printers` | Admin: all; Checkout: `?role=cashier` | Unified `Printer` rows |
+| POST | `/api/printers` | Admin | Create |
+| PUT | `/api/printers/{id}` | Admin | Update |
+| DELETE | `/api/printers/{id}` | Admin | Delete |
+
 ---
 
 ## Orders (`POS_ORDER_ROLES` except checkout)
@@ -125,14 +134,17 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | POST/PUT | `/api/orders/{order_id}/checkout` | `OrderCheckoutResponse` |
 
 **Checkout body (`OrderCheckoutRequest`):**
-- `payment_method` — **required**; `cash` \| `mobile_money` (aliases like `Cash`, `Mobile Money` normalized server-side)
-- `amount_tendered` — float, must be ≥ final total
+- `payment_method` — `cash` \| `mobile_money` \| `split` (optional when `cash_amount` / `mobile_money_amount` provided)
+- `amount_tendered` — required for legacy single-method; for split, cash given
+- optional `cash_amount`, `mobile_money_amount` — tendered/applied per method; sum must be ≥ final total
 - optional `discount_type` (`percentage`|`amount`), `discount_value`
-- `issue_receipt` — bool, default `true`; when true, server attempts LAN/file receipt print after payment commit
+- `issue_receipt` — bool, default `true`
+- `printer_id` — optional cashier printer id
+- `cashier_name` — optional free-text label printed on the receipt (blank → omitted / stored null)
 
 **Checkout response (`OrderCheckoutResponse`):** same fields as `OrderResponseDetail` plus optional `warning` (e.g. printer offline). Payment success is always reflected by HTTP 200 + `status=paid`; print failures do not roll back checkout.
 
-**Admin printers:** `GET/PUT /api/admin/kitchen-printers` routes include `drinks`, `food`, and **`cashier`** (receipt printer). Env fallbacks: `PRINTER_*_HOST` / `PRINTER_*_PORT`; receipt header uses `SHOP_NAME`.
+**Admin printers:** `GET/PUT /api/admin/kitchen-printers` manages global print mode only. Named printers (unlimited) use `/api/printers` CRUD with roles `cashier|kitchen|bar|other`. Category `food`→kitchen, `drinks`→bar (fallback kitchen). Cashier UI persists selection in `localStorage.selectedCashierPrinterId` and display name in `localStorage.currentCashierName`.
 
 ---
 
@@ -204,6 +216,7 @@ Menu items include `category_id`; categories at `GET /api/categories/` — used 
 | Method | Path | Role notes |
 |--------|------|------------|
 | GET | `/api/reports/summary/today` | Cashier = own checkout total |
+| GET | `/api/reports/sales` | root, admin, account; `period=daily\|monthly` + `date`; tax-aware totals |
 | GET | `/api/reports/top-items` | Dashboard roles |
 | GET | `/api/reports/hourly-trend` | |
 | GET | `/api/reports/daily-sales` | Account ≤ 90 days |

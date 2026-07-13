@@ -342,7 +342,7 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
     assert get_res.status_code == 200, get_res.text
     body = get_res.json()
     assert body["backend"] in ("file", "escpos_network")
-    assert len(body["routes"]) == 3
+    assert isinstance(body.get("routes"), list)
 
     put_res = client.put(
         "/api/admin/kitchen-printers",
@@ -351,11 +351,7 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
             "backend": "escpos_network",
             "render_mode": "image",
             "paper_width_px": 384,
-            "routes": [
-                {"route_key": "drinks", "host": "192.168.1.101", "port": 9100},
-                {"route_key": "food", "host": "192.168.1.102", "port": 9100},
-                {"route_key": "cashier", "host": "192.168.1.103", "port": 9100},
-            ],
+            "routes": [],
         },
     )
     assert put_res.status_code == 200, put_res.text
@@ -363,12 +359,71 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
     assert updated["backend"] == "escpos_network"
     assert updated["render_mode"] == "image"
     assert updated["paper_width_px"] == 384
-    drinks = next(r for r in updated["routes"] if r["route_key"] == "drinks")
-    food = next(r for r in updated["routes"] if r["route_key"] == "food")
-    cashier = next(r for r in updated["routes"] if r["route_key"] == "cashier")
-    assert drinks["host"] == "192.168.1.101"
-    assert food["host"] == "192.168.1.102"
-    assert cashier["host"] == "192.168.1.103"
 
     waiter_res = client.get("/api/admin/kitchen-printers", headers=auth_headers("waiter"))
     assert waiter_res.status_code == 403
+
+
+def test_drinks_maps_to_bar_with_kitchen_fallback(client, db_session, auth_headers, monkeypatch):
+    """Category drinks → bar role; falls back to kitchen when no bar host."""
+    import asyncio
+
+    from models import Printer
+    from services.printing.routes import category_route_to_printer_role
+    from services.printing.service import dispatch_kitchen_ticket
+    from services.printing.settings import seed_kitchen_printer_settings
+
+    assert category_route_to_printer_role("food") == "kitchen"
+    assert category_route_to_printer_role("drinks") == "bar"
+
+    seed_kitchen_printer_settings(db_session)
+    db_session.query(Printer).delete()
+    db_session.commit()
+    db_session.add_all(
+        [
+            Printer(
+                name="Kitchen",
+                host="10.0.0.10",
+                port=9100,
+                role="kitchen",
+                is_active=True,
+            ),
+            Printer(
+                name="Cashier",
+                host=None,
+                port=9100,
+                role="cashier",
+                is_active=True,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    captured = {}
+
+    def _capture(endpoint, payload, **kwargs):
+        captured["host"] = endpoint.host
+
+    monkeypatch.setattr("services.printing.service.print_image_to_network", _capture)
+    client.put(
+        "/api/admin/kitchen-printers",
+        headers=auth_headers("admin"),
+        json={
+            "backend": "escpos_network",
+            "render_mode": "text",
+            "paper_width_px": 576,
+            "routes": [],
+        },
+    )
+
+    ticket = {"item_name": "Tea", "quantity": 1, "order_id": 1, "date": "2026-01-01"}
+    asyncio.run(dispatch_kitchen_ticket("drinks", ticket, db=db_session))
+    assert captured.get("host") == "10.0.0.10"
+
+    db_session.add(
+        Printer(name="Bar", host="10.0.0.20", port=9100, role="bar", is_active=True)
+    )
+    db_session.commit()
+    captured.clear()
+    asyncio.run(dispatch_kitchen_ticket("drinks", ticket, db=db_session))
+    assert captured.get("host") == "10.0.0.20"
