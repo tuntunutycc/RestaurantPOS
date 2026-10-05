@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-05 — Docker Desktop packaging
+
+### Summary
+Linux image and Compose file for Windows Docker Desktop. SQLite and file-backend tickets use named volumes. First boot creates tables and seeds root from `ROOT_USERNAME` / `ROOT_PASSWORD`.
+
+### Files
+- `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `entrypoint.sh`
+
 ## 2026-07-13 — Cashier name on checkout receipt
 
 ### Summary
