@@ -51,7 +51,7 @@ RootAdminRole = Literal["admin"]
 PrinterRoleLiteral = Literal["cashier", "kitchen", "bar", "other"]
 PrinterRouteLiteral = Literal["drinks", "food"]
 PrinterEndpointRouteLiteral = Literal["drinks", "food", "cashier"]
-PrinterBackendLiteral = Literal["file", "escpos_network"]
+PrinterBackendLiteral = Literal["file", "escpos_network", "windows_printer"]
 PrinterRenderModeLiteral = Literal["text", "image"]
 
 TableStatusLiteral = Literal["available", "occupied"]
@@ -192,6 +192,7 @@ class PrinterResponse(BaseModel):
     name: str
     host: str | None = None
     port: int = 9100
+    windows_printer_name: str | None = None
     role: PrinterRoleLiteral
     is_active: bool = True
 
@@ -204,8 +205,17 @@ class PrinterCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     host: str | None = None
     port: int = Field(default=9100, ge=1, le=65535)
+    windows_printer_name: str | None = Field(default=None, max_length=256)
     role: PrinterRoleLiteral
     is_active: bool = True
+
+    @field_validator("windows_printer_name")
+    @classmethod
+    def normalize_windows_printer_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped or None
 
 
 class PrinterUpdate(BaseModel):
@@ -214,8 +224,29 @@ class PrinterUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=64)
     host: str | None = None
     port: int | None = Field(default=None, ge=1, le=65535)
+    windows_printer_name: str | None = Field(default=None, max_length=256)
     role: PrinterRoleLiteral | None = None
     is_active: bool | None = None
+
+    @field_validator("windows_printer_name")
+    @classmethod
+    def normalize_windows_printer_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped or None
+
+
+class WindowsPrinterNameItem(BaseModel):
+    name: str
+
+
+class WindowsPrinterListResponse(BaseModel):
+    """Installed Windows print queues (empty when not on Windows / no pywin32)."""
+
+    available: bool
+    printers: list[WindowsPrinterNameItem] = Field(default_factory=list)
+    message: str | None = None
 
 
 class ZoneCreate(BaseModel):

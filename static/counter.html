@@ -661,7 +661,12 @@
               class="w-full max-w-md px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
               <option value="file">File (dev / test without printer)</option>
               <option value="escpos_network">LAN printer (Xprinter ESC/POS)</option>
+              <option value="windows_printer">Windows printer (USB / installed queue)</option>
             </select>
+            <p class="text-xs text-slate-500 mt-1">
+              Windows mode prints <strong>cashier receipts</strong> to a USB/installed queue.
+              Kitchen/bar tickets still use LAN IP when a host is set on those printers; otherwise they fall back to file.
+            </p>
           </div>
           <div class="grid md:grid-cols-2 gap-4">
             <div>
@@ -707,12 +712,13 @@
                 <th class="px-3 py-2 font-medium">Role</th>
                 <th class="px-3 py-2 font-medium">IP Address</th>
                 <th class="px-3 py-2 font-medium">Port</th>
+                <th class="px-3 py-2 font-medium">Windows queue</th>
                 <th class="px-3 py-2 font-medium">Active</th>
                 <th class="px-3 py-2 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody id="printers-table-body" class="divide-y divide-slate-100 bg-white">
-              <tr><td colspan="6" class="px-3 py-4 text-slate-500">Loading printers…</td></tr>
+              <tr><td colspan="7" class="px-3 py-4 text-slate-500">Loading printers…</td></tr>
             </tbody>
           </table>
         </div>
@@ -728,27 +734,35 @@
             <input id="printer-form-name" type="text" maxlength="64" placeholder="e.g. Cashier 2"
               class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500" />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-host">IP Address</label>
-            <input id="printer-form-host" type="text" placeholder="e.g. 192.168.1.101"
-              class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div class="grid grid-cols-2 gap-3">
+          <div id="printer-form-lan-fields" class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-host">IP Address</label>
+              <input id="printer-form-host" type="text" placeholder="e.g. 192.168.1.101"
+                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500" />
+            </div>
             <div>
               <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-port">Port</label>
               <input id="printer-form-port" type="number" min="1" max="65535" value="9100"
                 class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-role">Role</label>
-              <select id="printer-form-role"
-                class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500">
-                <option value="cashier">cashier</option>
-                <option value="kitchen">kitchen</option>
-                <option value="bar">bar</option>
-                <option value="other">other</option>
-              </select>
-            </div>
+          </div>
+          <div id="printer-form-windows-fields" class="hidden space-y-1">
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-windows-name">Windows printer</label>
+            <select id="printer-form-windows-name"
+              class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              <option value="">— Select installed printer —</option>
+            </select>
+            <p id="printer-form-windows-hint" class="text-xs text-slate-500"></p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1" for="printer-form-role">Role</label>
+            <select id="printer-form-role"
+              class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              <option value="cashier">cashier</option>
+              <option value="kitchen">kitchen</option>
+              <option value="bar">bar</option>
+              <option value="other">other</option>
+            </select>
           </div>
           <label class="flex items-center gap-2 text-sm text-slate-700">
             <input id="printer-form-active" type="checkbox" checked class="rounded border-slate-300 text-emerald-600" />

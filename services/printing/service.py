@@ -14,6 +14,7 @@ from services.printing.backends.escpos_network import (
     print_image_to_network,
     send_network_ticket,
 )
+from services.printing.backends.escpos_windows import send_raw_to_windows_printer
 from services.printing.backends.file import send_file_ticket, send_file_ticket_image
 from services.printing.config import CASHIER_PRINTER_ROUTE, PrinterEndpoint
 from services.printing.image_renderer import render_ticket_image
@@ -22,6 +23,7 @@ from services.printing.routes import category_route_to_printer_role
 from services.printing.settings import (
     load_printer_config,
     resolve_cashier_printer_endpoint,
+    resolve_cashier_windows_printer_name,
     resolve_printer_endpoint_for_role,
 )
 from services.printing.ticket import (
@@ -33,12 +35,25 @@ from services.printing.ticket import (
 logger = logging.getLogger(__name__)
 
 
+def _has_network_endpoint(
+    *,
+    route: str,
+    config_routes: dict[str, PrinterEndpoint],
+    endpoint_override: PrinterEndpoint | None,
+) -> bool:
+    if endpoint_override is not None and (endpoint_override.host or "").strip():
+        return True
+    endpoint = config_routes.get(route)
+    return bool(endpoint and (endpoint.host or "").strip())
+
+
 async def _dispatch_payload(
     *,
     route: str,
     ticket_text: str,
     db: Session | None = None,
     endpoint_override: PrinterEndpoint | None = None,
+    windows_printer_name: str | None = None,
 ) -> None:
     config = load_printer_config(db)
     if endpoint_override is not None:
@@ -47,6 +62,33 @@ async def _dispatch_payload(
             routes={**config.routes, route: endpoint_override},
         )
 
+    use_windows = (
+        config.backend == "windows_printer" and route == CASHIER_PRINTER_ROUTE
+    )
+    # windows_printer is cashier-only. Kitchen/bar keep LAN when a host is configured
+    # so enabling USB receipts does not silently disable IP kitchen printers.
+    use_network = False
+    if not use_windows:
+        if config.backend == "escpos_network":
+            use_network = True
+        elif config.backend == "windows_printer":
+            use_network = _has_network_endpoint(
+                route=route,
+                config_routes=config.routes,
+                endpoint_override=endpoint_override,
+            )
+            if use_network:
+                logger.info(
+                    "windows_printer backend: using LAN for kitchen/bar route=%s",
+                    route,
+                )
+            else:
+                logger.warning(
+                    "windows_printer backend: no LAN host for route=%s; "
+                    "falling back to file",
+                    route,
+                )
+
     if config.render_mode == "image":
         image = render_ticket_image(
             ticket_text,
@@ -54,7 +96,15 @@ async def _dispatch_payload(
             font_path=config.font_path,
         )
         escpos_payload = build_escpos_raster_payload(image)
-        if config.backend == "escpos_network":
+        if use_windows:
+            queue = (windows_printer_name or "").strip()
+            if not queue:
+                raise RuntimeError(
+                    "Cashier Windows printer queue name is not configured"
+                )
+            await asyncio.to_thread(send_raw_to_windows_printer, queue, escpos_payload)
+            return
+        if use_network:
             if endpoint_override is not None:
                 timeout = (
                     CASHIER_SOCKET_TIMEOUT_SECONDS
@@ -75,7 +125,15 @@ async def _dispatch_payload(
         return
 
     escpos_payload = build_escpos_text_payload(ticket_text)
-    if config.backend == "escpos_network":
+    if use_windows:
+        queue = (windows_printer_name or "").strip()
+        if not queue:
+            raise RuntimeError(
+                "Cashier Windows printer queue name is not configured"
+            )
+        await asyncio.to_thread(send_raw_to_windows_printer, queue, escpos_payload)
+        return
+    if use_network:
         if endpoint_override is not None:
             timeout = (
                 CASHIER_SOCKET_TIMEOUT_SECONDS
@@ -166,13 +224,45 @@ async def dispatch_cashier_receipt(
         created_at=created_at,
     )
     endpoint_override: PrinterEndpoint | None = None
+    windows_name: str | None = None
     if db is not None:
-        endpoint_override = resolve_cashier_printer_endpoint(db, printer_id=printer_id)
-        if printer_id is not None and endpoint_override is None:
-            raise RuntimeError(f"Cashier printer id={printer_id} not found or inactive")
+        config = load_printer_config(db)
+        if config.backend == "windows_printer":
+            windows_name = resolve_cashier_windows_printer_name(
+                db, printer_id=printer_id
+            )
+            if printer_id is not None and windows_name is None:
+                # Explicit id was requested but queue missing / inactive.
+                from models import Printer
+
+                selected = (
+                    db.query(Printer)
+                    .filter(
+                        Printer.id == printer_id,
+                        Printer.role == "cashier",
+                        Printer.is_active.is_(True),
+                    )
+                    .first()
+                )
+                if selected is None:
+                    raise RuntimeError(
+                        f"Cashier printer id={printer_id} not found or inactive"
+                    )
+                raise RuntimeError(
+                    f"Cashier printer id={printer_id} has no windows_printer_name"
+                )
+        else:
+            endpoint_override = resolve_cashier_printer_endpoint(
+                db, printer_id=printer_id
+            )
+            if printer_id is not None and endpoint_override is None:
+                raise RuntimeError(
+                    f"Cashier printer id={printer_id} not found or inactive"
+                )
     await _dispatch_payload(
         route=CASHIER_PRINTER_ROUTE,
         ticket_text=receipt_text,
         db=db,
         endpoint_override=endpoint_override,
+        windows_printer_name=windows_name,
     )

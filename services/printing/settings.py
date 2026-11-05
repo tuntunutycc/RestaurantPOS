@@ -36,9 +36,17 @@ def _paper_width_from_env() -> int:
     return paper_width_px if paper_width_px in (384, 576) else 576
 
 
+def _normalize_backend(backend_raw: str | None) -> PrinterBackendName:
+    raw = (backend_raw or "").strip().lower()
+    if raw == "escpos_network":
+        return "escpos_network"
+    if raw == "windows_printer":
+        return "windows_printer"
+    return "file"
+
+
 def _backend_from_env() -> PrinterBackendName:
-    backend_raw = os.getenv("PRINTER_BACKEND", "file").strip().lower()
-    return "escpos_network" if backend_raw == "escpos_network" else "file"
+    return _normalize_backend(os.getenv("PRINTER_BACKEND", "file"))
 
 
 def _render_mode_from_env() -> PrinterRenderModeName:
@@ -235,6 +243,55 @@ def resolve_cashier_printer_endpoint(
     )
 
 
+def resolve_cashier_windows_printer_name(
+    db: Session,
+    printer_id: int | None = None,
+) -> str | None:
+    """Resolve Windows queue name for cashier receipts."""
+    seed_default_printers(db)
+    if printer_id is not None:
+        row = (
+            db.query(Printer)
+            .filter(
+                Printer.id == printer_id,
+                Printer.role == CASHIER_PRINTER_ROLE,
+                Printer.is_active.is_(True),
+            )
+            .first()
+        )
+        if row is None:
+            return None
+        name = (getattr(row, "windows_printer_name", None) or "").strip()
+        return name or None
+
+    # Prefer an active cashier row that already has a Windows queue configured.
+    named = (
+        db.query(Printer)
+        .filter(
+            Printer.role == CASHIER_PRINTER_ROLE,
+            Printer.is_active.is_(True),
+            Printer.windows_printer_name.isnot(None),
+        )
+        .order_by(Printer.id.asc())
+        .all()
+    )
+    for row in named:
+        name = (row.windows_printer_name or "").strip()
+        if name:
+            return name
+
+    row = (
+        db.query(Printer)
+        .filter(Printer.role == CASHIER_PRINTER_ROLE, Printer.is_active.is_(True))
+        .order_by(Printer.id.asc())
+        .first()
+    )
+    if row is None:
+        return None
+    name = (getattr(row, "windows_printer_name", None) or "").strip()
+    return name or None
+
+
 def _load_printer_config_from_db(db: Session, *, seed_printers: bool = True) -> PrinterConfig:
     settings = db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
     if not settings:
@@ -253,9 +310,7 @@ def _load_printer_config_from_db(db: Session, *, seed_printers: bool = True) -> 
 
     output_dir = os.getenv("KITCHEN_PRINT_OUTPUT_DIR", ".").strip() or "."
     backend_raw = (getattr(settings, "backend", None) or "").strip().lower()
-    backend: PrinterBackendName = (
-        "escpos_network" if backend_raw == "escpos_network" else "file"
-    )
+    backend: PrinterBackendName = _normalize_backend(backend_raw)
     render_mode_raw = (getattr(settings, "render_mode", None) or "").strip().lower()
     render_mode: PrinterRenderModeName = (
         "image" if render_mode_raw == "image" else "text"

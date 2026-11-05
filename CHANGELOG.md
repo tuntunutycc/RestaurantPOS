@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-11-05 — Windows cashier receipt printing
+
+### Summary
+Cashier receipts can print to a Windows installed USB/Bluetooth queue (`windows_printer` backend) selected in Admin UI. Under that mode kitchen/bar still use LAN when a host is configured; otherwise file. Spooler errors are mapped to actionable messages. LAN (`escpos_network`) and file backends unchanged.
+
+### Spec
+- `specs/feature-windows-cashier-printing/`
+
+### Backend / Frontend / Tests
+- `Printer.windows_printer_name`; `GET /api/admin/windows-printers`; `escpos_windows` RAW send
+- Counter Admin: Windows print mode + queue dropdown
+- `tests/test_windows_cashier_printing.py`; `requirements-windows.txt` (`pywin32`)
+
 ## 2026-10-05 — Docker Desktop packaging
 
 ### Summary

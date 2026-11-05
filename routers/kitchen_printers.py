@@ -6,18 +6,29 @@ from sqlalchemy.orm import Session
 from auth import require_roles
 from database import get_db
 from models import KitchenPrinterSettings, User
-from schemas import KitchenPrinterSettingsResponse, KitchenPrinterSettingsUpdate
+from schemas import (
+    KitchenPrinterSettingsResponse,
+    KitchenPrinterSettingsUpdate,
+    WindowsPrinterListResponse,
+    WindowsPrinterNameItem,
+)
 from rbac import ADMIN_PANEL_ROLES
+from services.printing.backends.escpos_windows import (
+    list_windows_printers,
+    windows_printing_available,
+)
 from services.printing.settings import seed_kitchen_printer_settings
 
 router = APIRouter(prefix="/api/admin")
+
+_VALID_BACKENDS = frozenset({"file", "escpos_network", "windows_printer"})
 
 
 def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
     seed_kitchen_printer_settings(db)
     settings = db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
     backend = (getattr(settings, "backend", None) or "file").strip().lower()
-    if backend not in ("file", "escpos_network"):
+    if backend not in _VALID_BACKENDS:
         backend = "file"
     render_mode = (getattr(settings, "render_mode", None) or "text").strip().lower()
     if render_mode not in ("text", "image"):
@@ -59,3 +70,25 @@ def update_kitchen_printer_settings(
     settings.paper_width_px = body.paper_width_px
     db.commit()
     return _build_settings_response(db)
+
+
+@router.get("/windows-printers", response_model=WindowsPrinterListResponse)
+def get_windows_printers(
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
+):
+    """List installed Windows print queues for Admin cashier printer setup."""
+    if not windows_printing_available():
+        return WindowsPrinterListResponse(
+            available=False,
+            printers=[],
+            message=(
+                "Windows printer listing requires pywin32 on a Windows host "
+                "(pip install -r requirements-windows.txt)."
+            ),
+        )
+    names = list_windows_printers()
+    return WindowsPrinterListResponse(
+        available=True,
+        printers=[WindowsPrinterNameItem(name=n) for n in names],
+        message=None if names else "No Windows printers found on this host.",
+    )

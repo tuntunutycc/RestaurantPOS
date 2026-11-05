@@ -77,6 +77,7 @@ def create_printer(
         name=name,
         host=(body.host or "").strip() or None,
         port=int(body.port or 9100),
+        windows_printer_name=body.windows_printer_name,
         role=body.role,
         is_active=bool(body.is_active),
     )
@@ -106,6 +107,8 @@ def update_printer(
         row.host = body.host.strip() or None
     if body.port is not None:
         row.port = int(body.port)
+    if "windows_printer_name" in body.model_fields_set:
+        row.windows_printer_name = body.windows_printer_name
     if body.role is not None:
         row.role = body.role
     if body.is_active is not None:

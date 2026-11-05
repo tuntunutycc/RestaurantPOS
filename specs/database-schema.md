@@ -172,7 +172,7 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 
 ## `kitchen_printer_settings`
 
-Singleton row `id=1`: `backend`, `render_mode`, `paper_width_px`.
+Singleton row `id=1`: `backend` (`file` \| `escpos_network` \| `windows_printer`), `render_mode`, `paper_width_px`.
 
 ---
 
@@ -184,7 +184,7 @@ Legacy PK `route_key` (`drinks` | `food` | `cashier`) — optional host fallback
 
 ## `printers`
 
-Dynamic named LAN printers (Admin CRUD).
+Dynamic named printers (Admin CRUD). LAN uses `host`/`port`; Windows cashier receipts use `windows_printer_name` when backend is `windows_printer`.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -192,6 +192,7 @@ Dynamic named LAN printers (Admin CRUD).
 | `name` | String(64) | Label e.g. "Cashier 2" |
 | `host` | String(255) nullable | LAN IP |
 | `port` | Integer | Default 9100 |
+| `windows_printer_name` | String(256) nullable | Windows spooler queue name |
 | `role` | String(32) | `cashier` \| `kitchen` \| `bar` \| `other` |
 | `is_active` | Boolean | |
 

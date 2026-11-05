@@ -97,16 +97,17 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 
 ## Kitchen printers (`ADMIN_PANEL_ROLES`)
 
-| Method | Path |
-|--------|------|
-| GET/PUT | `/api/admin/kitchen-printers` |
+| Method | Path | Notes |
+|--------|------|-------|
+| GET/PUT | `/api/admin/kitchen-printers` | Global backend: `file` \| `escpos_network` \| `windows_printer` |
+| GET | `/api/admin/windows-printers` | List installed Windows queues (`available`, `printers[]`, `message`) |
 
 ## Cashier / terminal printers (dynamic)
 
 | Method | Path | Roles | Notes |
 |--------|------|-------|-------|
-| GET | `/api/printers` | Admin: all; Checkout: `?role=cashier` | Unified `Printer` rows |
-| POST | `/api/printers` | Admin | Create |
+| GET | `/api/printers` | Admin: all; Checkout: `?role=cashier` | Unified `Printer` rows; includes `windows_printer_name` |
+| POST | `/api/printers` | Admin | Create (optional `windows_printer_name`) |
 | PUT | `/api/printers/{id}` | Admin | Update |
 | DELETE | `/api/printers/{id}` | Admin | Delete |
 
@@ -144,7 +145,7 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 
 **Checkout response (`OrderCheckoutResponse`):** same fields as `OrderResponseDetail` plus optional `warning` (e.g. printer offline). Payment success is always reflected by HTTP 200 + `status=paid`; print failures do not roll back checkout.
 
-**Admin printers:** `GET/PUT /api/admin/kitchen-printers` manages global print mode only. Named printers (unlimited) use `/api/printers` CRUD with roles `cashier|kitchen|bar|other`. Category `food`→kitchen, `drinks`→bar (fallback kitchen). Cashier UI persists selection in `localStorage.selectedCashierPrinterId` and display name in `localStorage.currentCashierName`.
+**Admin printers:** `GET/PUT /api/admin/kitchen-printers` manages global print mode only (`file` \| `escpos_network` \| `windows_printer`). `windows_printer` sends **cashier receipts** to a Windows queue; kitchen/bar keep **LAN** when `Printer.host` is set (else file). Named printers use `/api/printers` CRUD with roles `cashier|kitchen|bar|other` and optional `windows_printer_name`. `GET /api/admin/windows-printers` lists installed queues when `pywin32` is available. Category `food`→kitchen, `drinks`→bar (fallback kitchen). Cashier UI persists selection in `localStorage.selectedCashierPrinterId` and display name in `localStorage.currentCashierName`.
 
 ---
 
@@ -193,9 +194,10 @@ Use **`GET /api/orders/{id}/details`** for waiter active-order modal / cart brea
 
 ## Kitchen printers (`ADMIN_PANEL_ROLES`)
 
-| Method | Path |
-|--------|------|
-| GET/PUT | `/api/admin/kitchen-printers` |
+| Method | Path | Notes |
+|--------|------|-------|
+| GET/PUT | `/api/admin/kitchen-printers` | Includes `windows_printer` backend |
+| GET | `/api/admin/windows-printers` | Installed Windows queues for cashier setup |
 
 ---
 

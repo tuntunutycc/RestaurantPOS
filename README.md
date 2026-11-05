@@ -281,6 +281,61 @@ Use this when you want to wipe all users, menu, orders, and sales history.
 
 **What is wiped:** all users, menu, zones/tables, orders, reports history, audit logs, and sessions. You must seed root again and reconfigure the restaurant.
 
+### Native Windows Deployment (Required for USB Receipt Printing)
+
+Cashier USB / installed-queue receipt printing uses **`pywin32`** and the **Windows Print Spooler**. On the cashier PC, run the app **natively on Windows 11** — not inside Docker.
+
+> **Important — do not use Docker on the cashier machine.**  
+> `Dockerfile` / `docker-compose.yml` exist for Linux-style deploys, but a Linux container **cannot** access the Windows USB/Bluetooth print spooler. Use Docker only where USB receipts are not required (or use LAN `escpos_network` printers instead).
+
+1. **Prerequisites**
+   - [Git for Windows](https://git-scm.com/download/win)
+   - [Python 3.11+](https://www.python.org/downloads/) (check **Add python.exe to PATH** during install)
+   - Windows printer online in **Settings → Bluetooth & devices → Printers & scanners** (e.g. `POSPrinter POS-80(300DPI)`)
+
+2. **Clone the repository**
+   ```bat
+   git clone https://github.com/tuntunutycc/RestaurantPOS.git
+   cd RestaurantPOS
+   ```
+
+3. **Create and activate a virtual environment**
+   ```bat
+   python -m venv venv
+   venv\Scripts\activate
+   ```
+
+4. **Install dependencies (includes `pywin32`)**
+   ```bat
+   pip install -r requirements-windows.txt
+   ```
+   `requirements-windows.txt` installs `requirements.txt` plus `pywin32`.
+
+5. **Configure environment**
+   ```bat
+   copy .env.example .env
+   ```
+   Edit `.env` and set at least a strong `JWT_SECRET_KEY` (32+ characters).
+
+6. **Seed the first root user** (first install only)
+   ```bat
+   set PYTHONPATH=.
+   python scripts\seed_root.py --username root --password "YourSecurePass123"
+   ```
+
+7. **Run the server**
+   ```bat
+   uvicorn main:app --host 0.0.0.0 --port 8000
+   ```
+   Open `http://localhost:8000/login`.
+
+8. **Enable Windows receipt printing in Admin**
+   - Counter → Kitchen Printer Settings → Print mode = **Windows printer (USB / installed queue)**
+   - Printers → edit the **cashier** printer → select the Windows queue (e.g. `POSPrinter POS-80(300DPI)`) → Save
+   - Checkout with **Print Receipt** enabled
+
+Kitchen/bar thermal printers can still use LAN IP (`host`/`port` on those printer rows) while cashier uses Windows USB.
+
 ### Production notes
 
 | Topic | Guidance |
@@ -290,6 +345,7 @@ Use this when you want to wipe all users, menu, orders, and sales history.
 | **Root bootstrap** | Use `scripts/seed_root.py` on the server after deploy; avoid relying on `/setup` in production. |
 | **Persistent disk** | On Cloud Run / containers, mount a volume for `pos.db` (or use PostgreSQL); otherwise data is lost on redeploy. |
 | **HTTPS** | Terminate TLS at your reverse proxy or platform; app serves same-origin static + API. |
+| **Windows USB receipts** | See **Native Windows Deployment** above. Do not run the cashier machine in Docker Linux. |
 
 ### Default dev credentials (after reset)
 

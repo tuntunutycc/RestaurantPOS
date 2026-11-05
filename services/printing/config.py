@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-PrinterBackendName = Literal["file", "escpos_network"]
+PrinterBackendName = Literal["file", "escpos_network", "windows_printer"]
 PrinterRenderModeName = Literal["text", "image"]
 PrinterRoleName = Literal["cashier", "kitchen", "bar", "other"]
 

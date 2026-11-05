@@ -35,7 +35,7 @@ class Category(Base):
 
 
 class KitchenPrinterSettings(Base):
-    """Singleton kitchen printer backend mode (file vs LAN ESC/POS)."""
+    """Singleton print backend mode (file | escpos_network | windows_printer)."""
 
     __tablename__ = "kitchen_printer_settings"
 
@@ -56,7 +56,11 @@ class PrinterRouteEndpoint(Base):
 
 
 class Printer(Base):
-    """Named LAN printer with a role (cashier, kitchen, bar, other)."""
+    """Named printer with a role (cashier, kitchen, bar, other).
+
+    LAN uses host/port. Windows cashier receipts use windows_printer_name
+    when KitchenPrinterSettings.backend is windows_printer.
+    """
 
     __tablename__ = "printers"
 
@@ -64,6 +68,7 @@ class Printer(Base):
     name = Column(String(64), nullable=False)
     host = Column(String(255), nullable=True)
     port = Column(Integer, nullable=False, default=9100)
+    windows_printer_name = Column(String(256), nullable=True)
     role = Column(String(32), nullable=False, default="kitchen", index=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 

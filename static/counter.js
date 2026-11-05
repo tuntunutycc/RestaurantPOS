@@ -3815,6 +3815,71 @@ if (kitchenPrinterForm) {
   });
 }
 
+function getSelectedPrintBackend() {
+  return String(document.getElementById('printer-backend')?.value || 'file').trim();
+}
+
+function isWindowsPrintBackend() {
+  return getSelectedPrintBackend() === 'windows_printer';
+}
+
+async function loadWindowsPrinterOptions(selectedName = '') {
+  const select = document.getElementById('printer-form-windows-name');
+  const hint = document.getElementById('printer-form-windows-hint');
+  if (!select) return;
+  const wanted = String(selectedName || '').trim();
+  select.innerHTML = '<option value="">— Select installed printer —</option>';
+  if (hint) hint.textContent = 'Loading Windows printers…';
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/windows-printers`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    if (!res.ok) throw new Error('Failed to load Windows printers');
+    const data = await res.json();
+    const printers = Array.isArray(data.printers) ? data.printers : [];
+    printers.forEach((p) => {
+      const name = String(p.name || '').trim();
+      if (!name) return;
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    });
+    if (wanted) {
+      const exists = Array.from(select.options).some((o) => o.value === wanted);
+      if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = wanted;
+        opt.textContent = `${wanted} (saved)`;
+        select.appendChild(opt);
+      }
+      select.value = wanted;
+    }
+    if (hint) {
+      if (!data.available) {
+        hint.textContent = data.message || 'Windows printer list unavailable on this host.';
+      } else if (!printers.length) {
+        hint.textContent = data.message || 'No Windows printers found.';
+      } else {
+        hint.textContent = 'Choose the Windows queue for cashier receipts (e.g. POSPrinter POS-80).';
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    if (hint) hint.textContent = 'Could not load Windows printers.';
+  }
+}
+
+function syncPrinterModalConnectionFields() {
+  const lanFields = document.getElementById('printer-form-lan-fields');
+  const winFields = document.getElementById('printer-form-windows-fields');
+  const role = String(document.getElementById('printer-form-role')?.value || '').trim();
+  const showWindows = isWindowsPrintBackend() && role === 'cashier';
+  if (lanFields) lanFields.classList.toggle('hidden', showWindows);
+  if (winFields) winFields.classList.toggle('hidden', !showWindows);
+}
+
 async function loadKitchenPrinterSettings() {
   const form = document.getElementById('form-kitchen-printers');
   if (!form) return;
@@ -3831,12 +3896,13 @@ async function loadKitchenPrinterSettings() {
     if (backendEl) backendEl.value = data.backend || 'file';
     if (renderModeEl) renderModeEl.value = data.render_mode || 'text';
     if (paperWidthEl) paperWidthEl.value = String(data.paper_width_px || 576);
+    syncPrinterModalConnectionFields();
   } catch (err) {
     console.error(err);
   }
 }
 
-function openPrinterModal(printer = null) {
+async function openPrinterModal(printer = null) {
   const modal = document.getElementById('printer-modal');
   if (!modal) return;
   const title = document.getElementById('printer-modal-title');
@@ -3846,6 +3912,7 @@ function openPrinterModal(printer = null) {
   const portEl = document.getElementById('printer-form-port');
   const roleEl = document.getElementById('printer-form-role');
   const activeEl = document.getElementById('printer-form-active');
+  const windowsName = printer?.windows_printer_name || '';
   if (printer) {
     if (title) title.textContent = 'Edit Printer';
     if (idEl) idEl.value = String(printer.id);
@@ -3862,6 +3929,11 @@ function openPrinterModal(printer = null) {
     if (portEl) portEl.value = 9100;
     if (roleEl) roleEl.value = 'cashier';
     if (activeEl) activeEl.checked = true;
+  }
+  syncPrinterModalConnectionFields();
+  if (isWindowsPrintBackend()) {
+    await loadWindowsPrinterOptions(windowsName);
+    syncPrinterModalConnectionFields();
   }
   modal.classList.remove('hidden');
   modal.classList.add('flex');
@@ -3893,7 +3965,7 @@ async function loadPrintersAdmin() {
     if (!res.ok) throw new Error('Failed to load printers');
     const printers = await res.json();
     if (!Array.isArray(printers) || printers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-slate-500">No printers yet. Add one to get started.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-slate-500">No printers yet. Add one to get started.</td></tr>';
       return;
     }
     tbody.innerHTML = printers
@@ -3904,6 +3976,7 @@ async function loadPrintersAdmin() {
         <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.role)}</td>
         <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.host || '—')}</td>
         <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.port || 9100)}</td>
+        <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.windows_printer_name || '—')}</td>
         <td class="px-3 py-2 text-slate-600">${p.is_active ? 'Yes' : 'No'}</td>
         <td class="px-3 py-2 text-right space-x-2 whitespace-nowrap">
           <button type="button" class="printer-edit-btn text-blue-600 hover:underline" data-id="${p.id}">Edit</button>
@@ -3945,7 +4018,7 @@ async function loadPrintersAdmin() {
     });
   } catch (err) {
     console.error(err);
-    tbody.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-red-600">Error loading printers.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-red-600">Error loading printers.</td></tr>';
   }
 }
 
@@ -3959,6 +4032,23 @@ if (printerModal) {
     if (e.target === printerModal) closePrinterModal();
   });
 }
+const printerBackendEl = document.getElementById('printer-backend');
+if (printerBackendEl) {
+  printerBackendEl.addEventListener('change', () => {
+    syncPrinterModalConnectionFields();
+  });
+}
+const printerFormRoleEl = document.getElementById('printer-form-role');
+if (printerFormRoleEl) {
+  printerFormRoleEl.addEventListener('change', async () => {
+    syncPrinterModalConnectionFields();
+    if (isWindowsPrintBackend() && printerFormRoleEl.value === 'cashier') {
+      const current = String(document.getElementById('printer-form-windows-name')?.value || '');
+      await loadWindowsPrinterOptions(current);
+      syncPrinterModalConnectionFields();
+    }
+  });
+}
 const printerModalSave = document.getElementById('printer-modal-save');
 if (printerModalSave) {
   printerModalSave.addEventListener('click', async () => {
@@ -3967,15 +4057,23 @@ if (printerModalSave) {
     const host = String(document.getElementById('printer-form-host')?.value || '').trim();
     const port = Number(document.getElementById('printer-form-port')?.value || 9100);
     const role = String(document.getElementById('printer-form-role')?.value || 'kitchen').trim();
+    const windowsPrinterName = String(
+      document.getElementById('printer-form-windows-name')?.value || ''
+    ).trim();
     const isActive = !!document.getElementById('printer-form-active')?.checked;
     if (!name) {
       await dialogAlert('Name is required.', 'error', 'Printers');
+      return;
+    }
+    if (isWindowsPrintBackend() && role === 'cashier' && !windowsPrinterName) {
+      await dialogAlert('Select a Windows printer queue for cashier receipts.', 'error', 'Printers');
       return;
     }
     const payload = {
       name,
       host: host || null,
       port: port || 9100,
+      windows_printer_name: windowsPrinterName || null,
       role,
       is_active: isActive,
     };
