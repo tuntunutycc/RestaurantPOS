@@ -1,0 +1,15 @@
+Pyidaungsu Font 2.5.3 (Regular)
+Copyright (c) 2014 by Myanmar Computer Federation (MCF).
+
+Source (upstream release used in this repo):
+https://github.com/mcfnlp/Pyidaungsu
+https://mcf.org.mm/pyidaungsu-font
+
+Files:
+- Pyidaungsu.ttf (copy of Pyidaungsu-2.5.3_Regular.ttf for default auto-discovery)
+- Pyidaungsu-2.5.3_Regular.ttf
+
+SHA-256 (Regular TTF):
+df7106c15da76f6a24c10821b43da51f54961f6bc6791fb1fcf21c6c60bb2e10
+
+Used by RestaurantPOS for image-mode kitchen tickets and cashier receipts.

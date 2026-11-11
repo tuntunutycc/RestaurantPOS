@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-11 — Prefer Pyidaungsu for Myanmar print fonts
+
+### Summary
+Image-mode kitchen tickets and cashier receipts now prefer `Pyidaungsu.ttf` over NotoSansMyanmar. Bundled MCF Pyidaungsu 2.5.3 Regular under `assets/fonts/` (`Pyidaungsu.ttf` + versioned copy + NOTICE).
+
 ## 2026-11-05 — Windows cashier receipt printing
 
 ### Summary

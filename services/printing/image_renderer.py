@@ -19,10 +19,12 @@ BUNDLED_FONT_DIRS = (
     PROJECT_ROOT / "static" / "fonts",
 )
 PREFERRED_MYANMAR_FONT_NAMES = (
+    "Pyidaungsu.ttf",
+    "Pyidaungsu-2.5.3_Regular.ttf",
+    "Pyidaungsu Regular.ttf",
     "NotoSansMyanmar-Regular.ttf",
     "NotoSansMyanmar.ttf",
     "NotoSerifMyanmar-Regular.ttf",
-    "Pyidaungsu.ttf",
     "Myanmar3.ttf",
 )
 PREFERRED_LATIN_FONT_NAMES = (

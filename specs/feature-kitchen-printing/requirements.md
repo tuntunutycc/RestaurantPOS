@@ -102,8 +102,8 @@ Each ticket must include:
 ### FR-13: Font Handling
 - Image rendering should use a configured or bundled Myanmar-capable font when available.
 - Bundled font discovery must support `assets/fonts/` and `static/fonts/` so deployments can work without `.env` font paths.
-- Preferred bundled filename: `NotoSansMyanmar-Regular.ttf`.
-- Repository includes `assets/fonts/NotoSansMyanmar-Regular.ttf` and its OFL license for default Myanmar image rendering.
+- Preferred bundled filename: `Pyidaungsu.ttf` (fallback: `NotoSansMyanmar-Regular.ttf`).
+- Repository includes `assets/fonts/NotoSansMyanmar-Regular.ttf` and its OFL license; place `Pyidaungsu.ttf` in `assets/fonts/` to use it as the default Myanmar image font.
 - If no configured font is available, renderer falls back to a system/default font so tests and ASCII tickets still work.
 - Missing or unusable font must be logged clearly.
 
@@ -161,7 +161,7 @@ Each ticket must include:
 - `PRINTER_DRINKS_HOST`, `PRINTER_DRINKS_PORT` (default port 9100)
 - `PRINTER_FOOD_HOST`, `PRINTER_FOOD_PORT` (default port 9100)
 - `KITCHEN_PRINT_OUTPUT_DIR` (optional; defaults to project cwd for file backend)
-- `KITCHEN_PRINT_FONT_PATH` is optional; bundled `assets/fonts/NotoSansMyanmar-Regular.ttf` is preferred when present.
+- `KITCHEN_PRINT_FONT_PATH` is optional; bundled `assets/fonts/Pyidaungsu.ttf` is preferred when present, else `NotoSansMyanmar-Regular.ttf`.
 
 ### 6.2 Admin UI
 - Category create/edit form includes printer route selector:

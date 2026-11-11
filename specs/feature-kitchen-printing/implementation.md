@@ -385,7 +385,7 @@ To add per-item overrides:
 
 To improve Myanmar rendering:
 1. Replace or add fonts under `assets/fonts/`.
-2. Prefer `NotoSansMyanmar-Regular.ttf` for default auto-discovery.
+2. Prefer `Pyidaungsu.ttf` for default auto-discovery; fall back to `NotoSansMyanmar-Regular.ttf`.
 3. Prefer `NotoSans-Regular.ttf` for Latin/digit/symbol fallback.
 4. Use `KITCHEN_PRINT_FONT_PATH` only for deployment-specific overrides.
 5. If shaping is still wrong, consider a renderer with stronger complex-script support.
