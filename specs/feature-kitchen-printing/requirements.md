@@ -106,6 +106,8 @@ Each ticket must include:
 - Repository includes `assets/fonts/NotoSansMyanmar-Regular.ttf` and its OFL license; place `Pyidaungsu.ttf` in `assets/fonts/` to use it as the default Myanmar image font.
 - If no configured font is available, renderer falls back to a system/default font so tests and ASCII tickets still work.
 - Missing or unusable font must be logged clearly.
+- Myanmar runs in image mode must use complex-script shaping so left-side vowels (e.g. U+1031 `ေ`) appear in visual order, not storage order.
+- Shaping preference: Pillow RAQM when available; else HarfBuzz + FreeType (`uharfbuzz`, `freetype-py`). Log the active shaping backend on each image render.
 
 ### FR-14: Font Fallback for Mixed Ticket Text
 - Image rendering should support a font chain for mixed Myanmar + Latin + digit + punctuation tickets.
@@ -190,7 +192,7 @@ Each ticket must include:
 - Bluetooth/USB printer support
 - Kitchen KDS screen
 - Print retry queue / dead-letter persistence
-- Perfect Myanmar shaping across all operating systems/printers is not guaranteed without a suitable font and renderer support.
+- Perfect Myanmar shaping still requires a Myanmar-capable OpenType font plus RAQM or HarfBuzz; without those engines vowels may stay in storage order.
 
 ## 9. Acceptance Criteria
 - AC-1: Admin can set category `printer_route` to drinks or food.

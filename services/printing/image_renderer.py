@@ -7,6 +7,11 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from services.printing.myanmar_shaper import (
+    load_truetype,
+    render_shaped_text,
+    shaping_backend,
+)
 from services.printing.print_log import ensure_print_file_logging
 
 logger = logging.getLogger(__name__)
@@ -114,7 +119,7 @@ def _load_first_font(
     *,
     size: int,
     label: str,
-) -> ImageFont.ImageFont | None:
+) -> tuple[ImageFont.ImageFont, Path] | None:
     ensure_print_file_logging()
     existing = [path for path in paths if path.exists()]
     logger.info(
@@ -127,41 +132,53 @@ def _load_first_font(
         if not path.exists():
             continue
         try:
-            font = ImageFont.truetype(str(path), size=size)
-            logger.info("Loaded kitchen print %s font: %s", label, path)
-            return font
+            font = load_truetype(path, size=size)
+            logger.info(
+                "Loaded kitchen print %s font: %s shaping=%s",
+                label,
+                path,
+                shaping_backend(),
+            )
+            return font, path
         except OSError as exc:
             logger.warning("Unable to load kitchen print font %s: %s", path, exc)
     return None
 
 
-def _load_font(font_path: str | None, size: int = DEFAULT_FONT_SIZE) -> ImageFont.ImageFont:
+def _load_font(
+    font_path: str | None, size: int = DEFAULT_FONT_SIZE
+) -> tuple[ImageFont.ImageFont, Path | None]:
     ensure_print_file_logging()
-    font = _load_first_font(_candidate_font_paths(font_path), size=size, label="Myanmar")
-    if font is not None:
-        return font
+    loaded = _load_first_font(
+        _candidate_font_paths(font_path), size=size, label="Myanmar"
+    )
+    if loaded is not None:
+        return loaded
 
     logger.warning(
         "No Myanmar-capable kitchen print font found; using Pillow default font. "
         "Place Pyidaungsu.ttf under assets/fonts and use render_mode=image."
     )
-    return ImageFont.load_default()
+    return ImageFont.load_default(), None
 
 
 def _load_font_chain(
     font_path: str | None,
     size: int = DEFAULT_FONT_SIZE,
-) -> tuple[ImageFont.ImageFont, ImageFont.ImageFont]:
-    myanmar_font = _load_font(font_path, size=size)
-    latin_font = _load_first_font(
+) -> tuple[ImageFont.ImageFont, ImageFont.ImageFont, Path | None]:
+    myanmar_font, myanmar_path = _load_font(font_path, size=size)
+    latin_loaded = _load_first_font(
         _candidate_latin_font_paths(),
         size=size,
         label="Latin fallback",
     )
-    if latin_font is None:
+    if latin_loaded is None:
         logger.warning("No kitchen print Latin fallback font found; using Myanmar/default font")
         latin_font = myanmar_font
-    return myanmar_font, latin_font
+    else:
+        latin_font, _latin_path = latin_loaded
+    logger.info("Print text shaping backend=%s myanmar_font_path=%s", shaping_backend(), myanmar_path)
+    return myanmar_font, latin_font, myanmar_path
 
 
 def _is_myanmar_char(char: str) -> bool:
@@ -213,19 +230,45 @@ def _text_bbox(
     return draw.textbbox((0, 0), text or " ", font=font)
 
 
+def _run_needs_myanmar_shaping(text: str) -> bool:
+    return any(_is_myanmar_char(ch) for ch in text)
+
+
+def _measure_run(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    font: ImageFont.ImageFont,
+    *,
+    myanmar_font_path: Path | None,
+) -> tuple[int, int]:
+    if myanmar_font_path is not None and _run_needs_myanmar_shaping(text):
+        shaped = render_shaped_text(
+            text,
+            str(myanmar_font_path),
+            size=DEFAULT_FONT_SIZE,
+        )
+        return shaped.size
+    bbox = _text_bbox(draw, text, font)
+    return max(bbox[2] - bbox[0], 0), max(bbox[3] - bbox[1], DEFAULT_FONT_SIZE)
+
+
 def _measure_line(
     draw: ImageDraw.ImageDraw,
     line: str,
     myanmar_font: ImageFont.ImageFont,
     latin_font: ImageFont.ImageFont,
+    *,
+    myanmar_font_path: Path | None,
 ) -> tuple[int, int]:
     runs = _line_runs(line or " ", myanmar_font, latin_font)
     width = 0
     height = DEFAULT_FONT_SIZE
     for text, font in runs:
-        bbox = _text_bbox(draw, text, font)
-        width += max(bbox[2] - bbox[0], 0)
-        height = max(height, bbox[3] - bbox[1])
+        run_w, run_h = _measure_run(
+            draw, text, font, myanmar_font_path=myanmar_font_path
+        )
+        width += run_w
+        height = max(height, run_h)
     return width, height
 
 
@@ -237,9 +280,20 @@ def _draw_line(
     y: int,
     myanmar_font: ImageFont.ImageFont,
     latin_font: ImageFont.ImageFont,
+    myanmar_font_path: Path | None,
+    canvas: Image.Image,
 ) -> None:
     cursor_x = x
     for text, font in _line_runs(line or " ", myanmar_font, latin_font):
+        if myanmar_font_path is not None and _run_needs_myanmar_shaping(text):
+            shaped = render_shaped_text(
+                text,
+                str(myanmar_font_path),
+                size=DEFAULT_FONT_SIZE,
+            )
+            canvas.paste(shaped, (cursor_x, y))
+            cursor_x += shaped.size[0]
+            continue
         bbox = _text_bbox(draw, text, font)
         draw.text((cursor_x - bbox[0], y - bbox[1]), text, fill=0, font=font)
         cursor_x += max(bbox[2] - bbox[0], 0)
@@ -254,18 +308,25 @@ def render_ticket_image(
     """Render ticket text to a 1-bit image suitable for ESC/POS raster printing."""
     width = paper_width_px if paper_width_px in (384, 576) else 576
     logger.info(
-        "Rendering print image width_px=%s font_path_override=%s",
+        "Rendering print image width_px=%s font_path_override=%s shaping=%s",
         width,
         font_path or "(auto)",
+        shaping_backend(),
     )
-    myanmar_font, latin_font = _load_font_chain(font_path)
+    myanmar_font, latin_font, myanmar_font_path = _load_font_chain(font_path)
     lines = ticket_text.rstrip("\n").splitlines() or [""]
 
     probe = Image.new("L", (width, 10), 255)
     draw = ImageDraw.Draw(probe)
     line_heights: list[int] = []
     for line in lines:
-        _line_width, line_height = _measure_line(draw, line, myanmar_font, latin_font)
+        _line_width, line_height = _measure_line(
+            draw,
+            line,
+            myanmar_font,
+            latin_font,
+            myanmar_font_path=myanmar_font_path,
+        )
         line_heights.append(line_height)
 
     height = PADDING_Y_PX * 2 + sum(line_heights) + (len(lines) - 1) * LINE_GAP_PX
@@ -281,6 +342,8 @@ def render_ticket_image(
             y=y,
             myanmar_font=myanmar_font,
             latin_font=latin_font,
+            myanmar_font_path=myanmar_font_path,
+            canvas=image,
         )
         y += line_height + LINE_GAP_PX
 

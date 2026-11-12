@@ -306,6 +306,14 @@ Latest known result (2026-07-04):
 
 ## 8. Debugging Playbook
 
+### Problem: Myanmar vowels (ေ / သရ) appear in the wrong place
+- Symptom: glyphs exist, but `ေ` sits after the consonant (storage order) like “Mac vs Windows typing”.
+- Cause: image renderer used Pillow BASIC layout without OpenType shaping.
+- Fix:
+  - Ensure `pillow` build has RAQM, or install `uharfbuzz` + `freetype-py` from `requirements.txt`.
+  - Confirm print log shows `shaping=raqm` or `shaping=harfbuzz` (not `basic`).
+  - Keep `render_mode=image` and a Myanmar OpenType font (`Pyidaungsu.ttf`).
+
 ### Problem: Myanmar prints as Chinese/garbled
 
 Likely cause:

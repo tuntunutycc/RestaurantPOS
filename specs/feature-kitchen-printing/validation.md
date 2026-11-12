@@ -92,6 +92,8 @@ Validation evidence:
 - [x] Test: bundled Myanmar font auto-discovery.
 - [x] Test: bundled Latin fallback font routing.
 - [x] Test: mixed-script image render remains non-empty.
+- [x] Test: Myanmar U+1031 shaping differs from Pillow BASIC layout (`tests/test_myanmar_print_shaping.py`).
+- [x] Test: shaping backend is `raqm` or `harfbuzz` when engines are installed.
 - [x] Test: raster payload builder returns non-empty bytes.
 - [x] Test: order submit succeeds when renderer raises.
 - [x] Full suite passes: **52 passed** (2026-07-04).

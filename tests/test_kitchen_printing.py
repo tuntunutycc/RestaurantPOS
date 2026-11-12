@@ -238,17 +238,18 @@ def test_image_renderer_discovers_bundled_myanmar_font(tmp_path, monkeypatch):
     fallback_font = ImageFont.load_default()
     loaded_paths = []
 
-    def _fake_truetype(path, size):
-        loaded_paths.append(path)
+    def _fake_load_truetype(path, *, size):
+        loaded_paths.append(str(path))
         return fallback_font
 
     monkeypatch.setattr(renderer, "BUNDLED_FONT_DIRS", (font_dir,))
     monkeypatch.setattr(renderer, "SYSTEM_MYANMAR_FONT_PATHS", ())
-    monkeypatch.setattr(renderer.ImageFont, "truetype", _fake_truetype)
+    monkeypatch.setattr(renderer, "load_truetype", _fake_load_truetype)
 
-    font = renderer._load_font(None)
+    font, loaded_path = renderer._load_font(None)
 
     assert font is fallback_font
+    assert loaded_path == font_path
     assert loaded_paths == [str(font_path)]
 
 

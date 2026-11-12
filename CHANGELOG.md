@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-12 — Myanmar vowel shaping for image print
+
+### Summary
+Image-mode tickets shape Myanmar text with Pillow RAQM when available, otherwise HarfBuzz + FreeType, so left-side vowels like `ေ` print in visual order. Adds `uharfbuzz` / `freetype-py` and shaping regression tests.
+
 ## 2026-11-12 — Printer diagnostic log file
 
 ### Summary

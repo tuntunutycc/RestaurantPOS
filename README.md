@@ -338,8 +338,9 @@ Cashier USB / installed-queue receipt printing uses **`pywin32`** and the **Wind
 9. **Printer diagnostic log file**
    - After any print job, open:
      `logs\printing\print.log`
-   - That file records backend, render mode, Windows queue / LAN target, Myanmar font path loaded (or missing), and success/failure details.
+   - That file records backend, render mode, Windows queue / LAN target, Myanmar font path loaded (or missing), shaping backend (`raqm` / `harfbuzz`), and success/failure details.
    - The font line appears only when printing in **image** mode. Text mode will log that Myanmar may look wrong.
+   - If Myanmar vowels like `ေ` sit in the wrong place, confirm the log shows `shaping=raqm` or `shaping=harfbuzz` (not `basic`), then reinstall deps: `pip install -r requirements.txt`.
 
 Kitchen/bar thermal printers can still use LAN IP (`host`/`port` on those printer rows) while cashier uses Windows USB.
 
