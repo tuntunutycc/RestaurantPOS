@@ -59,6 +59,16 @@ def _dedupe_paths(paths: list[Path]) -> list[Path]:
     return unique_paths
 
 
+def _looks_like_myanmar_font(path: Path) -> bool:
+    """Match common Myanmar font downloads, including spaced/versioned names."""
+    stem = path.stem.lower().replace(" ", "").replace("-", "").replace("_", "")
+    return (
+        "pyidaungsu" in stem
+        or "myanmar" in stem
+        or stem.startswith("myanmar3")
+    )
+
+
 def _candidate_font_paths(font_path: str | None) -> list[Path]:
     candidates: list[Path] = []
     if font_path:
@@ -70,10 +80,11 @@ def _candidate_font_paths(font_path: str | None) -> list[Path]:
     for font_dir in BUNDLED_FONT_DIRS:
         if not font_dir.exists():
             continue
-        candidates.extend(sorted(font_dir.glob("*Myanmar*.ttf")))
-        candidates.extend(sorted(font_dir.glob("*Myanmar*.otf")))
-        candidates.extend(sorted(font_dir.glob("*Pyidaungsu*.ttf")))
-        candidates.extend(sorted(font_dir.glob("*Pyidaungsu*.otf")))
+        for path in sorted(font_dir.iterdir()):
+            if path.suffix.lower() not in {".ttf", ".otf"}:
+                continue
+            if _looks_like_myanmar_font(path):
+                candidates.append(path)
 
     candidates.extend(Path(path) for path in SYSTEM_MYANMAR_FONT_PATHS)
     return _dedupe_paths(candidates)
@@ -228,6 +239,11 @@ def render_ticket_image(
 ) -> Image.Image:
     """Render ticket text to a 1-bit image suitable for ESC/POS raster printing."""
     width = paper_width_px if paper_width_px in (384, 576) else 576
+    logger.info(
+        "Rendering print image width_px=%s font_path_override=%s",
+        width,
+        font_path or "(auto)",
+    )
     myanmar_font, latin_font = _load_font_chain(font_path)
     lines = ticket_text.rstrip("\n").splitlines() or [""]
 

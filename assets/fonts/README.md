@@ -26,3 +26,5 @@ The renderer auto-detects preferred bundled fonts in this order:
 5. Pillow default font as a last fallback
 
 For reliable Myanmar ticket/receipt output, use `render_mode=image` in Kitchen Printer Settings and restart the server after adding font files.
+
+The log line `Loaded kitchen print Myanmar font: ...` appears only when a receipt/ticket is printed in **image** mode. It does not appear at server startup, and never appears in text mode.

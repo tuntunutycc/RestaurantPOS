@@ -70,6 +70,14 @@ def _set_windows_backend(db_session) -> None:
     db_session.commit()
 
 
+def _restore_file_backend(db_session) -> None:
+    seed_kitchen_printer_settings(db_session)
+    settings = db_session.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    settings.backend = "file"
+    settings.render_mode = "text"
+    db_session.commit()
+
+
 def test_windows_printers_list_unavailable_without_pywin32(client, auth_headers, monkeypatch):
     monkeypatch.setattr(
         "routers.kitchen_printers.windows_printing_available",
@@ -191,6 +199,7 @@ def test_checkout_windows_backend_sends_raw_receipt(
         assert "Change:" in text or "change" in text.lower()
     finally:
         _purge_order(db_session, order.id)
+        _restore_file_backend(db_session)
 
 
 def test_checkout_windows_missing_queue_soft_fails(
@@ -224,6 +233,7 @@ def test_checkout_windows_missing_queue_soft_fails(
         assert body.get("warning")
     finally:
         _purge_order(db_session, order.id)
+        _restore_file_backend(db_session)
 
 
 def test_kitchen_ticket_windows_backend_falls_back_to_file_without_lan_host(
@@ -245,23 +255,26 @@ def test_kitchen_ticket_windows_backend_falls_back_to_file_without_lan_host(
 
     from services.printing.service import dispatch_kitchen_ticket
 
-    asyncio.run(
-        dispatch_kitchen_ticket(
-            "food",
-            {
-                "item_name": "Test Mohinga",
-                "quantity": 1,
-                "note": None,
-                "table_number": 1,
-                "order_id": 99,
-                "date": "2026-11-05",
-            },
-            db=db_session,
+    try:
+        asyncio.run(
+            dispatch_kitchen_ticket(
+                "food",
+                {
+                    "item_name": "Test Mohinga",
+                    "quantity": 1,
+                    "note": None,
+                    "table_number": 1,
+                    "order_id": 99,
+                    "date": "2026-11-05",
+                },
+                db=db_session,
+            )
         )
-    )
-    out = Path(tmp_path) / "food_printer_output.txt"
-    assert out.exists()
-    assert "Test Mohinga" in out.read_text(encoding="utf-8")
+        out = Path(tmp_path) / "food_printer_output.txt"
+        assert out.exists()
+        assert "Test Mohinga" in out.read_text(encoding="utf-8")
+    finally:
+        _restore_file_backend(db_session)
 
 
 def test_kitchen_ticket_windows_backend_keeps_lan_when_host_set(
@@ -298,21 +311,24 @@ def test_kitchen_ticket_windows_backend_keeps_lan_when_host_set(
 
     from services.printing.service import dispatch_kitchen_ticket
 
-    asyncio.run(
-        dispatch_kitchen_ticket(
-            "food",
-            {
-                "item_name": "LAN Kitchen Item",
-                "quantity": 2,
-                "note": None,
-                "table_number": 3,
-                "order_id": 42,
-                "date": "2026-11-05",
-            },
-            db=db_session,
+    try:
+        asyncio.run(
+            dispatch_kitchen_ticket(
+                "food",
+                {
+                    "item_name": "LAN Kitchen Item",
+                    "quantity": 2,
+                    "note": None,
+                    "table_number": 3,
+                    "order_id": 42,
+                    "date": "2026-11-05",
+                },
+                db=db_session,
+            )
         )
-    )
-    assert sent == [("192.168.1.50", 9100)]
+        assert sent == [("192.168.1.50", 9100)]
+    finally:
+        _restore_file_backend(db_session)
 
 
 def test_windows_print_error_messages_are_actionable(monkeypatch):
@@ -338,17 +354,20 @@ def test_windows_print_error_messages_are_actionable(monkeypatch):
 
 def test_put_kitchen_printers_accepts_windows_backend(client, db_session, auth_headers):
     seed_kitchen_printer_settings(db_session)
-    res = client.put(
-        "/api/admin/kitchen-printers",
-        headers=auth_headers("admin"),
-        json={
-            "backend": "windows_printer",
-            "render_mode": "text",
-            "paper_width_px": 576,
-            "routes": [],
-        },
-    )
-    assert res.status_code == 200, res.text
-    assert res.json()["backend"] == "windows_printer"
-    get_res = client.get("/api/admin/kitchen-printers", headers=auth_headers("admin"))
-    assert get_res.json()["backend"] == "windows_printer"
+    try:
+        res = client.put(
+            "/api/admin/kitchen-printers",
+            headers=auth_headers("admin"),
+            json={
+                "backend": "windows_printer",
+                "render_mode": "text",
+                "paper_width_px": 576,
+                "routes": [],
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["backend"] == "windows_printer"
+        get_res = client.get("/api/admin/kitchen-printers", headers=auth_headers("admin"))
+        assert get_res.json()["backend"] == "windows_printer"
+    finally:
+        _restore_file_backend(db_session)

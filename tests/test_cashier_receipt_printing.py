@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from models import Category, MenuItem, Order, OrderItem, Printer, Table, Zone
+from models import Category, KitchenPrinterSettings, MenuItem, Order, OrderItem, Printer, Table, Zone
 from services.printing.settings import seed_default_printers, seed_kitchen_printer_settings
 
 
@@ -68,6 +68,11 @@ def test_checkout_issue_receipt_file_backend(client, db_session, auth_headers, t
     monkeypatch.setenv("KITCHEN_PRINT_OUTPUT_DIR", str(tmp_path))
     monkeypatch.setenv("SHOP_NAME", "Audit Cafe")
     monkeypatch.delenv("PRINTER_CASHIER_HOST", raising=False)
+    seed_kitchen_printer_settings(db_session)
+    settings = db_session.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    settings.backend = "file"
+    settings.render_mode = "text"
+    db_session.commit()
 
     order = _seed_open_order(db_session, total=12.0)
     try:

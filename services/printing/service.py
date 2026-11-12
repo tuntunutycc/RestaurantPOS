@@ -89,6 +89,36 @@ async def _dispatch_payload(
                     route,
                 )
 
+    target = "file"
+    if use_windows:
+        target = f"windows_queue={(windows_printer_name or '').strip() or '(missing)'}"
+    elif use_network:
+        endpoint = endpoint_override or config.routes.get(route)
+        if endpoint is not None:
+            target = f"lan={endpoint.host}:{endpoint.port}"
+        else:
+            target = "lan=(missing endpoint)"
+
+    logger.info(
+        "Print dispatch route=%s backend=%s render_mode=%s target=%s",
+        route,
+        config.backend,
+        config.render_mode,
+        target,
+    )
+    if config.backend == "windows_printer" and route == CASHIER_PRINTER_ROUTE:
+        if config.render_mode != "image":
+            logger.warning(
+                "Cashier Windows print is using render_mode=%s. "
+                "Myanmar text usually needs render_mode=image.",
+                config.render_mode,
+            )
+        if not (windows_printer_name or "").strip():
+            logger.error(
+                "Cashier Windows print aborted: windows_printer_name is empty "
+                "(set it on the cashier Printer in Admin)"
+            )
+
     if config.render_mode == "image":
         image = render_ticket_image(
             ticket_text,
@@ -96,15 +126,77 @@ async def _dispatch_payload(
             font_path=config.font_path,
         )
         escpos_payload = build_escpos_raster_payload(image)
+        logger.info(
+            "Print image rendered route=%s size_px=%sx%s payload_bytes=%s",
+            route,
+            image.size[0],
+            image.size[1],
+            len(escpos_payload),
+        )
         if use_windows:
             queue = (windows_printer_name or "").strip()
             if not queue:
                 raise RuntimeError(
                     "Cashier Windows printer queue name is not configured"
                 )
-            await asyncio.to_thread(send_raw_to_windows_printer, queue, escpos_payload)
+            try:
+                await asyncio.to_thread(send_raw_to_windows_printer, queue, escpos_payload)
+                logger.info("Windows RAW print succeeded route=%s queue=%s", route, queue)
+            except Exception:
+                logger.exception(
+                    "Windows RAW print failed route=%s queue=%s", route, queue
+                )
+                raise
             return
         if use_network:
+            try:
+                if endpoint_override is not None:
+                    timeout = (
+                        CASHIER_SOCKET_TIMEOUT_SECONDS
+                        if route == CASHIER_PRINTER_ROUTE
+                        else 5.0
+                    )
+                    await asyncio.to_thread(
+                        print_image_to_network,
+                        endpoint_override,
+                        escpos_payload,
+                        timeout_seconds=timeout,
+                        route_label=route,
+                    )
+                else:
+                    await asyncio.to_thread(
+                        send_network_ticket, config, route, escpos_payload
+                    )
+                logger.info("LAN print succeeded route=%s target=%s", route, target)
+            except Exception:
+                logger.exception("LAN print failed route=%s target=%s", route, target)
+                raise
+            return
+        await asyncio.to_thread(send_file_ticket_image, config, route, image)
+        logger.info("File image print wrote route=%s", route)
+        return
+
+    escpos_payload = build_escpos_text_payload(ticket_text)
+    logger.info(
+        "Print text payload route=%s bytes=%s (Myanmar may look wrong without image mode)",
+        route,
+        len(escpos_payload),
+    )
+    if use_windows:
+        queue = (windows_printer_name or "").strip()
+        if not queue:
+            raise RuntimeError(
+                "Cashier Windows printer queue name is not configured"
+            )
+        try:
+            await asyncio.to_thread(send_raw_to_windows_printer, queue, escpos_payload)
+            logger.info("Windows RAW print succeeded route=%s queue=%s", route, queue)
+        except Exception:
+            logger.exception("Windows RAW print failed route=%s queue=%s", route, queue)
+            raise
+        return
+    if use_network:
+        try:
             if endpoint_override is not None:
                 timeout = (
                     CASHIER_SOCKET_TIMEOUT_SECONDS
@@ -120,37 +212,13 @@ async def _dispatch_payload(
                 )
             else:
                 await asyncio.to_thread(send_network_ticket, config, route, escpos_payload)
-            return
-        await asyncio.to_thread(send_file_ticket_image, config, route, image)
-        return
-
-    escpos_payload = build_escpos_text_payload(ticket_text)
-    if use_windows:
-        queue = (windows_printer_name or "").strip()
-        if not queue:
-            raise RuntimeError(
-                "Cashier Windows printer queue name is not configured"
-            )
-        await asyncio.to_thread(send_raw_to_windows_printer, queue, escpos_payload)
-        return
-    if use_network:
-        if endpoint_override is not None:
-            timeout = (
-                CASHIER_SOCKET_TIMEOUT_SECONDS
-                if route == CASHIER_PRINTER_ROUTE
-                else 5.0
-            )
-            await asyncio.to_thread(
-                print_image_to_network,
-                endpoint_override,
-                escpos_payload,
-                timeout_seconds=timeout,
-                route_label=route,
-            )
-        else:
-            await asyncio.to_thread(send_network_ticket, config, route, escpos_payload)
+            logger.info("LAN print succeeded route=%s", route)
+        except Exception:
+            logger.exception("LAN print failed route=%s", route)
+            raise
         return
     await asyncio.to_thread(send_file_ticket, config, route, ticket_text)
+    logger.info("File text print wrote route=%s", route)
 
 
 async def dispatch_kitchen_ticket(
