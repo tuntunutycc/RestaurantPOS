@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-12 — Printer diagnostic log file
+
+### Summary
+Every print job writes diagnostics to `logs/printing/print.log` (backend, render mode, target queue/host, Myanmar font resolution, success/failure). Console logging remains; `logs/` is gitignored.
+
 ## 2026-11-11 — Prefer Pyidaungsu for Myanmar print fonts
 
 ### Summary

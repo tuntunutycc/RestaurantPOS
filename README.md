@@ -331,8 +331,15 @@ Cashier USB / installed-queue receipt printing uses **`pywin32`** and the **Wind
 
 8. **Enable Windows receipt printing in Admin**
    - Counter → Kitchen Printer Settings → Print mode = **Windows printer (USB / installed queue)**
+   - Set **Render mode = Image mode** for correct Myanmar text
    - Printers → edit the **cashier** printer → select the Windows queue (e.g. `POSPrinter POS-80(300DPI)`) → Save
    - Checkout with **Print Receipt** enabled
+
+9. **Printer diagnostic log file**
+   - After any print job, open:
+     `logs\printing\print.log`
+   - That file records backend, render mode, Windows queue / LAN target, Myanmar font path loaded (or missing), and success/failure details.
+   - The font line appears only when printing in **image** mode. Text mode will log that Myanmar may look wrong.
 
 Kitchen/bar thermal printers can still use LAN IP (`host`/`port` on those printer rows) while cashier uses Windows USB.
 

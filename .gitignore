@@ -28,3 +28,6 @@ pos.db
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime printer diagnostics (created on first print)
+logs/

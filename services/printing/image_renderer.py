@@ -7,6 +7,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from services.printing.print_log import ensure_print_file_logging
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_FONT_SIZE = 28
@@ -113,6 +115,14 @@ def _load_first_font(
     size: int,
     label: str,
 ) -> ImageFont.ImageFont | None:
+    ensure_print_file_logging()
+    existing = [path for path in paths if path.exists()]
+    logger.info(
+        "Font search label=%s candidates=%s existing=%s",
+        label,
+        len(paths),
+        [str(path) for path in existing[:8]],
+    )
     for path in paths:
         if not path.exists():
             continue
@@ -126,11 +136,15 @@ def _load_first_font(
 
 
 def _load_font(font_path: str | None, size: int = DEFAULT_FONT_SIZE) -> ImageFont.ImageFont:
+    ensure_print_file_logging()
     font = _load_first_font(_candidate_font_paths(font_path), size=size, label="Myanmar")
     if font is not None:
         return font
 
-    logger.warning("No Myanmar-capable kitchen print font found; using Pillow default font")
+    logger.warning(
+        "No Myanmar-capable kitchen print font found; using Pillow default font. "
+        "Place Pyidaungsu.ttf under assets/fonts and use render_mode=image."
+    )
     return ImageFont.load_default()
 
 

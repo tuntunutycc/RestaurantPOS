@@ -18,6 +18,7 @@ from services.printing.backends.escpos_windows import send_raw_to_windows_printe
 from services.printing.backends.file import send_file_ticket, send_file_ticket_image
 from services.printing.config import CASHIER_PRINTER_ROUTE, PrinterEndpoint
 from services.printing.image_renderer import render_ticket_image
+from services.printing.print_log import ensure_print_file_logging
 from services.printing.receipt import build_receipt_text
 from services.printing.routes import category_route_to_printer_role
 from services.printing.settings import (
@@ -55,6 +56,7 @@ async def _dispatch_payload(
     endpoint_override: PrinterEndpoint | None = None,
     windows_printer_name: str | None = None,
 ) -> None:
+    log_path = ensure_print_file_logging()
     config = load_printer_config(db)
     if endpoint_override is not None:
         config = replace(
@@ -100,17 +102,30 @@ async def _dispatch_payload(
             target = "lan=(missing endpoint)"
 
     logger.info(
-        "Print dispatch route=%s backend=%s render_mode=%s target=%s",
+        "Print dispatch route=%s backend=%s render_mode=%s target=%s log_file=%s",
         route,
         config.backend,
         config.render_mode,
         target,
+        log_path,
+    )
+    logger.info(
+        "Print diagnostics: font_path_override=%s paper_width_px=%s "
+        "myanmar_hint=%s",
+        config.font_path or "(auto: Pyidaungsu then Noto under assets/fonts)",
+        config.paper_width_px,
+        (
+            "image mode will load Myanmar font"
+            if config.render_mode == "image"
+            else "text mode skips Myanmar font — expect garbled Myanmar on many printers"
+        ),
     )
     if config.backend == "windows_printer" and route == CASHIER_PRINTER_ROUTE:
         if config.render_mode != "image":
             logger.warning(
                 "Cashier Windows print is using render_mode=%s. "
-                "Myanmar text usually needs render_mode=image.",
+                "Myanmar text usually needs render_mode=image. "
+                "Notepad can look correct while app text-mode RAW looks wrong.",
                 config.render_mode,
             )
         if not (windows_printer_name or "").strip():

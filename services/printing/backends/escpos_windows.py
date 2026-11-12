@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from services.printing.print_log import ensure_print_file_logging
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -19,7 +21,11 @@ def windows_printing_available() -> bool:
 
 def list_windows_printers() -> list[str]:
     """Return installed local/connection printer queue names (sorted, unique)."""
+    ensure_print_file_logging()
     if win32print is None:
+        logger.warning(
+            "Windows printer list unavailable: pywin32 not installed or not on Windows"
+        )
         return []
     flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
     try:
@@ -36,7 +42,9 @@ def list_windows_printers() -> list[str]:
             continue
         if name:
             names.add(name)
-    return sorted(names)
+    found = sorted(names)
+    logger.info("Windows printer queues found=%s names=%s", len(found), found)
+    return found
 
 
 def _format_windows_print_error(printer_name: str, exc: BaseException) -> str:
@@ -58,6 +66,7 @@ def _format_windows_print_error(printer_name: str, exc: BaseException) -> str:
 
 def send_raw_to_windows_printer(printer_name: str, payload: bytes) -> None:
     """Write raw ESC/POS bytes to a Windows print queue using datatype RAW."""
+    ensure_print_file_logging()
     if win32print is None:
         raise RuntimeError(
             "Windows printer backend requires pywin32 on a Windows host "
@@ -69,6 +78,11 @@ def send_raw_to_windows_printer(printer_name: str, payload: bytes) -> None:
     if not payload:
         raise RuntimeError("Empty print payload")
 
+    logger.info(
+        "Windows RAW print starting queue=%s payload_bytes=%s",
+        name,
+        len(payload),
+    )
     try:
         handle = win32print.OpenPrinter(name)
     except Exception as exc:
@@ -86,6 +100,11 @@ def send_raw_to_windows_printer(printer_name: str, payload: bytes) -> None:
                     f"Windows printer wrote {written} of {len(payload)} bytes to '{name}'"
                 )
             win32print.EndPagePrinter(handle)
+            logger.info(
+                "Windows RAW print finished queue=%s written=%s",
+                name,
+                written if written is not None else len(payload),
+            )
         except RuntimeError:
             raise
         except Exception as exc:
