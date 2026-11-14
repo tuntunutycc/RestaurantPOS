@@ -80,16 +80,23 @@ function toNumber(value, fallback = 0) {
 function normalizeSelectedModifiers(raw) {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((m) => ({
-      name: String(m?.name || '').trim(),
-      price: toNumber(m?.price, 0),
-      group: m?.group ? String(m.group) : null,
-    }))
+    .map((m) => {
+      const quantity = Math.max(1, Math.floor(toNumber(m?.quantity, 1)));
+      return {
+        name: String(m?.name || '').trim(),
+        price: toNumber(m?.price, 0),
+        group: m?.group ? String(m.group) : null,
+        quantity,
+      };
+    })
     .filter((m) => m.name);
 }
 
 function modifiersTotal(selectedModifiers) {
-  return normalizeSelectedModifiers(selectedModifiers).reduce((sum, m) => sum + toNumber(m.price, 0), 0);
+  return normalizeSelectedModifiers(selectedModifiers).reduce(
+    (sum, m) => sum + toNumber(m.price, 0) * Math.max(1, Math.floor(toNumber(m.quantity, 1))),
+    0
+  );
 }
 
 function getRawBasePrice(menuItem, isTakeaway = false) {
@@ -204,7 +211,12 @@ function getMenuPriceHtml(menuItem) {
 
 function buildCartLineKey(menuItemId, selectedModifiers, specialInstructions, isTakeaway = false) {
   const normalized = normalizeSelectedModifiers(selectedModifiers)
-    .map((m) => ({ name: m.name, price: Number(m.price.toFixed(2)), group: m.group || null }))
+    .map((m) => ({
+      name: m.name,
+      price: Number(toNumber(m.price, 0).toFixed(2)),
+      group: m.group || null,
+      quantity: Math.max(1, Math.floor(toNumber(m.quantity, 1))),
+    }))
     .sort((a, b) => `${a.group || ''}|${a.name}`.localeCompare(`${b.group || ''}|${b.name}`));
   const note = String(specialInstructions || '').trim();
   return `${menuItemId}::${JSON.stringify(normalized)}::${note}::${isTakeaway ? '1' : '0'}`;
@@ -212,6 +224,18 @@ function buildCartLineKey(menuItemId, selectedModifiers, specialInstructions, is
 
 function getMenuItemById(id) {
   return menuItems.find((m) => m.id === id) || null;
+}
+
+function showWarning(message) {
+  if (window.toast?.warning) {
+    window.toast.warning(message);
+    return;
+  }
+  if (window.toast?.info) {
+    window.toast.info(message);
+    return;
+  }
+  console.warn(message);
 }
 
 function showError(message) {
@@ -1235,7 +1259,12 @@ function renderCart() {
     }
     const breakdownHtml = renderItemBreakdownHtml(lineBreakdown);
     const modifiersHtml = (selected_modifiers || []).length
-      ? `<div class="text-xs text-slate-500 mt-0.5">${(selected_modifiers || []).map((m) => `+ ${escapeHtml(m.name)}${toNumber(m.price, 0) ? ` (${formatMoney(toNumber(m.price, 0))})` : ''}`).join(', ')}</div>`
+      ? `<div class="text-xs text-slate-500 mt-0.5">${(selected_modifiers || []).map((m) => {
+          const qty = Math.max(1, Math.floor(toNumber(m.quantity, 1)));
+          const lineMod = toNumber(m.price, 0) * qty;
+          const qtyLabel = qty > 1 ? ` ×${qty}` : '';
+          return `+ ${escapeHtml(m.name)}${qtyLabel}${lineMod ? ` (${formatMoney(lineMod)})` : ''}`;
+        }).join(', ')}</div>`
       : '';
     const noteHtml = special_instructions
       ? `<div class="text-xs text-slate-500 italic mt-0.5">${escapeHtml(special_instructions)}</div>`
@@ -1357,11 +1386,24 @@ function bindPredefinedInstructionChips() {
 function getSelectedModifiersFromModal() {
   const selected = [];
   document.querySelectorAll('[data-modifier-option]').forEach((input) => {
+    const mode = String(input.getAttribute('data-modifier-mode') || 'check');
+    if (mode === 'qty') {
+      const qty = Math.max(0, Math.floor(toNumber(input.value, 0)));
+      if (qty < 1) return;
+      selected.push({
+        name: String(input.getAttribute('data-option-name') || ''),
+        price: toNumber(input.getAttribute('data-option-price'), 0),
+        group: String(input.getAttribute('data-group-name') || '') || null,
+        quantity: qty,
+      });
+      return;
+    }
     if (!input.checked) return;
     selected.push({
       name: String(input.getAttribute('data-option-name') || ''),
       price: toNumber(input.getAttribute('data-option-price'), 0),
       group: String(input.getAttribute('data-group-name') || '') || null,
+      quantity: 1,
     });
   });
   return normalizeSelectedModifiers(selected);
@@ -1388,6 +1430,24 @@ function validateRequiredModifierGroups() {
     }
   }
   return true;
+}
+
+function bindModifierQtySteppers(groupsEl) {
+  if (!groupsEl || groupsEl.dataset.qtyBound === '1') return;
+  groupsEl.dataset.qtyBound = '1';
+  groupsEl.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-mod-qty-btn]');
+    if (!btn || !groupsEl.contains(btn)) return;
+    const wrap = btn.closest('[data-mod-qty-wrap]');
+    const input = wrap?.querySelector('[data-modifier-option][data-modifier-mode="qty"]');
+    const display = wrap?.querySelector('[data-mod-qty-display]');
+    if (!input) return;
+    const delta = btn.getAttribute('data-mod-qty-btn') === 'plus' ? 1 : -1;
+    const next = Math.max(0, Math.floor(toNumber(input.value, 0) + delta));
+    input.value = String(next);
+    if (display) display.textContent = String(next);
+    updateModifierModalAddButton();
+  });
 }
 
 function openModifierModal(menuItem) {
@@ -1421,26 +1481,45 @@ function openModifierModal(menuItem) {
   setModifierModalQty(1);
 
   const groups = Array.isArray(menuItem.modifiers_config) ? menuItem.modifiers_config : [];
-  if (!groups.length) {
+  // Flat option list for waiter: group titles are optional (often blank).
+  const flatOptions = [];
+  groups.forEach((group, groupIndex) => {
+    const options = Array.isArray(group?.options) ? group.options : [];
+    options.forEach((opt) => {
+      flatOptions.push({
+        name: opt?.name || 'Option',
+        price: toNumber(opt?.price, 0),
+        groupName: String(group?.group || '').trim(),
+        required: !!group?.is_required,
+        groupIndex,
+      });
+    });
+  });
+  if (!flatOptions.length) {
     groupsEl.innerHTML = `<p class="text-sm text-slate-500">${escapeHtml(t('none', 'None'))}</p>`;
   } else {
-    groupsEl.innerHTML = groups.map((group, i) => {
-      const required = !!group?.is_required;
+    const requiredBlocks = groups
+      .map((group, i) => ({ group, i }))
+      .filter(({ group }) => group && group.is_required);
+    const optionalOptions = flatOptions.filter((o) => !o.required);
+
+    const requiredHtml = requiredBlocks.map(({ group, i }) => {
       const options = Array.isArray(group?.options) ? group.options : [];
+      const title = String(group?.group || '').trim() || t('choose_one', 'Choose one');
       return `
         <div class="border border-slate-200 rounded-md p-3">
           <p class="text-sm font-semibold text-slate-800 mb-2">
-            ${escapeHtml(group?.group || `Modifiers ${i + 1}`)}
-            ${required ? '<span class="text-red-600">*</span>' : '<span class="text-slate-400 text-xs">(optional)</span>'}
+            ${escapeHtml(title)} <span class="text-red-600">*</span>
           </p>
           <div class="space-y-1.5">
             ${options.map((opt) => `
               <label class="flex items-center justify-between gap-2 text-sm">
                 <span class="flex items-center gap-2">
                   <input
-                    type="${required ? 'radio' : 'checkbox'}"
+                    type="radio"
                     name="mod-group-${i}"
                     data-modifier-option="1"
+                    data-modifier-mode="check"
                     data-group-name="${escapeAttr(group?.group || '')}"
                     data-option-name="${escapeAttr(opt?.name || '')}"
                     data-option-price="${toNumber(opt?.price, 0)}"
@@ -1455,6 +1534,38 @@ function openModifierModal(menuItem) {
         </div>
       `;
     }).join('');
+
+    const optionalHtml = optionalOptions.length
+      ? `
+        <div class="border border-slate-200 rounded-md p-3">
+          <div class="space-y-1.5">
+            ${optionalOptions.map((opt) => `
+              <div class="flex items-center justify-between gap-2 text-sm" data-mod-qty-wrap="1">
+                <span class="min-w-0">
+                  <span class="font-medium text-slate-800">${escapeHtml(opt.name)}</span>
+                  <span class="text-slate-600 ml-1">+${formatMoney(opt.price)}</span>
+                </span>
+                <span class="flex items-center gap-1 shrink-0">
+                  <button type="button" data-mod-qty-btn="minus" class="px-2 py-1 bg-gray-200 rounded text-gray-700 hover:bg-gray-300 font-semibold" aria-label="Decrease">-</button>
+                  <span data-mod-qty-display class="w-6 text-center font-medium">0</span>
+                  <input type="hidden" value="0"
+                    data-modifier-option="1"
+                    data-modifier-mode="qty"
+                    data-group-name="${escapeAttr(opt.groupName)}"
+                    data-option-name="${escapeAttr(opt.name)}"
+                    data-option-price="${opt.price}"
+                  />
+                  <button type="button" data-mod-qty-btn="plus" class="px-2 py-1 bg-gray-200 rounded text-gray-700 hover:bg-gray-300 font-semibold" aria-label="Increase">+</button>
+                </span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `
+      : '';
+
+    groupsEl.innerHTML = `${requiredHtml}${optionalHtml}`;
+    bindModifierQtySteppers(groupsEl);
   }
 
   groupsEl.querySelectorAll('[data-modifier-option]').forEach((input) => {
@@ -1746,6 +1857,70 @@ async function submitOrder(payload) {
   });
 }
 
+async function fetchPrinterHealth() {
+  try {
+    const res = await fetch(`${API_BASE}/api/printers/health`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth?.checkUnauthorized?.(res)) return null;
+    if (!res.ok) return null;
+    return res.json();
+  } catch (err) {
+    console.error('Printer health check failed:', err);
+    return null;
+  }
+}
+
+function renderPrinterHealthBadge(data) {
+  const btn = document.getElementById('btn-printer-health');
+  if (!btn) return;
+  if (!data) {
+    btn.textContent = 'Printer: ?';
+    btn.className = 'px-2.5 py-1.5 text-xs font-medium rounded border border-slate-300 bg-white text-slate-600';
+    btn.title = 'Could not check printer status';
+    return;
+  }
+  const offline = (data.printers || []).filter((p) => p.status === 'offline');
+  if (offline.length) {
+    const detail = offline.map((p) => `${p.route}${p.host ? ` ${p.host}:${p.port}` : ''}`).join(', ');
+    btn.textContent = `Printer OFFLINE (${offline.map((p) => p.route).join(', ')})`;
+    btn.className = 'px-2.5 py-1.5 text-xs font-medium rounded border border-red-300 bg-red-50 text-red-800';
+    btn.title = data.warning || detail;
+    return;
+  }
+  const skipped = (data.printers || []).every((p) => p.status === 'skipped');
+  if (skipped) {
+    btn.textContent = `Printer OK (${data.backend || 'file'})`;
+    btn.className = 'px-2.5 py-1.5 text-xs font-medium rounded border border-emerald-300 bg-emerald-50 text-emerald-800';
+    btn.title = (data.printers || []).map((p) => `${p.route}: ${p.message}`).join('\n');
+    return;
+  }
+  btn.textContent = 'Printer online';
+  btn.className = 'px-2.5 py-1.5 text-xs font-medium rounded border border-emerald-300 bg-emerald-50 text-emerald-800';
+  btn.title = (data.printers || []).map((p) => `${p.route}: ${p.status} ${p.host || ''}`).join('\n');
+}
+
+async function refreshPrinterHealth() {
+  const data = await fetchPrinterHealth();
+  renderPrinterHealthBadge(data);
+  return data;
+}
+
+function bindPrinterHealth() {
+  const btn = document.getElementById('btn-printer-health');
+  if (btn && btn.dataset.bound !== '1') {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      refreshPrinterHealth().then((data) => {
+        if (data?.warning) showWarning(data.warning);
+        else if (data?.all_online) showSuccess(t('printer_online', 'Kitchen printers look OK.'));
+      });
+    });
+  }
+  refreshPrinterHealth();
+  setInterval(refreshPrinterHealth, 30000);
+}
+
 function bindSubmitOrder() {
   const submitBtn = document.getElementById('submit-order');
 
@@ -1786,6 +1961,10 @@ function bindSubmitOrder() {
       setActiveOrderContext(null);
       renderCart();
       showSuccess(data.message || t('order_submitted', 'Order submitted.'));
+      if (data.warning) {
+        showWarning(data.warning);
+      }
+      refreshPrinterHealth();
       if (AUTO_LOGOUT_AFTER_SUBMIT) {
         setTimeout(() => autoLogoutToPin(), 650);
       } else if (isCashierRole()) {
@@ -2047,6 +2226,7 @@ if (
   (async function init() {
     bindBackToDashboardNav();
     bindSubmitOrder();
+    bindPrinterHealth();
     bindModifierModal();
     bindPredefinedInstructionChips();
     bindTakeawayModal();

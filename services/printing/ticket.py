@@ -5,6 +5,77 @@ from __future__ import annotations
 from PIL import Image
 
 
+def _modifier_ticket_lines(selected_modifiers) -> list[str]:
+    """Pattern A: list each topping under the parent item."""
+    lines: list[str] = []
+    for raw in selected_modifiers or []:
+        if not isinstance(raw, dict):
+            continue
+        name = str(raw.get("name") or "").strip()
+        if not name:
+            continue
+        try:
+            qty = int(raw.get("quantity") or 1)
+        except (TypeError, ValueError):
+            qty = 1
+        if qty < 1:
+            qty = 1
+        if qty == 1:
+            lines.append(f"   + {name}")
+        else:
+            lines.append(f"   + {name} x{qty}")
+    return lines
+
+
+def _ticket_header_lines(
+    *,
+    route: str,
+    table_number: str | int | None,
+    order_id: int,
+    created_at: str,
+    order_type: str = "dine_in",
+    customer_name: str | None = None,
+    title: str = "=== KITCHEN TICKET ===",
+) -> list[str]:
+    normalized_order_type = (order_type or "dine_in").strip().lower()
+    customer = (customer_name or "").strip() or "Walk-in"
+
+    if normalized_order_type == "takeaway":
+        header_block = (
+            "=================================\n"
+            "  [ *** TAKEAWAY / ပါဆယ် *** ]\n"
+            f"  Takeaway #{order_id}\n"
+            f"  Customer: {customer}\n"
+            "================================="
+        )
+    else:
+        header_block = f"Table: {table_number or ''}"
+
+    return [
+        title,
+        f"Route: {route}",
+        header_block,
+        f"Order: #{order_id}",
+        f"Time: {created_at}",
+        "---------------------------------",
+    ]
+
+
+def _item_body_lines(
+    *,
+    item_name: str,
+    quantity: int,
+    note: str | None = None,
+    selected_modifiers=None,
+) -> list[str]:
+    note_value = (note or "").strip()
+    lines = [f"{quantity}x {item_name}"]
+    lines.extend(_modifier_ticket_lines(selected_modifiers))
+    if note_value:
+        lines.append(f"   *** Note: {note_value} ***")
+    return lines
+
+
 def build_ticket_text(
     *,
     route: str,
@@ -16,33 +87,74 @@ def build_ticket_text(
     created_at: str,
     order_type: str = "dine_in",
     customer_name: str | None = None,
+    selected_modifiers=None,
 ) -> str:
-    note_value = (note or "").strip()
-    normalized_order_type = (order_type or "dine_in").strip().lower()
-    customer = (customer_name or "").strip() or "Walk-in"
-
-    if normalized_order_type == "takeaway":
-        header_block = (
-            "=================================\n"
-            "  [ *** TAKEAWAY / ပါဆယ် *** ]\n"
-            f"  Takeaway #{order_id}\n"
-            f"  Customer: {customer}\n"
-            "=================================\n"
+    """Single-item kitchen ticket (kept for compatibility / unit tests)."""
+    lines = _ticket_header_lines(
+        route=route,
+        table_number=table_number,
+        order_id=order_id,
+        created_at=created_at,
+        order_type=order_type,
+        customer_name=customer_name,
+        title="=== KITCHEN ITEM TICKET ===",
+    )
+    lines.extend(
+        _item_body_lines(
+            item_name=item_name,
+            quantity=quantity,
+            note=note,
+            selected_modifiers=selected_modifiers,
         )
-    else:
-        header_block = f"Table: {table_number or ''}\n"
+    )
+    lines.extend(["---------------------------------", "[ --- CUT TICKET --- ]", ""])
+    return "\n".join(lines)
 
-    lines = [
-        "=== KITCHEN ITEM TICKET ===",
-        f"Route: {route}",
-        header_block.rstrip("\n"),
-        f"Order: #{order_id}",
-        f"Time: {created_at}",
-        "---------------------------------",
-        f"{quantity}x {item_name}",
-    ]
-    if note_value:
-        lines.append(f"   *** Note: {note_value} ***")
+
+def build_batch_ticket_text(
+    *,
+    route: str,
+    items: list[dict],
+    table_number: str | int | None,
+    order_id: int,
+    created_at: str,
+    order_type: str = "dine_in",
+    customer_name: str | None = None,
+    batch_number: int | None = None,
+) -> str:
+    """One combined kitchen slip for a submit batch (no prices).
+
+    ``items`` entries: item_name, quantity, note?, selected_modifiers?
+    """
+    lines = _ticket_header_lines(
+        route=route,
+        table_number=table_number,
+        order_id=order_id,
+        created_at=created_at,
+        order_type=order_type,
+        customer_name=customer_name,
+        title="=== KITCHEN TICKET ===",
+    )
+    if batch_number is not None:
+        # Insert batch after Time line (index 4 is Time, 5 is separator)
+        lines.insert(5, f"Batch: #{batch_number}")
+
+    body_items = list(items or [])
+    if not body_items:
+        lines.append("(no items)")
+    else:
+        for index, raw in enumerate(body_items):
+            if index > 0:
+                lines.append("---------------------------------")
+            lines.extend(
+                _item_body_lines(
+                    item_name=str(raw.get("item_name") or ""),
+                    quantity=int(raw.get("quantity") or 1),
+                    note=raw.get("note"),
+                    selected_modifiers=raw.get("selected_modifiers") or [],
+                )
+            )
+
     lines.extend(["---------------------------------", "[ --- CUT TICKET --- ]", ""])
     return "\n".join(lines)
 

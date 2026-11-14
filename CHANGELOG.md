@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-14 — Kitchen print miss: stop silent file fallback
+
+### Summary
+Confirmed that under `windows_printer` with no kitchen/bar LAN host, tickets were written to a local file and treated as success (kitchen got no paper). Now that case returns a submit `warning`, logs an error, and health marks the route offline. Dine-in and takeaway both verified to dispatch kitchen slips.
+
+## 2026-11-13 — Kitchen printer online check (warn only)
+
+### Summary
+`GET /api/printers/health` probes food/drinks LAN reachability. Waiter badge + Admin status panel show online/offline. Order submit still succeeds when offline and returns `warning` (file/dev backend is treated as OK).
+
+## 2026-11-13 — Combined kitchen batch slip (no prices)
+
+### Summary
+Order submit prints one kitchen slip per printer route for the whole batch (items + modifiers + notes), instead of one slip per line. Prices stay off kitchen tickets.
+
+## 2026-11-13 — Priced modifiers (sub-menu toppings)
+
+### Summary
+Any menu item can have priced modifier groups (Admin UI). Waiters pick toppings with quantity; line totals include `price × qty`. Kitchen tickets use Pattern A (toppings under the parent item). Cashier checkout and receipts show modifiers. Instruction tags remain note-only.
+
+### Spec
+- `specs/feature-priced-modifiers/`
+
 ## 2026-11-12 — Myanmar vowel shaping for image print
 
 ### Summary

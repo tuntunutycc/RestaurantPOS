@@ -28,6 +28,7 @@ from services.printing.settings import (
     resolve_printer_endpoint_for_role,
 )
 from services.printing.ticket import (
+    build_batch_ticket_text,
     build_escpos_raster_payload,
     build_escpos_text_payload,
     build_ticket_text,
@@ -70,6 +71,7 @@ async def _dispatch_payload(
     # windows_printer is cashier-only. Kitchen/bar keep LAN when a host is configured
     # so enabling USB receipts does not silently disable IP kitchen printers.
     use_network = False
+    kitchen_file_fallback = False
     if not use_windows:
         if config.backend == "escpos_network":
             use_network = True
@@ -85,9 +87,10 @@ async def _dispatch_payload(
                     route,
                 )
             else:
-                logger.warning(
-                    "windows_printer backend: no LAN host for route=%s; "
-                    "falling back to file",
+                kitchen_file_fallback = True
+                logger.error(
+                    "windows_printer backend: no LAN host for kitchen/bar route=%s; "
+                    "refusing silent success — will write file backup then signal failure",
                     route,
                 )
 
@@ -189,6 +192,12 @@ async def _dispatch_payload(
             return
         await asyncio.to_thread(send_file_ticket_image, config, route, image)
         logger.info("File image print wrote route=%s", route)
+        if kitchen_file_fallback:
+            raise RuntimeError(
+                f"Kitchen route '{route}' has no LAN host under windows_printer; "
+                "ticket saved to file only (not sent to kitchen printer). "
+                "Set host:port on the kitchen/bar Printer in Admin."
+            )
         return
 
     escpos_payload = build_escpos_text_payload(ticket_text)
@@ -234,6 +243,12 @@ async def _dispatch_payload(
         return
     await asyncio.to_thread(send_file_ticket, config, route, ticket_text)
     logger.info("File text print wrote route=%s", route)
+    if kitchen_file_fallback:
+        raise RuntimeError(
+            f"Kitchen route '{route}' has no LAN host under windows_printer; "
+            "ticket saved to file only (not sent to kitchen printer). "
+            "Set host:port on the kitchen/bar Printer in Admin."
+        )
 
 
 async def dispatch_kitchen_ticket(
@@ -244,18 +259,44 @@ async def dispatch_kitchen_ticket(
     customer_name: str | None = None,
     db: Session | None = None,
 ) -> None:
-    """Dispatch one kitchen ticket; `route` remains drinks|food for file labels."""
-    ticket_text = build_ticket_text(
-        route=route,
-        item_name=str(item_ticket.get("item_name") or ""),
-        quantity=int(item_ticket.get("quantity") or 1),
-        note=item_ticket.get("note"),
-        table_number=item_ticket.get("table_number"),
-        order_id=int(item_ticket.get("order_id") or 0),
-        created_at=str(item_ticket.get("date") or ""),
-        order_type=order_type,
-        customer_name=customer_name,
-    )
+    """Dispatch a kitchen ticket.
+
+    Preferred payload (combined batch slip, no prices):
+      ``{ items: [{item_name, quantity, note?, selected_modifiers?}, ...],
+          table_number, order_id, date, batch_number? }``
+
+    Legacy single-item payload still accepted:
+      ``{ item_name, quantity, note?, selected_modifiers?, ... }``
+    """
+    items = item_ticket.get("items")
+    if isinstance(items, list) and items:
+        ticket_text = build_batch_ticket_text(
+            route=route,
+            items=items,
+            table_number=item_ticket.get("table_number"),
+            order_id=int(item_ticket.get("order_id") or 0),
+            created_at=str(item_ticket.get("date") or ""),
+            order_type=order_type,
+            customer_name=customer_name,
+            batch_number=(
+                int(item_ticket["batch_number"])
+                if item_ticket.get("batch_number") is not None
+                else None
+            ),
+        )
+    else:
+        ticket_text = build_ticket_text(
+            route=route,
+            item_name=str(item_ticket.get("item_name") or ""),
+            quantity=int(item_ticket.get("quantity") or 1),
+            note=item_ticket.get("note"),
+            table_number=item_ticket.get("table_number"),
+            order_id=int(item_ticket.get("order_id") or 0),
+            created_at=str(item_ticket.get("date") or ""),
+            order_type=order_type,
+            customer_name=customer_name,
+            selected_modifiers=item_ticket.get("selected_modifiers") or [],
+        )
     endpoint_override: PrinterEndpoint | None = None
     if db is not None:
         role = category_route_to_printer_role(route)

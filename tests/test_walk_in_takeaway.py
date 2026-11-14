@@ -358,3 +358,62 @@ def test_last_takeaway_item_cancel_auto_clears_from_active_list(client, db_sessi
 
     after = client.get("/api/orders/active-takeaways", headers=auth_headers("waiter"))
     assert not any(o["id"] == order_id for o in after.json())
+
+
+def test_takeaway_submit_prints_kitchen_ticket_with_takeaway_header(
+    client, db_session, auth_headers, monkeypatch
+):
+    """Takeaway submit must dispatch kitchen print with TAKEAWAY / customer header."""
+    from services.printing.ticket import build_batch_ticket_text
+
+    menu_item = _seed_menu_item(db_session)
+    captured = []
+
+    async def _capture(route, ticket, **kwargs):
+        text = build_batch_ticket_text(
+            route=route,
+            items=ticket.get("items") or [],
+            table_number=ticket.get("table_number"),
+            order_id=int(ticket.get("order_id") or 0),
+            created_at=str(ticket.get("date") or ""),
+            order_type=kwargs.get("order_type") or "dine_in",
+            customer_name=kwargs.get("customer_name"),
+            batch_number=ticket.get("batch_number"),
+        )
+        captured.append(
+            {
+                "route": route,
+                "order_type": kwargs.get("order_type"),
+                "customer_name": kwargs.get("customer_name"),
+                "text": text,
+                "items": ticket.get("items"),
+            }
+        )
+
+    monkeypatch.setattr("routers.orders.dispatch_kitchen_ticket", _capture)
+
+    res = client.post(
+        "/api/orders/submit",
+        headers=auth_headers("waiter"),
+        json={
+            "order_type": "takeaway",
+            "table_id": None,
+            "customer_name": "Ko Aung",
+            "items": [
+                {
+                    "menu_item_id": menu_item.id,
+                    "quantity": 2,
+                    "selected_modifiers": [],
+                }
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert len(captured) == 1, "takeaway submit should print one kitchen slip per route"
+    job = captured[0]
+    assert job["order_type"] == "takeaway"
+    assert job["customer_name"] == "Ko Aung"
+    assert job["items"] and job["items"][0]["quantity"] == 2
+    assert "TAKEAWAY" in job["text"] or "ပါဆယ်" in job["text"]
+    assert "Ko Aung" in job["text"]
+    assert menu_item.name in job["text"]

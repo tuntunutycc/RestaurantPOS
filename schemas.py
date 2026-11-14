@@ -356,6 +356,7 @@ class SelectedModifier(BaseModel):
     name: str
     price: float = 0.0
     group: str | None = None
+    quantity: int = Field(default=1, ge=1)
 
 
 class MenuItemCreate(BaseModel):
@@ -482,6 +483,23 @@ class OrderSubmitResponse(BaseModel):
     total_amount: float
     is_new_order: bool
     message: str
+    warning: str | None = None
+
+
+class PrinterRouteHealthItem(BaseModel):
+    route: str
+    online: bool
+    status: Literal["online", "offline", "skipped"]
+    host: str | None = None
+    port: int | None = None
+    message: str
+
+
+class PrinterHealthResponse(BaseModel):
+    backend: str
+    printers: list[PrinterRouteHealthItem] = Field(default_factory=list)
+    all_online: bool
+    warning: str | None = None
 
 
 class OrderCreateResponse(BaseModel):

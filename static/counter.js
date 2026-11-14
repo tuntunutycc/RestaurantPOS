@@ -1277,6 +1277,102 @@ async function apiJsonRequest(url, options = {}) {
   return data;
 }
 
+/** Flatten stored modifiers_config groups into a simple option list for the admin editor. */
+function flattenModifierOptions(config) {
+  const options = [];
+  for (const group of Array.isArray(config) ? config : []) {
+    for (const opt of Array.isArray(group?.options) ? group.options : []) {
+      const name = String(opt?.name || '').trim();
+      const price = Number(opt?.price || 0);
+      options.push({
+        name: name || String(opt?.name || ''),
+        price: Number.isFinite(price) && price >= 0 ? price : 0,
+      });
+    }
+  }
+  return options;
+}
+
+/** Persist as one optional group (API contract still uses modifiers_config groups). */
+function wrapModifierOptions(options) {
+  const cleaned = (Array.isArray(options) ? options : [])
+    .map((opt) => ({
+      name: String(opt?.name || '').trim(),
+      price: Number(opt?.price || 0),
+    }))
+    .filter((opt) => opt.name)
+    .map((opt) => ({
+      name: opt.name,
+      price: Number.isFinite(opt.price) && opt.price >= 0 ? opt.price : 0,
+    }));
+  if (!cleaned.length) return [];
+  return [{ group: '', is_required: false, options: cleaned }];
+}
+
+function readModifiersConfigFromEditor() {
+  return wrapModifierOptions(collectModifiersEditorState());
+}
+
+function renderModifiersEditor(config) {
+  const root = document.getElementById('menu-modifiers-editor');
+  if (!root) return;
+  const options = Array.isArray(config) && config.length && !Object.prototype.hasOwnProperty.call(config[0] || {}, 'options')
+    ? config
+    : flattenModifierOptions(config);
+  if (!options.length) {
+    root.innerHTML = `<p class="text-xs text-slate-500">No options yet. Click "+ Option" to add toppings (e.g. ပဲကြော်).</p>`;
+    return;
+  }
+  root.innerHTML = options.map((opt, idx) => `
+    <div class="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-md p-2" data-mod-option="${idx}">
+      <input type="text" data-mod-option-name value="${escapeAttr(opt?.name || '')}" placeholder="Option name (e.g. ပဲကြော်)"
+        class="flex-1 min-w-[8rem] px-2 py-1.5 text-sm border border-slate-300 rounded-md" />
+      <input type="number" data-mod-option-price value="${Number(opt?.price || 0)}" step="0.01" min="0" placeholder="Price"
+        class="w-28 px-2 py-1.5 text-sm border border-slate-300 rounded-md" />
+      <button type="button" data-mod-remove-option class="text-xs text-slate-500 hover:text-red-600 px-1">✕</button>
+    </div>
+  `).join('');
+}
+
+function collectModifiersEditorState() {
+  const root = document.getElementById('menu-modifiers-editor');
+  if (!root) return [];
+  const options = [];
+  root.querySelectorAll('[data-mod-option]').forEach((optEl) => {
+    options.push({
+      name: String(optEl.querySelector('[data-mod-option-name]')?.value || ''),
+      price: parseFloat(optEl.querySelector('[data-mod-option-price]')?.value || '0') || 0,
+    });
+  });
+  return options;
+}
+
+function bindModifiersEditor() {
+  const root = document.getElementById('menu-modifiers-editor');
+  const addOptBtn = document.getElementById('btn-add-modifier-option');
+  if (addOptBtn && addOptBtn.dataset.bound !== '1') {
+    addOptBtn.dataset.bound = '1';
+    addOptBtn.addEventListener('click', () => {
+      const next = collectModifiersEditorState();
+      next.push({ name: '', price: 0 });
+      renderModifiersEditor(next);
+    });
+  }
+  if (!root || root.dataset.bound === '1') return;
+  root.dataset.bound = '1';
+  root.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (!target.closest('[data-mod-remove-option]')) return;
+    const optEl = target.closest('[data-mod-option]');
+    const state = collectModifiersEditorState();
+    const idx = Number(optEl?.getAttribute('data-mod-option'));
+    if (Number.isNaN(idx)) return;
+    state.splice(idx, 1);
+    renderModifiersEditor(state);
+  });
+}
+
 function buildMenuItemPayloadFromForm() {
   const name = document.getElementById('item-name')?.value.trim() || '';
   const price = parseFloat(document.getElementById('item-price')?.value);
@@ -1291,6 +1387,7 @@ function buildMenuItemPayloadFromForm() {
   const categoryId = parseInt(document.getElementById('item-category')?.value, 10);
   const imageUrl = document.getElementById('item-image-url')?.value.trim() || null;
   const isPromoted = !!document.getElementById('item-is-promoted')?.checked;
+  const modifiersConfig = readModifiersConfigFromEditor();
 
   if (!name) throw new Error('Item name is required.');
   if (Number.isNaN(price) || price < 0) throw new Error('Enter a valid price (0 or greater).');
@@ -1319,7 +1416,7 @@ function buildMenuItemPayloadFromForm() {
     image_url: imageUrl,
     is_available: true,
     is_promoted: isPromoted,
-    modifiers_config: [],
+    modifiers_config: modifiersConfig,
   };
 }
 
@@ -1946,10 +2043,18 @@ function selectOrder(order, source = null) {
     checkoutHeaderEl.textContent = `${t('checkout', 'Checkout')} - ${cashierOrderDisplayLabel(order, cashierCheckoutSource)}`;
   }
   const itemsRows = visibleItems
-    .map(
-      (i) =>
-        `<tr><td class="py-1">${escapeHtml(i.menu_item_name)}</td><td class="py-1 text-right">${i.quantity}</td><td class="py-1 text-right">${formatMoney(Number(i.subtotal))}</td></tr>`
-    )
+    .map((i) => {
+      const mods = Array.isArray(i.selected_modifiers) ? i.selected_modifiers : [];
+      const modsHtml = mods.length
+        ? `<div class="text-xs text-slate-500">${mods.map((m) => {
+            const q = Math.max(1, Math.floor(Number(m?.quantity) || 1));
+            return q > 1
+              ? `+ ${escapeHtml(m?.name || '')} ×${q}`
+              : `+ ${escapeHtml(m?.name || '')}`;
+          }).join('<br/>')}</div>`
+        : '';
+      return `<tr><td class="py-1">${escapeHtml(i.menu_item_name)}${modsHtml}</td><td class="py-1 text-right align-top">${i.quantity}</td><td class="py-1 text-right align-top">${formatMoney(Number(i.subtotal))}</td></tr>`;
+    })
     .join('');
   const receiptContent = document.getElementById('receipt-content');
   if (receiptContent) {
@@ -3265,6 +3370,7 @@ function resetMenuItemFormMode() {
   if (taxValueInput) taxValueInput.value = '0';
   if (promotedInput) promotedInput.checked = false;
   syncTaxValueFieldState();
+  renderModifiersEditor([]);
 }
 
 function startMenuItemEdit(itemId) {
@@ -3301,6 +3407,7 @@ function startMenuItemEdit(itemId) {
   document.getElementById('item-image-file').value = '';
   const promotedInput = document.getElementById('item-is-promoted');
   if (promotedInput) promotedInput.checked = !!item.is_promoted;
+  renderModifiersEditor(Array.isArray(item.modifiers_config) ? item.modifiers_config : []);
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -3902,6 +4009,46 @@ async function loadKitchenPrinterSettings() {
   }
 }
 
+async function loadPrinterHealthStatus() {
+  const summaryEl = document.getElementById('printer-health-summary');
+  const listEl = document.getElementById('printer-health-list');
+  if (!summaryEl || !listEl) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/printers/health`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    if (!res.ok) throw new Error('Health check failed');
+    const data = await res.json();
+    const offline = (data.printers || []).filter((p) => p.status === 'offline');
+    if (offline.length) {
+      summaryEl.textContent = data.warning || `Offline: ${offline.map((p) => p.route).join(', ')}`;
+      summaryEl.className = 'text-sm text-red-700 mb-2';
+    } else {
+      summaryEl.textContent = `OK — backend ${data.backend || '?'}` + (data.all_online ? '' : '');
+      summaryEl.className = 'text-sm text-emerald-700 mb-2';
+    }
+    listEl.innerHTML = (data.printers || []).map((p) => {
+      const target = p.host ? `${escapeHtml(p.host)}:${p.port || 9100}` : '—';
+      const tone =
+        p.status === 'offline' ? 'text-red-700' : p.status === 'online' ? 'text-emerald-700' : 'text-slate-600';
+      return `<li class="${tone}"><span class="font-medium">${escapeHtml(p.route)}</span> · ${escapeHtml(p.status)} · ${target} · ${escapeHtml(p.message || '')}</li>`;
+    }).join('');
+  } catch (err) {
+    console.error(err);
+    summaryEl.textContent = 'Could not check printer status.';
+    summaryEl.className = 'text-sm text-slate-600 mb-2';
+    listEl.innerHTML = '';
+  }
+}
+
+function bindPrinterHealthCheck() {
+  const btn = document.getElementById('btn-check-printer-health');
+  if (!btn || btn.dataset.bound === '1') return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', () => loadPrinterHealthStatus());
+}
+
 async function openPrinterModal(printer = null) {
   const modal = document.getElementById('printer-modal');
   if (!modal) return;
@@ -4163,6 +4310,11 @@ async function loadMenuData() {
       console.error('Kitchen printer settings failed:', e);
     }
     try {
+      await loadPrinterHealthStatus();
+    } catch (e) {
+      console.error('Printer health failed:', e);
+    }
+    try {
       await loadPrintersAdmin();
     } catch (e) {
       console.error('Printers admin failed:', e);
@@ -4378,6 +4530,9 @@ function connectCounterWebSocket() {
 
 // Initial load only when authenticated and role-allowed.
 bindCategoryEditModal();
+bindModifiersEditor();
+bindPrinterHealthCheck();
+renderModifiersEditor([]);
 if (
   window.auth &&
   window.auth.getToken() &&

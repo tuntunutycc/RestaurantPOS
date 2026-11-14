@@ -6,10 +6,20 @@ from sqlalchemy.orm import Session
 from auth import require_roles
 from database import get_db
 from models import Printer, User
-from rbac import ADMIN_PANEL_ROLES, CHECKOUT_ROLES
-from schemas import PrinterCreate, PrinterResponse, PrinterUpdate
+from rbac import ADMIN_PANEL_ROLES, CHECKOUT_ROLES, POS_ORDER_ROLES
+from schemas import (
+    PrinterCreate,
+    PrinterHealthResponse,
+    PrinterResponse,
+    PrinterRouteHealthItem,
+    PrinterUpdate,
+)
 from services.printing.config import PRINTER_ROLES
-from services.printing.settings import seed_default_printers
+from services.printing.health import (
+    check_kitchen_printers_health,
+    warning_for_offline_routes,
+)
+from services.printing.settings import load_printer_config, seed_default_printers
 
 router = APIRouter(prefix="/api")
 
@@ -24,6 +34,33 @@ def _normalize_role(role: str | None) -> str | None:
             detail=f"Unsupported printer role; use one of: {', '.join(sorted(PRINTER_ROLES))}",
         )
     return normalized
+
+
+@router.get("/printers/health", response_model=PrinterHealthResponse)
+def get_printers_health(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
+):
+    """Probe kitchen food/drinks LAN reachability. Never blocks ordering."""
+    config = load_printer_config(db)
+    results = check_kitchen_printers_health(db)
+    warning = warning_for_offline_routes(results)
+    return PrinterHealthResponse(
+        backend=config.backend,
+        printers=[
+            PrinterRouteHealthItem(
+                route=r.route,
+                online=r.online,
+                status=r.status,  # type: ignore[arg-type]
+                host=r.host,
+                port=r.port,
+                message=r.message,
+            )
+            for r in results
+        ],
+        all_online=all(r.status != "offline" for r in results),
+        warning=warning,
+    )
 
 
 @router.get("/printers", response_model=list[PrinterResponse])

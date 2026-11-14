@@ -63,6 +63,27 @@ def build_receipt_text(
         qty = int(item.get("quantity") or 1)
         line_total = float(item.get("subtotal") or 0.0)
         lines.append(f"{qty}x {name}")
+        for raw in item.get("selected_modifiers") or []:
+            if not isinstance(raw, dict):
+                continue
+            mod_name = str(raw.get("name") or "").strip()
+            if not mod_name:
+                continue
+            try:
+                mod_qty = int(raw.get("quantity") or 1)
+            except (TypeError, ValueError):
+                mod_qty = 1
+            if mod_qty < 1:
+                mod_qty = 1
+            try:
+                unit = float(raw.get("price") or 0.0)
+            except (TypeError, ValueError):
+                unit = 0.0
+            mod_total = unit * mod_qty
+            if mod_qty == 1:
+                lines.append(f"    + {mod_name}  {_money(mod_total)}")
+            else:
+                lines.append(f"    + {mod_name} x{mod_qty}  {_money(mod_total)}")
         lines.append(f"    {_money(line_total)}")
     lines.extend(
         [

@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+from typing import Any
+
 from pydantic import BaseModel, field_validator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,6 +14,7 @@ from auth import get_current_user, require_roles
 from database import get_db
 from models import MenuItem, Order, OrderItem, Table, User
 from rbac import CHECKOUT_ROLES, POS_ORDER_ROLES
+from services.printing.health import check_route_health, warning_for_offline_routes
 from services.printing.routes import resolve_printer_route
 from services.printing.service import dispatch_cashier_receipt, dispatch_kitchen_ticket
 from schemas import (
@@ -136,14 +139,44 @@ def _table_number_from_table(table: Table) -> int:
         return int(table.id)
 
 
+def _normalize_selected_modifier_dict(raw) -> dict | None:
+    """Normalize one selected modifier; drop empty names; quantity defaults to 1."""
+    if hasattr(raw, "model_dump"):
+        data = raw.model_dump(mode="json")
+    elif isinstance(raw, dict):
+        data = dict(raw)
+    else:
+        return None
+    name = str(data.get("name") or "").strip()
+    if not name:
+        return None
+    try:
+        price = float(data.get("price") or 0.0)
+    except Exception:
+        price = 0.0
+    try:
+        quantity = int(data.get("quantity") or 1)
+    except Exception:
+        quantity = 1
+    if quantity < 1:
+        quantity = 1
+    group = data.get("group")
+    group_value = str(group).strip() if group is not None and str(group).strip() else None
+    return {
+        "name": name,
+        "price": price,
+        "group": group_value,
+        "quantity": quantity,
+    }
+
+
 def _selected_modifiers_payload(raw_modifiers) -> list[dict]:
     """Normalize validated modifier objects into JSON-serializable dicts."""
     payload = []
-    for m in (raw_modifiers or []):
-        if hasattr(m, "model_dump"):
-            payload.append(m.model_dump(mode="json"))
-        elif isinstance(m, dict):
-            payload.append(dict(m))
+    for m in raw_modifiers or []:
+        normalized = _normalize_selected_modifier_dict(m)
+        if normalized is not None:
+            payload.append(normalized)
     return payload
 
 
@@ -151,7 +184,11 @@ def _selected_modifiers_total(selected_modifiers: list[dict]) -> float:
     total = 0.0
     for m in selected_modifiers or []:
         try:
-            total += float(m.get("price") or 0.0)
+            unit = float(m.get("price") or 0.0)
+            qty = int(m.get("quantity") or 1)
+            if qty < 1:
+                qty = 1
+            total += unit * qty
         except Exception:
             continue
     return total
@@ -1111,7 +1148,14 @@ async def submit_order(
 
     batch_total = 0.0
     batch_items_detail: list[OrderItemDetail] = []
-    item_print_jobs: list[tuple[str, dict]] = []
+    # One combined kitchen slip per printer route for this submit batch (no prices).
+    route_print_items: dict[str, list[dict]] = {}
+    print_meta: dict[str, Any] = {
+        "table_number": table_number if table_number is not None else None,
+        "order_id": None,  # filled after order exists
+        "date": "",
+        "batch_number": new_batch_number,
+    }
 
     for line in body.items:
         menu_item = (
@@ -1169,18 +1213,13 @@ async def submit_order(
         )
         category = getattr(menu_item, "category", None)
         printer_route = resolve_printer_route(getattr(category, "printer_route", None))
-        item_print_jobs.append(
-            (
-                printer_route,
-                {
-                    "item_name": menu_item.name,
-                    "quantity": line.quantity,
-                    "note": note_value,
-                    "table_number": table_number if table_number is not None else (order.customer_name or "Takeaway"),
-                    "order_id": order.id,
-                    "date": order.created_at.isoformat() if order.created_at else "",
-                },
-            )
+        route_print_items.setdefault(printer_route, []).append(
+            {
+                "item_name": menu_item.name,
+                "quantity": line.quantity,
+                "note": note_value,
+                "selected_modifiers": selected_modifiers,
+            }
         )
 
     # Update order running total and persist
@@ -1190,6 +1229,14 @@ async def submit_order(
         table.status = "occupied"
     db.commit()
     db.refresh(order)
+
+    print_meta["order_id"] = order.id
+    print_meta["date"] = order.created_at.isoformat() if order.created_at else ""
+    print_meta["table_number"] = (
+        table_number
+        if table_number is not None
+        else (order.customer_name or "Takeaway")
+    )
 
     # Broadcast this batch only for Kitchen (KDS)
     manager = getattr(request.app.state, "ws_manager", None)
@@ -1210,21 +1257,62 @@ async def submit_order(
     if table and previous_status != table.status:
         await _broadcast_table_status_changed(request, table)
 
-    # Print each item as a separate ticket (single-item ticketing).
-    if item_print_jobs:
-        await asyncio.gather(
+    # Probe + print: order is already saved; offline printers only produce a warning.
+    print_warning: str | None = None
+    if route_print_items:
+        health_results = [
+            check_route_health(db, route) for route in route_print_items.keys()
+        ]
+        print_warning = warning_for_offline_routes(health_results)
+
+        route_list = list(route_print_items.keys())
+        print_results = await asyncio.gather(
             *[
                 dispatch_kitchen_ticket(
                     printer_route,
-                    item_ticket,
+                    {
+                        "items": items,
+                        "table_number": print_meta["table_number"],
+                        "order_id": print_meta["order_id"],
+                        "date": print_meta["date"],
+                        "batch_number": print_meta["batch_number"],
+                    },
                     order_type=getattr(order, "order_type", "dine_in"),
                     customer_name=getattr(order, "customer_name", None),
                     db=db,
                 )
-                for printer_route, item_ticket in item_print_jobs
+                for printer_route, items in route_print_items.items()
             ],
             return_exceptions=True,
         )
+        failed_parts: list[str] = []
+        for route, result in zip(route_list, print_results, strict=True):
+            if isinstance(result, BaseException):
+                detail = str(result).strip() or result.__class__.__name__
+                failed_parts.append(f"{route} ({detail})")
+                logger.error(
+                    "Kitchen print failed route=%s order_id=%s: %s",
+                    route,
+                    order.id,
+                    detail,
+                )
+            else:
+                logger.info(
+                    "Kitchen print OK route=%s order_id=%s batch=%s items=%s",
+                    route,
+                    order.id,
+                    print_meta["batch_number"],
+                    len(route_print_items.get(route) or []),
+                )
+        if failed_parts:
+            fail_msg = (
+                "Kitchen print failed for: "
+                + "; ".join(failed_parts)
+                + ". Order was saved; check printer / logs/printing/print.log."
+            )
+            print_warning = (
+                f"{print_warning} | {fail_msg}" if print_warning else fail_msg
+            )
 
     return OrderSubmitResponse(
         id=order.id,
@@ -1244,6 +1332,7 @@ async def submit_order(
                 else f"Items added to Table {table.name_or_number}'s existing order (batch {new_batch_number})"
             )
         ),
+        warning=print_warning,
     )
 
 
@@ -1391,6 +1480,9 @@ async def checkout_order(
                     ),
                     "quantity": int(getattr(oi, "quantity", 1) or 1),
                     "subtotal": float(getattr(oi, "subtotal", 0.0) or 0.0),
+                    "selected_modifiers": list(
+                        getattr(oi, "selected_modifiers", None) or []
+                    ),
                 }
                 for oi in active_items
             ]

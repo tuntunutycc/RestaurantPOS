@@ -11,13 +11,23 @@
     <div id="pos-nav"></div>
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
       <h1 class="text-xl md:text-2xl font-bold text-slate-800" data-i18n="app_waiter_title">Waiter POS – Take Order</h1>
-      <button
-        type="button"
-        id="btn-back-to-dashboard"
-        class="hidden px-3 py-1.5 bg-slate-700 text-white text-sm font-medium rounded hover:bg-slate-800 whitespace-nowrap"
-      >
-        Dashboard
-      </button>
+      <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          id="btn-printer-health"
+          class="px-2.5 py-1.5 text-xs font-medium rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+          title="Check kitchen printer"
+        >
+          Printer: …
+        </button>
+        <button
+          type="button"
+          id="btn-back-to-dashboard"
+          class="hidden px-3 py-1.5 bg-slate-700 text-white text-sm font-medium rounded hover:bg-slate-800 whitespace-nowrap"
+        >
+          Dashboard
+        </button>
+      </div>
     </div>
 
     <div id="waiter-main-grid" class="grid md:grid-cols-2 gap-4 md:gap-6 items-start">

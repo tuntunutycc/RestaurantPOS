@@ -74,7 +74,9 @@ See `specs/feature-menu-rbac/` for cashier availability-only contract.
 
 **MenuItem fields:** `price`, `discount_price` (legacy), `discount_type`, `discount_value`, `takeaway_price`, `tax_type`, `tax_value`, `modifiers_config`, etc.
 
-**Counter UI create payload (`static/counter.js` `#form-menu-item`):** sends all `MenuItemCreate` fields with defaults (`discount_type: "none"`, `discount_value: 0`, `modifiers_config: []`, `is_available: true`). Legacy `#item-discount-price` maps to `discount_price`. Edit mode omits `is_available` so sold-out state is preserved.
+**Modifiers:** `modifiers_config` = `[{ group, is_required, options: [{ name, price }] }]`. Order lines use `selected_modifiers: [{ name, price, group?, quantity? }]` (`quantity` default 1; money = `sum(price * quantity)`).
+
+**Counter UI create payload (`static/counter.js` `#form-menu-item`):** sends all `MenuItemCreate` fields including admin-edited `modifiers_config` (empty when no groups). Legacy `#item-discount-price` maps to `discount_price`. Edit mode omits `is_available` so sold-out state is preserved.
 
 ---
 

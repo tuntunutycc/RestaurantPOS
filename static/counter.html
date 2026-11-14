@@ -688,6 +688,15 @@
           </div>
           <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">Save Print Mode</button>
         </form>
+        <div class="mt-4 pt-4 border-t border-slate-200">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <p class="text-sm font-medium text-slate-700">Kitchen printer status</p>
+            <button type="button" id="btn-check-printer-health" class="px-3 py-1.5 text-xs font-medium rounded border border-slate-300 bg-white hover:bg-slate-50">Check now</button>
+          </div>
+          <p id="printer-health-summary" class="text-sm text-slate-600 mb-2">Not checked yet.</p>
+          <ul id="printer-health-list" class="text-xs text-slate-600 space-y-1"></ul>
+          <p class="text-xs text-slate-400 mt-2">Offline shows a warning only — orders are never blocked (safe for file/dev mode).</p>
+        </div>
       </section>
 
       <section data-menu-admin-only class="bg-white rounded-lg shadow p-6 mb-8">
@@ -855,6 +864,16 @@
               <input type="checkbox" id="item-is-promoted" class="rounded border-slate-300 text-amber-600 focus:ring-amber-500" />
               Mark as promoted item (waiter incentive)
             </label>
+            <div class="border border-slate-200 rounded-md p-3 space-y-2 bg-slate-50">
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <p class="text-sm font-semibold text-slate-800">Sub-menu / Options</p>
+                  <p class="text-xs text-slate-500">Priced toppings only (name + price), e.g. ပဲကြော်. Waiter can pick qty. Tags stay for notes like နံနံပင်ရှောင်.</p>
+                </div>
+                <button type="button" id="btn-add-modifier-option" class="shrink-0 px-2.5 py-1.5 text-xs font-medium bg-white border border-slate-300 rounded-md hover:bg-slate-100">+ Option</button>
+              </div>
+              <div id="menu-modifiers-editor" class="space-y-2"></div>
+            </div>
             <div class="flex gap-2">
               <button type="submit" id="btn-submit-menu-item" class="flex-1 py-2 bg-emerald-600 text-white font-medium rounded-md hover:bg-emerald-700">Add Menu Item</button>
               <button type="button" id="btn-cancel-menu-edit" class="hidden px-4 py-2 bg-slate-200 text-slate-800 font-medium rounded-md hover:bg-slate-300">Cancel</button>

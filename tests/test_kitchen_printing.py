@@ -342,7 +342,7 @@ def test_admin_kitchen_printer_settings_api(client, auth_headers):
     get_res = client.get("/api/admin/kitchen-printers", headers=auth_headers("admin"))
     assert get_res.status_code == 200, get_res.text
     body = get_res.json()
-    assert body["backend"] in ("file", "escpos_network")
+    assert body["backend"] in ("file", "escpos_network", "windows_printer")
     assert isinstance(body.get("routes"), list)
 
     put_res = client.put(
