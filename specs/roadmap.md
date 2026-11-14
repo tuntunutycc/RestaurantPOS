@@ -28,7 +28,7 @@ This baseline captures features that are currently implemented and functional in
 - Menu item availability toggle (`is_available`) is implemented.
 - Menu item soft delete is implemented (`is_deleted`, `deleted_at`) to preserve historical order linkage.
 - Modifier configuration support is implemented (`modifiers_config`) and used in order pricing.
-- Menu item image upload/serving is implemented (upload endpoint + static image serving).
+- Menu item image upload/serving endpoints remain for backward compatibility; Admin/Waiter UI no longer uploads or displays menu photos (field cleared on Admin save).
 - Admin menu-management UI exists in the counter/admin screen.
 
 ### Admin: Zone/Table Management

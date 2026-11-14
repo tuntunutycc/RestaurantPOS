@@ -1,9 +1,14 @@
 # Changelog
 
+## 2026-11-14 — Retire menu item photos from UI
+
+### Summary
+Admin no longer uploads or edits menu images; Waiter menu cards are text-only. Backend `image_url` stays nullable for API/DB compatibility. Saving a menu item from Admin clears `image_url` so old photos stop appearing. Order totals, kitchen print, and cashier flows are unchanged.
+
 ## 2026-11-14 — Kitchen print miss: stop silent file fallback
 
 ### Summary
-Confirmed that under `windows_printer` with no kitchen/bar LAN host, tickets were written to a local file and treated as success (kitchen got no paper). Now that case returns a submit `warning`, logs an error, and health marks the route offline. Dine-in and takeaway both verified to dispatch kitchen slips.
+Confirmed that under `windows_printer` with no kitchen/bar LAN host, tickets were written to a local file and treated as success (kitchen got no paper). Now that case returns a submit `warning`, logs an error, and health marks the route offline. Dine-in and takeaway both verified to dispatch kitchen slips. Regression test updated to expect file backup + `RuntimeError` (no silent OK).
 
 ## 2026-11-13 — Kitchen printer online check (warn only)
 

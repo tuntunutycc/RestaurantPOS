@@ -1385,7 +1385,6 @@ function buildMenuItemPayloadFromForm() {
   const taxValue = taxType === 'none' ? 0 : parseFloat(taxValueRaw || '0');
   const description = document.getElementById('item-description')?.value.trim() || null;
   const categoryId = parseInt(document.getElementById('item-category')?.value, 10);
-  const imageUrl = document.getElementById('item-image-url')?.value.trim() || null;
   const isPromoted = !!document.getElementById('item-is-promoted')?.checked;
   const modifiersConfig = readModifiersConfigFromEditor();
 
@@ -1413,7 +1412,8 @@ function buildMenuItemPayloadFromForm() {
     tax_value: taxValue,
     category_id: categoryId,
     description,
-    image_url: imageUrl,
+    // Menu photos retired from UI; clear on save so old URLs stop showing elsewhere.
+    image_url: null,
     is_available: true,
     is_promoted: isPromoted,
     modifiers_config: modifiersConfig,
@@ -3351,8 +3351,6 @@ function resetMenuItemFormMode() {
   const priceInput = document.getElementById('item-price');
   const descriptionInput = document.getElementById('item-description');
   const categoryInput = document.getElementById('item-category');
-  const imageUrlInput = document.getElementById('item-image-url');
-  const imageFileInput = document.getElementById('item-image-file');
   const discountInput = document.getElementById('item-discount-price');
   const takeawayInput = document.getElementById('item-takeaway-price');
   const taxTypeInput = document.getElementById('item-tax-type');
@@ -3362,8 +3360,6 @@ function resetMenuItemFormMode() {
   if (priceInput) priceInput.value = '';
   if (descriptionInput) descriptionInput.value = '';
   if (categoryInput) categoryInput.value = '';
-  if (imageUrlInput) imageUrlInput.value = '';
-  if (imageFileInput) imageFileInput.value = '';
   if (discountInput) discountInput.value = '';
   if (takeawayInput) takeawayInput.value = '';
   if (taxTypeInput) taxTypeInput.value = 'none';
@@ -3403,8 +3399,6 @@ function startMenuItemEdit(itemId) {
   syncTaxValueFieldState();
   document.getElementById('item-description').value = item.description || '';
   document.getElementById('item-category').value = String(item.category_id || '');
-  document.getElementById('item-image-url').value = item.image_url || '';
-  document.getElementById('item-image-file').value = '';
   const promotedInput = document.getElementById('item-is-promoted');
   if (promotedInput) promotedInput.checked = !!item.is_promoted;
   renderModifiersEditor(Array.isArray(item.modifiers_config) ? item.modifiers_config : []);
@@ -3676,9 +3670,6 @@ function renderMenuItems(items) {
   }
   el.innerHTML = items
     .map((m) => {
-      const img = m.image_url
-        ? `<img src="${escapeAttr(m.image_url)}" alt="" class="w-10 h-10 object-cover rounded inline-block mr-2 align-middle" />`
-        : '';
       const available = m.is_available !== false;
       const hasDiscount = Number(m.discount_price) > 0;
       const priceLabel = hasDiscount
@@ -3743,7 +3734,6 @@ function renderMenuItems(items) {
       return `
         <li class="py-2 flex items-center justify-between gap-3" data-menu-category-id="${m.category_id}">
           <div class="flex items-center gap-2 min-w-0">
-            ${img}
             ${priceLabel}
             ${badge}
             ${isAdminPanel ? promotedBadge : ''}
@@ -4383,44 +4373,13 @@ document.getElementById('form-category').addEventListener('submit', async (e) =>
   }
 });
 
-document.getElementById('item-image-file').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const fd = new FormData();
-  fd.append('file', file);
-  try {
-    const res = await fetch(`${API_BASE}/api/upload`, {
-      method: 'POST',
-      headers: { ...window.auth.getAuthHeaders() },
-      body: fd,
-    });
-    if (window.auth && window.auth.checkUnauthorized(res)) return;
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      await dialogAlert(data.detail || 'Upload failed', 'error', 'Upload Failed');
-      return;
-    }
-    document.getElementById('item-image-url').value = data.url || '';
-  } catch (err) {
-    console.error(err);
-    await dialogAlert('Upload failed', 'error', 'Upload Failed');
-  }
-  e.target.value = '';
-});
-
 document.getElementById('item-tax-type')?.addEventListener('change', syncTaxValueFieldState);
 
 document.getElementById('form-menu-item').addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = document.getElementById('form-menu-item');
-  const imageFile = document.getElementById('item-image-file').files?.[0];
   const editItemId = Number(document.getElementById('menu-edit-item-id').value || 0);
   const isEditMode = form?.getAttribute('data-mode') === 'edit' && !!editItemId;
-  const imageUrl = document.getElementById('item-image-url').value.trim() || null;
-  if (imageFile && !imageUrl) {
-    await dialogAlert('Please wait for image upload to finish.', 'error', 'Upload In Progress');
-    return;
-  }
   const btn = document.getElementById('btn-submit-menu-item');
   btn.disabled = true;
   try {

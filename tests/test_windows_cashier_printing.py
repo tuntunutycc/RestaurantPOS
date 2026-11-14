@@ -236,9 +236,10 @@ def test_checkout_windows_missing_queue_soft_fails(
         _restore_file_backend(db_session)
 
 
-def test_kitchen_ticket_windows_backend_falls_back_to_file_without_lan_host(
+def test_kitchen_ticket_windows_backend_file_backup_then_fails_without_lan_host(
     client, db_session, auth_headers, tmp_path, monkeypatch
 ):
+    """windows_printer + no kitchen LAN host: write file backup, then raise (no silent OK)."""
     _set_windows_backend(db_session)
     seed_default_printers(db_session)
     for row in db_session.query(Printer).filter(Printer.role == "kitchen").all():
@@ -253,23 +254,26 @@ def test_kitchen_ticket_windows_backend_falls_back_to_file_without_lan_host(
 
     import asyncio
 
+    import pytest
+
     from services.printing.service import dispatch_kitchen_ticket
 
     try:
-        asyncio.run(
-            dispatch_kitchen_ticket(
-                "food",
-                {
-                    "item_name": "Test Mohinga",
-                    "quantity": 1,
-                    "note": None,
-                    "table_number": 1,
-                    "order_id": 99,
-                    "date": "2026-11-05",
-                },
-                db=db_session,
+        with pytest.raises(RuntimeError, match="no LAN host"):
+            asyncio.run(
+                dispatch_kitchen_ticket(
+                    "food",
+                    {
+                        "item_name": "Test Mohinga",
+                        "quantity": 1,
+                        "note": None,
+                        "table_number": 1,
+                        "order_id": 99,
+                        "date": "2026-11-05",
+                    },
+                    db=db_session,
+                )
             )
-        )
         out = Path(tmp_path) / "food_printer_output.txt"
         assert out.exists()
         assert "Test Mohinga" in out.read_text(encoding="utf-8")

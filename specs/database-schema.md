@@ -47,7 +47,7 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 | `tax_type` | String(32) | `none` | `none` \| `percentage` \| `fixed` |
 | `tax_value` | Float | `0.0` | |
 | `description` | String(1024) nullable | | |
-| `image_url` | String(512) nullable | | |
+| `image_url` | String(512) nullable | | Retained for API/DB compatibility; Admin/Waiter UI no longer uploads or displays menu photos |
 | `is_available` | Boolean | true | Indexed; soft delete sets `false` |
 | `is_promoted` | Boolean | false | Waiter incentive reporting |
 | `is_deleted` | Boolean | false | Soft delete |

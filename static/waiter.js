@@ -521,39 +521,30 @@ function renderMenu() {
   }
   grid.innerHTML = filtered.map((m) => {
     const available = m.is_available !== false;
-    const imgHtml = m.image_url
-      ? `<img src="${escapeAttr(m.image_url)}" alt="" class="w-full h-20 object-cover rounded-t-lg" />`
-      : `<div class="w-full h-20 bg-slate-200 rounded-t-lg flex items-center justify-center text-slate-400 text-xs">No image</div>`;
     const soldOutBadge = available
       ? ''
-      : '<span class="absolute top-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded bg-red-600 text-white">Sold Out</span>';
+      : '<span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-red-600 text-white">Sold Out</span>';
     const promotedBadge = m.is_promoted === true
-      ? '<span class="absolute top-2 left-2 text-[11px] font-bold px-2 py-0.5 rounded bg-amber-500 text-white shadow">★ Promo</span>'
+      ? '<span class="text-[11px] font-bold px-2 py-0.5 rounded bg-amber-500 text-white shadow">★ Promo</span>'
       : '';
     const cardStateClass = available ? 'hover:bg-blue-50' : 'opacity-50 grayscale pointer-events-none';
     const promoBorder = m.is_promoted === true ? 'border-amber-400 ring-1 ring-amber-200' : 'border-slate-200';
     return `
-      <div data-menu-card-id="${m.id}" class="menu-item-card cursor-pointer text-left p-0 bg-white rounded-lg shadow border overflow-hidden ${cardStateClass} ${promoBorder}">
-        <div class="relative">
-          ${imgHtml}
-          ${promotedBadge}
-          ${soldOutBadge}
+      <div data-menu-card-id="${m.id}" class="menu-item-card cursor-pointer text-left p-3 bg-white rounded-lg shadow border ${cardStateClass} ${promoBorder}">
+        <div class="flex items-start justify-between gap-2 mb-1">
+          <span class="font-medium text-slate-800 block leading-snug">${escapeHtml(m.name)}</span>
+          <button
+            type="button"
+            data-id="${m.id}"
+            class="add-to-cart-btn shrink-0 h-7 w-7 rounded-full text-sm font-bold text-white ${available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-400 cursor-not-allowed'}"
+            ${available ? '' : 'disabled'}
+            aria-label="${available ? 'Add to cart' : 'Sold out'}"
+          >
+            +
+          </button>
         </div>
-        <div class="px-2 pt-1 pb-2">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-medium text-slate-800 block">${escapeHtml(m.name)}</span>
-            <button
-              type="button"
-              data-id="${m.id}"
-              class="add-to-cart-btn h-7 w-7 rounded-full text-sm font-bold text-white ${available ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-400 cursor-not-allowed'}"
-              ${available ? '' : 'disabled'}
-              aria-label="${available ? 'Add to cart' : 'Sold out'}"
-            >
-              +
-            </button>
-          </div>
-          ${getMenuPriceHtml(m)}
-        </div>
+        ${(promotedBadge || soldOutBadge) ? `<div class="flex flex-wrap gap-1 mb-1">${promotedBadge}${soldOutBadge}</div>` : ''}
+        ${getMenuPriceHtml(m)}
       </div>`;
   }).join('');
   grid.querySelectorAll('[data-menu-card-id]').forEach((card) => {

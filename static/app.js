@@ -44,19 +44,8 @@ function renderMenuItems(items) {
     return;
   }
   el.innerHTML = items
-    .map((m) => {
-      const img = m.image_url
-        ? `<img src="${escapeAttr(m.image_url)}" alt="" class="w-10 h-10 object-cover rounded inline-block mr-2 align-middle" />`
-        : '';
-      return `<li class="py-2 flex items-center gap-2">${img}<span>${escapeHtml(m.name)} — ${formatMoney(Number(m.price))}</span></li>`;
-    })
+    .map((m) => `<li class="py-2 flex items-center gap-2"><span>${escapeHtml(m.name)} — ${formatMoney(Number(m.price))}</span></li>`)
     .join('');
-}
-
-function escapeAttr(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML.replace(/"/g, '&quot;');
 }
 
 function populateCategorySelect(categories) {
@@ -121,61 +110,25 @@ document.getElementById('form-category').addEventListener('submit', async (e) =>
   }
 });
 
-document.getElementById('item-image-file').addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const fd = new FormData();
-  fd.append('file', file);
-  try {
-    const res = await fetch(`${API_BASE}/api/upload`, {
-      method: 'POST',
-      headers: { ...window.auth.getAuthHeaders() },
-      body: fd,
-    });
-    if (window.auth && window.auth.checkUnauthorized(res)) return;
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      alert(data.detail || 'Upload failed');
-      return;
-    }
-    document.getElementById('item-image-url').value = data.url || '';
-  } catch (err) {
-    console.error(err);
-    alert('Upload failed');
-  }
-  e.target.value = '';
-});
-
 document.getElementById('form-menu-item').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = document.getElementById('item-name').value.trim();
   const price = parseFloat(document.getElementById('item-price').value);
   const description = document.getElementById('item-description').value.trim() || null;
   const categoryId = document.getElementById('item-category').value;
-  const imageUrl = document.getElementById('item-image-url').value.trim() || null;
-  const imageFile = document.getElementById('item-image-file').files?.[0];
   if (!name || isNaN(price) || price < 0 || !categoryId) return;
   try {
-    let res;
-    if (imageFile) {
-      const fd = new FormData();
-      fd.append('name', name);
-      fd.append('price', String(price));
-      fd.append('category_id', categoryId);
-      if (description) fd.append('description', description);
-      fd.append('image', imageFile);
-      res = await fetch(`${API_BASE}/api/menu-items/upload`, {
-        method: 'POST',
-        headers: { ...window.auth.getAuthHeaders() },
-        body: fd,
-      });
-    } else {
-      res = await fetch(`${API_BASE}/api/menu-items/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
-        body: JSON.stringify({ name, price, category_id: parseInt(categoryId, 10), description: description, image_url: imageUrl }),
-      });
-    }
+    const res = await fetch(`${API_BASE}/api/menu-items/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+      body: JSON.stringify({
+        name,
+        price,
+        category_id: parseInt(categoryId, 10),
+        description,
+        image_url: null,
+      }),
+    });
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -186,8 +139,6 @@ document.getElementById('form-menu-item').addEventListener('submit', async (e) =
     document.getElementById('item-price').value = '';
     document.getElementById('item-description').value = '';
     document.getElementById('item-category').value = '';
-    document.getElementById('item-image-url').value = '';
-    document.getElementById('item-image-file').value = '';
     await loadAll();
   } catch (err) {
     console.error(err);
