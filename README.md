@@ -318,8 +318,15 @@ Cashier USB / installed-queue receipt printing uses **`pywin32`** and the **Wind
    Edit `.env` and set at least a strong `JWT_SECRET_KEY` (32+ characters).
 
 6. **Seed the first root user** (first install only)
+
+   The script creates DB tables if needed, then creates root.
    ```bat
    set PYTHONPATH=.
+   python scripts\seed_root.py --username root --password "YourSecurePass123"
+   ```
+   PowerShell:
+   ```powershell
+   $env:PYTHONPATH="."
    python scripts\seed_root.py --username root --password "YourSecurePass123"
    ```
 

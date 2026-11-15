@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 — seed_root creates tables before inserting root
+
+### Summary
+`scripts/seed_root.py` now runs `Base.metadata.create_all` first so a fresh Windows/local install can seed root without a separate “create tables” command (fixes `no such table: users`).
+
 ## 2026-11-15 — Kitchen: one slip per line item (modifiers stay under parent)
 
 ### Summary

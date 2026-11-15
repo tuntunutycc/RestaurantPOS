@@ -8,7 +8,8 @@ Usage:
   PYTHONPATH=. python scripts/seed_root.py --username root --password 'YourSecurePass123'
   PYTHONPATH=. python scripts/seed_root.py --username root  # prompts for password
 
-Exits 0 if root already exists (idempotent). Exits 1 on validation or DB errors.
+Creates missing tables (idempotent) then seeds root. Exits 0 if root already
+exists. Exits 1 on validation or DB errors.
 """
 
 from __future__ import annotations
@@ -18,9 +19,14 @@ import getpass
 import sys
 
 from auth import hash_password
-from database import SessionLocal
-from models import User
+from database import SessionLocal, engine
+from models import Base, User
 from rbac import ROLE_ROOT
+
+
+def ensure_schema() -> None:
+    """Create SQLite/Postgres tables if they do not exist yet (safe to re-run)."""
+    Base.metadata.create_all(bind=engine)
 
 
 def root_exists(db=None) -> bool:
@@ -45,6 +51,8 @@ def seed_root(username: str, password: str, db=None) -> User:
         raise ValueError("username is required")
     if len(password) < 6:
         raise ValueError("password must be at least 6 characters")
+
+    ensure_schema()
 
     owns_db = db is None
     if db is None:
