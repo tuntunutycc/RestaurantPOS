@@ -9,6 +9,9 @@
 - [x] `GET /api/printers?role=cashier` returns active cashier printers
 - [x] Admin kitchen-printers GET includes `cashier` route; PUT with three routes OK
 - [x] Full `pytest` green
+- [x] Windows/LAN cashier dispatch also archives receipt text to `cashier_printer_output.txt` (FR-CR7; no double-write on file backend)
+- [x] Receipt footer Subtotal/Discount/Tax/Grand matches base+mods / item(+order) discount / tax / payable (FR-CR8)
+- [x] Receipt line amount is pre-tax; note lines print under items (review #18 / #24)
 
 ## Manual
 - [ ] Image mode + Myanmar item names render on thermal / PNG preview

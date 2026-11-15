@@ -1,5 +1,82 @@
 # Changelog
 
+## 2026-11-15 — Kitchen: one slip per line item (modifiers stay under parent)
+
+### Summary
+Order submit prints **one kitchen ticket per cart line** again (not one combined slip per printer route). Submenu/modifiers (e.g. မုန့်ဟင်းခါး + ပဲကြော်) still print on that same slip under the parent item (Pattern A). No prices on kitchen tickets. No DB schema change.
+
+### Spec
+- `specs/feature-kitchen-printing/` FR-2, FR-6
+
+## 2026-11-15 — Review UI/print polish (#29, #24, #23/#30, #18, #27)
+
+### Summary
+Waiter order-details modal shows takeaway / modifiers / notes. Cashier checkout groups lines by batch, shows notes, and uses pre-tax line amounts. Printed receipts include notes and pre-tax line amounts (footer tax unchanged). Selecting an available table no longer jumps the view down to the cart.
+
+### Spec
+- `specs/POS_final_review_2026-11-09.md`
+- `specs/feature-cashier-receipt-printing/` FR-CR8
+
+## 2026-11-15 — Cashier file-backend receipt without printer host
+
+### Summary
+With print backend `file` (no physical printer), selecting a cashier printer that has no `host` no longer aborts receipt dispatch. Receipt text still appends to `cashier_printer_output.txt` for local testing.
+
+### Spec
+- `specs/feature-cashier-receipt-printing/` FR-CR7
+
+## 2026-11-15 — Cashier receipt money footer fix
+
+### Summary
+Receipt (and checkout pane) now show Subtotal = base + modifiers, Discount = item (+ order) discount, Tax separate, Grand = payable — so Tax is no longer double-implied against a tax-inclusive “Subtotal”.
+
+### Spec
+- `specs/feature-cashier-receipt-printing/` FR-CR8
+
+## 2026-11-15 — Cashier receipt text archive
+
+### Summary
+Cashier receipts always append to `cashier_printer_output.txt` (same output dir as kitchen), including when printing via Windows queue or LAN — not only when backend is `file`.
+
+### Spec
+- `specs/feature-cashier-receipt-printing/` FR-CR7
+
+## 2026-11-15 — Daily Order History + Excel export
+
+### Summary
+Admin and Cashier can open `/order-history` (also `/admin/sales-history`, `/cashier/history`), filter paid orders by day, view line details (modifiers + takeaway), and download a structured `.xlsx` via `openpyxl`.
+
+### Also documented (completed work in this release window)
+- Menu schema supports priced add-ons via JSON `modifiers_config` (`ModifierGroup` / options; not separate DB tables).
+- Line-level `is_takeaway` for dine-in vs takeaway pricing and print tags.
+- Waiter POS UI: modifier selection + per-line takeaway toggle.
+- Kitchen print: combined batch slips with modifiers and `(ပါဆယ်)` on takeaway lines.
+- Daily Order History view + Excel export (this section).
+
+### Spec
+- `specs/feature-daily-order-history/`
+
+### API / UI
+- `GET /api/orders/daily-history?date=YYYY-MM-DD`
+- `GET /api/orders/daily-history/export?date=YYYY-MM-DD`
+- `static/order-history.html` + nav **Order History** for root/admin/cashier
+- Dependency: `openpyxl`
+
+## 2026-11-15 — Legacy-safe menu `modifiers_config`
+
+### Summary
+Older databases without / with NULL `modifiers_config` no longer break Admin menu list or add. Startup still adds the column and now backfills NULLs to `[]`; API schemas coerce null/flat legacy shapes into the current group format.
+
+## 2026-11-14 — Line-level takeaway markers on kitchen + receipt
+
+### Summary
+When Waiter ticks 🛍️ Takeaway on a cart line (including dine-in table orders), kitchen slips and cashier receipts mark that line as `{qty}x {name} (ပါဆယ်)` (option B). Cashier checkout UI shows a takeaway badge. Pricing still uses `takeaway_price` via existing dual-pricing rules.
+
+### Spec
+- `specs/feature-menu-pricing/` FR-P6
+- `specs/feature-kitchen-printing/` FR-6
+- `specs/feature-cashier-receipt-printing/` FR-CR6
+
 ## 2026-11-14 — Retire menu item photos from UI
 
 ### Summary

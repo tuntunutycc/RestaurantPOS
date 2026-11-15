@@ -702,7 +702,7 @@ function renderTableCards() {
       });
       renderSelectedTableLabel();
       renderCart();
-      focusCartSidebar();
+      // Keep table grid in view after selecting (review #27) — do not jump to cart.
     });
   });
   renderSelectedTableLabel();
@@ -1728,12 +1728,30 @@ function renderTableDetailsItems(orderDetails) {
     const itemBreakdownHtml = (!isCancelled && (unitDiscount > 0 || unitTax > 0))
       ? renderItemBreakdownHtml({ base, unitDiscount, unitTax })
       : '';
+    const mods = Array.isArray(item.selected_modifiers) ? item.selected_modifiers : [];
+    const modsHtml = mods.length
+      ? `<div class="text-xs ${isCancelled ? 'line-through text-gray-400' : 'text-slate-500'} mt-0.5">${mods.map((m) => {
+          const q = Math.max(1, Math.floor(Number(m?.quantity) || 1));
+          const label = escapeHtml(m?.name || '');
+          return q > 1 ? `+ ${label} ×${q}` : `+ ${label}`;
+        }).join('<br/>')}</div>`
+      : '';
+    const noteText = String(item.note || item.special_instructions || '').trim();
+    const noteHtml = noteText
+      ? `<p class="text-xs ${isCancelled ? 'line-through text-gray-400' : 'text-amber-700'} mt-0.5">📝 ${escapeHtml(noteText)}</p>`
+      : '';
+    const takeawayHtml = item.is_takeaway
+      ? `<span class="inline-block mt-0.5 text-[11px] font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-800">🛍️ ${escapeHtml(t('takeaway', 'Takeaway'))} / ပါဆယ်</span>`
+      : '';
     const lineFinal = Number(item.subtotal) || 0;
     return `
       <div class="border border-slate-200 rounded-md p-3" data-order-item-id="${item.id}">
         <div class="flex items-center justify-between gap-2 mb-2">
           <div>
             <p class="font-medium ${textClass}">${escapeHtml(item.menu_item_name)} x ${item.quantity}</p>
+            ${takeawayHtml}
+            ${modsHtml}
+            ${noteHtml}
             ${itemBreakdownHtml}
             <p class="text-xs ${waiterClass}">${escapeHtml(t('waiter', 'Waiter'))}: ${escapeHtml(displayOrderWaiterLine(item.waiter_name))}</p>
           </div>

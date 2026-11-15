@@ -54,6 +54,15 @@ Then apply discount → tax → modifiers (see `specs/feature-menu-item-discount
 - Add/Edit menu item form includes optional **Takeaway Price** input.
 - Add/Edit includes **Tax Type** and **Tax Value** (see `specs/feature-menu-item-tax/`).
 
+## FR-P6: Kitchen + cashier visibility for line-level takeaway
+When `OrderItem.is_takeaway` is true (including dine-in table orders with the cart 🛍️ checkbox):
+
+- **Kitchen slip (option B):** one slip per line item (modifiers under parent); takeaway lines print as  
+  `{qty}x {item_name} (ပါဆယ်)` so toppings like ပဲကြော် stay under the parent item. No separate slip. Prices stay off kitchen slips.
+- **Cashier receipt:** same inline marker — `{qty}x {item_name} (ပါဆယ်)` then modifiers and line amount; line subtotal already uses FR-P1 takeaway pricing.
+- **Cashier checkout UI:** show a takeaway/ပါဆယ် badge on those lines.
+- Walk-in takeaway orders (`order_type=takeaway`) keep the existing order-level TAKEAWAY header; line markers still apply when `is_takeaway` is true.
+
 ## Authorization
 - Menu write — `ADMIN_PANEL_ROLES`
 - Order submit — `POS_ORDER_ROLES`

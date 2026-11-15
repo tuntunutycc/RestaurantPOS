@@ -13,7 +13,9 @@
 
 ## Print path
 - `services/printing/receipt.py` — `build_receipt_text(...)`
-- `services/printing/service.py` — `dispatch_cashier_receipt(..., printer_id=...)`
+- `services/printing/service.py` — `dispatch_cashier_receipt(..., printer_id=...)`; always archives cashier text (FR-CR7)
+- Checkout passes FR-CR8 footer amounts from `_order_price_breakdown` + order-level discount
+- Cashier pane `recalculateCheckoutTotals` uses the same breakdown for display; tender still on line subtotals
 - `backends/escpos_network.py` — cashier TCP timeout 3s
 - Reuses kitchen image/ESC/POS/file backends
 

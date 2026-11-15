@@ -124,6 +124,8 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | GET | `/api/orders/active-takeaways` | `list[ActiveTakeawayOrderResponse]` | `order_type=takeaway`, not paid/cancelled |
 | GET | `/api/orders/tables` | `list[OrderResponseDetail]` | Checkout-ready tables |
 | GET | `/api/orders/active-by-table/{table_id}` | `OrderResponseDetail` | |
+| GET | `/api/orders/daily-history?date=` | `DailyOrderHistoryResponse` | **Paid/completed** for one day; roles `ORDER_HISTORY_ROLES` (`root`/`admin`/`cashier`) |
+| GET | `/api/orders/daily-history/export?date=` | `.xlsx` download | Same filter; columns Order ID, Time, Item Details, Qty, Total Price |
 | PUT | `/api/orders/{order_id}/status` | `OrderStatusUpdateResponse` | Legacy bulk cancel path |
 | POST | `/api/orders/{order_id}/cancel` | `OrderStatusUpdateResponse` | API/test whole-order cancel |
 | GET | `/api/orders/{order_id}/details` | `OrderDetailsResponse` | **Full breakdown** + item snapshots |

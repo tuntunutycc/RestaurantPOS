@@ -347,7 +347,7 @@ class ModifierOption(BaseModel):
 
 
 class ModifierGroup(BaseModel):
-    group: str
+    group: str = ""
     is_required: bool = False
     options: List[ModifierOption] = Field(default_factory=list)
 
@@ -357,6 +357,21 @@ class SelectedModifier(BaseModel):
     price: float = 0.0
     group: str | None = None
     quantity: int = Field(default=1, ge=1)
+
+
+def _normalize_modifiers_config(value):
+    """Tolerate legacy/null DB values so old installs keep serving menu APIs."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return []
+    if not value:
+        return []
+    first = value[0]
+    # Legacy flat option list: [{name, price}, ...] → one optional group.
+    if isinstance(first, dict) and "options" not in first and "name" in first:
+        return [{"group": "", "is_required": False, "options": value}]
+    return value
 
 
 class MenuItemCreate(BaseModel):
@@ -376,6 +391,11 @@ class MenuItemCreate(BaseModel):
     is_available: bool = True
     is_promoted: bool = False
     modifiers_config: List[ModifierGroup] = Field(default_factory=list)
+
+    @field_validator("modifiers_config", mode="before")
+    @classmethod
+    def coerce_modifiers_config(cls, v):
+        return _normalize_modifiers_config(v)
 
 
 class MenuItemResponse(BaseModel):
@@ -398,6 +418,11 @@ class MenuItemResponse(BaseModel):
     is_available: bool = True
     is_promoted: bool = False
     modifiers_config: List[ModifierGroup] = Field(default_factory=list)
+
+    @field_validator("modifiers_config", mode="before")
+    @classmethod
+    def coerce_modifiers_config(cls, v):
+        return _normalize_modifiers_config(v)
 
 
 class MenuItemRead(MenuItemResponse):
@@ -423,6 +448,13 @@ class MenuItemUpdate(BaseModel):
     is_available: bool | None = None
     is_promoted: bool | None = None
     modifiers_config: List[ModifierGroup] | None = None
+
+    @field_validator("modifiers_config", mode="before")
+    @classmethod
+    def coerce_modifiers_config(cls, v):
+        if v is None:
+            return None
+        return _normalize_modifiers_config(v)
 
 
 class MenuItemAvailabilityUpdate(BaseModel):
@@ -524,6 +556,8 @@ class OrderItemDetail(BaseModel):
     menu_item_name: str
     quantity: int
     subtotal: float
+    unit_price_at_sale: float | None = None
+    unit_discount_at_sale: float | None = 0.0
     unit_tax_at_sale: float | None = 0.0
     batch_number: int = 1
     item_status: OrderItemStatusLiteral | None = None
@@ -533,6 +567,7 @@ class OrderItemDetail(BaseModel):
     selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
     note: str | None = None
     special_instructions: str | None = None
+    is_takeaway: bool = False
 
 
 class OrderItemDetailsResponse(BaseModel):
@@ -669,6 +704,14 @@ class OrderResponseDetail(BaseModel):
                     ),
                     quantity=oi.quantity,
                     subtotal=float(oi.subtotal),
+                    unit_price_at_sale=(
+                        float(getattr(oi, "unit_price_at_sale"))
+                        if getattr(oi, "unit_price_at_sale", None) is not None
+                        else None
+                    ),
+                    unit_discount_at_sale=float(
+                        getattr(oi, "unit_discount_at_sale", 0.0) or 0.0
+                    ),
                     unit_tax_at_sale=float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0),
                     batch_number=getattr(oi, "batch_number", 1),
                     item_status=getattr(oi, "item_status", getattr(oi, "status", "pending")),
@@ -688,6 +731,7 @@ class OrderResponseDetail(BaseModel):
                     selected_modifiers=getattr(oi, "selected_modifiers", []) or [],
                     note=getattr(oi, "note", None) or getattr(oi, "special_instructions", None),
                     special_instructions=getattr(oi, "special_instructions", None),
+                    is_takeaway=bool(getattr(oi, "is_takeaway", False)),
                 )
                 for oi in order.order_items
             ]
@@ -878,6 +922,40 @@ class PromotedStaffSalesResponse(BaseModel):
     total_sales: float
     quantity: int = 0
     line_count: int = 0
+
+
+class DailyOrderHistoryLine(BaseModel):
+    """One active (non-cancelled) line on a paid order for daily history."""
+
+    id: int
+    menu_item_name: str
+    quantity: int
+    subtotal: float
+    is_takeaway: bool = False
+    selected_modifiers: List[SelectedModifier] = Field(default_factory=list)
+    note: str | None = None
+
+
+class DailyOrderHistoryOrder(BaseModel):
+    """Paid order summary for one calendar day (includes lines for detail modal)."""
+
+    id: int
+    created_at: datetime
+    total_amount: float
+    order_type: str = "dine_in"
+    customer_name: str | None = None
+    table_id: int | None = None
+    payment_method: str | None = None
+    items: List[DailyOrderHistoryLine] = Field(default_factory=list)
+
+
+class DailyOrderHistoryResponse(BaseModel):
+    """Daily paid-order history payload."""
+
+    date: str
+    orders: List[DailyOrderHistoryOrder] = Field(default_factory=list)
+    order_count: int = 0
+    grand_total: float = 0.0
 
 
 class ActiveTakeawayOrderResponse(BaseModel):

@@ -102,6 +102,197 @@ def test_checkout_issue_receipt_file_backend(client, db_session, auth_headers, t
         _purge_order(db_session, order.id)
 
 
+def test_checkout_file_backend_with_printer_id_no_host_writes_txt(
+    client, db_session, auth_headers, tmp_path, monkeypatch
+):
+    """File backend + selected cashier printer without host still archives receipt txt."""
+    monkeypatch.setenv("PRINTER_BACKEND", "file")
+    monkeypatch.setenv("PRINTER_RENDER_MODE", "text")
+    monkeypatch.setenv("KITCHEN_PRINT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("SHOP_NAME", "File Test Cafe")
+    monkeypatch.delenv("PRINTER_CASHIER_HOST", raising=False)
+    seed_kitchen_printer_settings(db_session)
+    seed_default_printers(db_session)
+    settings = db_session.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    settings.backend = "file"
+    settings.render_mode = "text"
+    db_session.commit()
+
+    cashier = (
+        db_session.query(Printer)
+        .filter(Printer.role == "cashier", Printer.is_active.is_(True))
+        .order_by(Printer.id.asc())
+        .first()
+    )
+    assert cashier is not None
+    cashier.host = None
+    cashier.windows_printer_name = None
+    db_session.commit()
+
+    order = _seed_open_order(db_session, total=15.0)
+    try:
+        res = client.put(
+            f"/api/orders/{order.id}/checkout",
+            headers=auth_headers("cashier"),
+            json={
+                "payment_method": "cash",
+                "amount_tendered": 20.0,
+                "issue_receipt": True,
+                "printer_id": cashier.id,
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["status"] == "paid"
+        assert body.get("warning") in (None, "")
+        out = Path(tmp_path) / "cashier_printer_output.txt"
+        assert out.exists(), "expected cashier_printer_output.txt for file-backend testing"
+        text = out.read_text(encoding="utf-8")
+        assert "File Test Cafe" in text
+        assert f"Order: #{order.id}" in text
+        assert "Grand Total:" in text
+    finally:
+        _purge_order(db_session, order.id)
+
+
+def test_checkout_receipt_footer_shows_base_discount_tax_breakdown(
+    client, db_session, auth_headers, tmp_path, monkeypatch
+):
+    """Receipt footer: Subtotal=base+mods, Discount=item, Tax separate, Grand=payable."""
+    monkeypatch.setenv("PRINTER_BACKEND", "file")
+    monkeypatch.setenv("PRINTER_RENDER_MODE", "text")
+    monkeypatch.setenv("KITCHEN_PRINT_OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setenv("SHOP_NAME", "Breakdown Cafe")
+    monkeypatch.delenv("PRINTER_CASHIER_HOST", raising=False)
+    seed_kitchen_printer_settings(db_session)
+    settings = db_session.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    settings.backend = "file"
+    settings.render_mode = "text"
+    db_session.commit()
+
+    suffix = uuid.uuid4().hex[:8]
+    zone = Zone(name=f"BD-Zone-{suffix}")
+    db_session.add(zone)
+    db_session.flush()
+    table = Table(name=f"BD-T-{suffix}", zone_id=zone.id, status="occupied")
+    db_session.add(table)
+    db_session.flush()
+    category = Category(name=f"BD-Cat-{suffix}", printer_route="food")
+    db_session.add(category)
+    db_session.flush()
+    item = MenuItem(
+        name="မုန့်ဟင်းခါး",
+        price=2000.0,
+        discount_type="fixed",
+        discount_value=200.0,
+        tax_type="fixed",
+        tax_value=1.8,
+        category_id=category.id,
+        is_available=True,
+        modifiers_config=[
+            {
+                "group": "",
+                "is_required": False,
+                "options": [{"name": "ပဲကြော်", "price": 100.0}],
+            }
+        ],
+    )
+    db_session.add(item)
+    db_session.flush()
+    order = Order(
+        table_id=table.id,
+        table_number=table.id,
+        order_type="dine_in",
+        status="open",
+        total_amount=1901.8,
+    )
+    db_session.add(order)
+    db_session.flush()
+    db_session.add(
+        OrderItem(
+            order_id=order.id,
+            menu_item_id=item.id,
+            quantity=1,
+            subtotal=1901.8,
+            batch_number=1,
+            batch_status="pending",
+            item_status="pending",
+            selected_modifiers=[{"name": "ပဲကြော်", "price": 100.0, "quantity": 1}],
+            unit_price_at_sale=2000.0,
+            unit_discount_at_sale=200.0,
+            unit_tax_at_sale=1.8,
+            menu_item_name_at_sale="မုန့်ဟင်းခါး",
+            note="နံနံပင်ရှောင်",
+            special_instructions="နံနံပင်ရှောင်",
+        )
+    )
+    db_session.commit()
+    db_session.refresh(order)
+
+    try:
+        res = client.put(
+            f"/api/orders/{order.id}/checkout",
+            headers=auth_headers("cashier"),
+            json={
+                "payment_method": "cash",
+                "amount_tendered": 2000.0,
+                "discount_type": None,
+                "discount_value": 0,
+                "issue_receipt": True,
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert res.json()["status"] == "paid"
+        text = (Path(tmp_path) / "cashier_printer_output.txt").read_text(encoding="utf-8")
+        assert "Subtotal:     2100.00" in text
+        assert "Discount:    -200.00" in text
+        assert "Tax:          1.80" in text
+        assert "Grand Total:  1901.80" in text
+        assert "+ ပဲကြော်" in text
+        assert "100.00" in text
+        # Review #18: item line shows pre-tax amount (1900), not tax-inclusive 1901.80
+        assert "    1900.00" in text
+        assert "    1901.80" not in text
+        # Review #24: note on printed receipt
+        assert "*** Note: နံနံပင်ရှောင် ***" in text
+    finally:
+        _purge_order(db_session, order.id)
+
+
+def test_receipt_text_includes_note_and_pre_tax_line_amount():
+    """Review #24 note on receipt; #18 line amount excludes unit tax."""
+    from services.printing.receipt import build_receipt_text
+
+    text = build_receipt_text(
+        order_id=99,
+        served_by="waiter1",
+        location_label="Table 1",
+        items=[
+            {
+                "name": "မုန့်ဟင်းခါး",
+                "quantity": 1,
+                "subtotal": 1901.8,
+                "unit_tax_at_sale": 1.8,
+                "note": "အစပ်လျှော့",
+                "selected_modifiers": [{"name": "ပဲကြော်", "price": 100.0, "quantity": 1}],
+                "is_takeaway": False,
+            }
+        ],
+        subtotal=2100.0,
+        discount_amount=200.0,
+        tax_amount=1.8,
+        grand_total=1901.8,
+        payment_method="cash",
+        amount_tendered=2000.0,
+        change_amount=98.2,
+    )
+    assert "*** Note: အစပ်လျှော့ ***" in text
+    assert "+ ပဲကြော်  100.00" in text
+    assert "    1900.00" in text
+    assert "Tax:          1.80" in text
+    assert "Grand Total:  1901.80" in text
+
+
 def test_checkout_printer_connection_error_returns_warning(
     client, db_session, auth_headers, monkeypatch
 ):

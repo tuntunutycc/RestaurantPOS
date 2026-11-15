@@ -36,6 +36,9 @@ POS_ORDER_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER, ROLE_WAITER]
 # Checkout / payment
 CHECKOUT_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER]
 
+# Daily paid-order history list + Excel export (admin floor + cashier)
+ORDER_HISTORY_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_CASHIER]
+
 # Full store reports
 FULL_REPORT_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT]
 

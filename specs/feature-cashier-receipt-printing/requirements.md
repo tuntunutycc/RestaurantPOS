@@ -51,7 +51,30 @@ Multi-cashier terminals share one (or more) network receipt printers configured 
 - Checkout body includes `printer_id` when printing
 - On success + `warning`: toast; no browser `window.print()`
 
+## FR-CR6: Line-level takeaway marker
+- When a receipt line has `is_takeaway=true`, append ` (ပါဆယ်)` to the item name on the same line. See `specs/feature-menu-pricing/` FR-P6.
+- Cashier checkout UI shows a takeaway/ပါဆယ် badge on those lines.
+
+## FR-CR7: Receipt text file archive
+- Every cashier receipt dispatch appends the plain-text receipt to `cashier_printer_output.txt` under the print output dir (`KITCHEN_PRINT_OUTPUT_DIR`, same as kitchen).
+- Archive happens for **all** backends (`file`, `escpos_network`, `windows_printer`) so Windows/LAN prints still leave a readable txt copy (mirrors kitchen `food_printer_output.txt` / `drinks_printer_output.txt` when those use file).
+- File backend must not double-append the same receipt text.
+- **No physical printer:** backend `file` + cashier `Printer` with empty `host` must still succeed and write the txt (do not treat missing host as “printer not found”). Network backend still requires `host:port`.
+
+## FR-CR8: Receipt money footer breakdown
+- Printed receipt (and cashier checkout pane) footer must use:
+  - **Subtotal** = Σ `(unit_price_at_sale + modifiers) × qty` (before item discount)
+  - **Discount** = Σ `unit_discount_at_sale × qty` + checkout order-level discount
+  - **Tax** = Σ `unit_tax_at_sale × qty`
+  - **Grand Total** = payable charged = Σ line `subtotal` − order-level discount
+- Identity: `Subtotal − Discount + Tax = Grand Total` (when order-level discount is included in Discount).
+- Do **not** label tax-inclusive line totals as “Subtotal” while also listing Tax again (that made Grand look wrong).
+- **Per-line amount on receipt / checkout pane** = pre-tax (`line.subtotal − unit_tax × qty`), matching review #18.
+- **Line notes** (`note` / special instructions) print under the item on the receipt (review #24), same idea as kitchen `*** Note: … ***`.
+- Payment / tender validation stays on tax-inclusive line subtotals (unchanged).
+
 ## Related
 - `specs/feature-kitchen-printing/` — shared render/backends
 - `specs/feature-payment-method-analytics/` — payment method on receipt
 - `specs/feature-cashier-three-pane/` — Check Out pane checkbox placement
+- `specs/feature-menu-pricing/` — `is_takeaway` pricing + visibility

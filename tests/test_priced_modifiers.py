@@ -194,6 +194,62 @@ def test_menu_item_modifiers_config_round_trip(client, db_session, auth_headers)
     assert len(stored.modifiers_config[0]["options"]) == 3
 
 
+def test_menu_item_response_tolerates_null_and_flat_legacy_modifiers():
+    from schemas import MenuItemResponse
+
+    null_cfg = MenuItemResponse.model_validate(
+        {
+            "id": 1,
+            "name": "A",
+            "price": 100,
+            "category_id": 1,
+            "modifiers_config": None,
+            "is_available": True,
+            "is_promoted": False,
+        }
+    )
+    assert null_cfg.modifiers_config == []
+
+    flat = MenuItemResponse.model_validate(
+        {
+            "id": 2,
+            "name": "B",
+            "price": 200,
+            "category_id": 1,
+            "modifiers_config": [{"name": "ပဲကြော်", "price": 500}],
+            "is_available": True,
+            "is_promoted": False,
+        }
+    )
+    assert len(flat.modifiers_config) == 1
+    assert flat.modifiers_config[0].group == ""
+    assert flat.modifiers_config[0].options[0].name == "ပဲကြော်"
+
+
+def test_menu_create_without_modifiers_config_field(client, db_session, auth_headers):
+    """Older Admin clients that omit modifiers_config must still create items."""
+    cat = Category(name="Legacy-Omit-Mods")
+    db_session.add(cat)
+    db_session.commit()
+    db_session.refresh(cat)
+
+    create = client.post(
+        "/api/menu-items/",
+        headers=auth_headers("admin"),
+        json={
+            "name": "Plain Item",
+            "price": 1800,
+            "category_id": cat.id,
+        },
+    )
+    assert create.status_code == 200, create.text
+    assert create.json()["modifiers_config"] == []
+
+    listing = client.get("/api/menu-items/", headers=auth_headers("admin"))
+    assert listing.status_code == 200, listing.text
+    assert any(i["id"] == create.json()["id"] for i in listing.json())
+
+
 def test_order_submit_line_subtotal_includes_modifier_qty(
     client, db_session, auth_headers
 ):
@@ -335,18 +391,16 @@ def test_kitchen_dispatch_receives_selected_modifiers(
     assert res.status_code == 200, res.text
     assert len(captured) == 1
     ticket = captured[0]["ticket"]
-    assert len(ticket["items"]) == 1
-    line = ticket["items"][0]
-    assert line["item_name"] == "မုန့်ဟင်းခါး-print"
-    assert line["selected_modifiers"][0]["name"] == "ပဲကြော်"
-    assert line["selected_modifiers"][0]["quantity"] == 2
-    assert line["note"] == "နံနံပင်ရှောင်"
+    assert ticket["item_name"] == "မုန့်ဟင်းခါး-print"
+    assert ticket["selected_modifiers"][0]["name"] == "ပဲကြော်"
+    assert ticket["selected_modifiers"][0]["quantity"] == 2
+    assert ticket["note"] == "နံနံပင်ရှောင်"
 
 
-def test_kitchen_batch_one_slip_for_same_route(
+def test_kitchen_one_slip_per_line_same_route(
     client, db_session, auth_headers, monkeypatch
 ):
-    """Two food lines in one submit → one kitchen dispatch (combined slip)."""
+    """Two food lines in one submit → two kitchen dispatches (one slip per line)."""
     item = _seed_mohinga(db_session, name="မုန့်ဟင်းခါး-batch", price=2000)
     captured: list[dict] = []
 
@@ -380,8 +434,14 @@ def test_kitchen_batch_one_slip_for_same_route(
         },
     )
     assert res.status_code == 200, res.text
-    assert len(captured) == 1
-    assert len(captured[0]["ticket"]["items"]) == 2
+    assert len(captured) == 2
+    mod_names = {
+        (t["ticket"]["selected_modifiers"] or [{}])[0].get("name") for t in captured
+    }
+    assert mod_names == {"ပဲကြော်", "အိုးဘဲဥ"}
+    for t in captured:
+        assert "items" not in t["ticket"]
+        assert t["ticket"]["item_name"] == "မုန့်ဟင်းခါး-batch"
 
 
 def test_build_batch_ticket_text_combined_no_prices():

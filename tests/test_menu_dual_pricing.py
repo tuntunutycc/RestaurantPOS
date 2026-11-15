@@ -188,3 +188,138 @@ def test_menu_item_create_payload_matches_counter_form(client, auth_headers, db_
     assert persisted.tax_type == "percentage"
     assert float(persisted.tax_value) == 5.0
     assert persisted.discount_type == "none"
+
+
+def test_kitchen_batch_marks_takeaway_lines_only():
+    from services.printing.ticket import build_batch_ticket_text
+
+    text = build_batch_ticket_text(
+        route="food",
+        table_number="F1",
+        order_id=77,
+        created_at="2026-11-14T20:00:00",
+        batch_number=2,
+        order_type="dine_in",
+        items=[
+            {
+                "item_name": "မုန့်ဟင်းခါး",
+                "quantity": 1,
+                "is_takeaway": False,
+                "selected_modifiers": [],
+            },
+            {
+                "item_name": "မုန့်ဟင်းခါး",
+                "quantity": 2,
+                "is_takeaway": True,
+                "note": "အိမ်ယူ",
+                "selected_modifiers": [{"name": "ပဲကြော်", "quantity": 1}],
+            },
+        ],
+    )
+    assert "Table: F1" in text
+    assert "1x မုန့်ဟင်းခါး" in text
+    assert "2x မုန့်ဟင်းခါး (ပါဆယ်)" in text
+    assert text.count("(ပါဆယ်)") == 1
+    assert "+ ပဲကြော်" in text
+    assert "အိမ်ယူ" in text
+    # Submenu stays under the parent line that already carries (ပါဆယ်).
+    takeaway_block = text.split("2x မုန့်ဟင်းခါး (ပါဆယ်)", 1)[1]
+    assert takeaway_block.index("+ ပဲကြော်") < takeaway_block.index("အိမ်ယူ")
+    assert "1200" not in text
+
+
+def test_receipt_marks_takeaway_lines():
+    from services.printing.receipt import build_receipt_text
+
+    text = build_receipt_text(
+        order_id=77,
+        served_by="waiter1",
+        location_label="F1",
+        items=[
+            {
+                "name": "မုန့်ဟင်းခါး",
+                "quantity": 1,
+                "subtotal": 1000.0,
+                "is_takeaway": False,
+                "selected_modifiers": [],
+            },
+            {
+                "name": "မုန့်ဟင်းခါး",
+                "quantity": 2,
+                "subtotal": 2400.0,
+                "is_takeaway": True,
+                "selected_modifiers": [{"name": "ပဲကြော်", "quantity": 1, "price": 500}],
+            },
+        ],
+        subtotal=3400.0,
+        discount_amount=0.0,
+        tax_amount=0.0,
+        grand_total=3400.0,
+        payment_method="cash",
+        amount_tendered=4000.0,
+        change_amount=600.0,
+        created_at="2026-11-14 20:05",
+        cashier_name="cashier1",
+    )
+    assert "Location: F1" in text
+    assert "1x မုန့်ဟင်းခါး\n" in text
+    assert "2x မုန့်ဟင်းခါး (ပါဆယ်)" in text
+    assert "+ ပဲကြော်" in text
+    assert "2400.00" in text
+    takeaway_block = text.split("2x မုန့်ဟင်းခါး (ပါဆယ်)", 1)[1]
+    assert takeaway_block.index("+ ပဲကြော်") < takeaway_block.index("2400.00")
+
+
+def test_dine_in_submit_passes_is_takeaway_to_kitchen_dispatch(
+    client, db_session, auth_headers, monkeypatch
+):
+    """Table order with Takeaway tick must send is_takeaway into kitchen print payload."""
+    from models import Table, Zone
+
+    menu_item = _seed_category_and_item(db_session, price=1000.0, takeaway_price=1200.0)
+    suffix = uuid.uuid4().hex[:8]
+    zone = Zone(name=f"Z-{suffix}")
+    db_session.add(zone)
+    db_session.flush()
+    table = Table(name=f"T-{suffix}", zone_id=zone.id, status="available")
+    db_session.add(table)
+    db_session.commit()
+    db_session.refresh(table)
+
+    captured = []
+
+    async def _capture(route, ticket, **kwargs):
+        captured.append({"route": route, "ticket": ticket, "kwargs": kwargs})
+
+    monkeypatch.setattr("routers.orders.dispatch_kitchen_ticket", _capture)
+
+    res = client.post(
+        "/api/orders/submit",
+        headers=auth_headers("waiter"),
+        json={
+            "order_type": "dine_in",
+            "table_id": table.id,
+            "items": [
+                {
+                    "menu_item_id": menu_item.id,
+                    "quantity": 1,
+                    "is_takeaway": False,
+                    "selected_modifiers": [],
+                },
+                {
+                    "menu_item_id": menu_item.id,
+                    "quantity": 2,
+                    "is_takeaway": True,
+                    "selected_modifiers": [],
+                },
+            ],
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert len(captured) == 2  # one kitchen slip per line
+    flags = sorted(bool(t["ticket"].get("is_takeaway")) for t in captured)
+    assert flags == [False, True]
+    dine = next(t["ticket"] for t in captured if not t["ticket"].get("is_takeaway"))
+    take = next(t["ticket"] for t in captured if t["ticket"].get("is_takeaway"))
+    assert dine["quantity"] == 1
+    assert take["quantity"] == 2

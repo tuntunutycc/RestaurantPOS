@@ -67,9 +67,11 @@ def _item_body_lines(
     quantity: int,
     note: str | None = None,
     selected_modifiers=None,
+    is_takeaway: bool = False,
 ) -> list[str]:
     note_value = (note or "").strip()
-    lines = [f"{quantity}x {item_name}"]
+    name = f"{item_name} (ပါဆယ်)" if is_takeaway else item_name
+    lines = [f"{quantity}x {name}"]
     lines.extend(_modifier_ticket_lines(selected_modifiers))
     if note_value:
         lines.append(f"   *** Note: {note_value} ***")
@@ -88,6 +90,7 @@ def build_ticket_text(
     order_type: str = "dine_in",
     customer_name: str | None = None,
     selected_modifiers=None,
+    is_takeaway: bool = False,
 ) -> str:
     """Single-item kitchen ticket (kept for compatibility / unit tests)."""
     lines = _ticket_header_lines(
@@ -105,6 +108,7 @@ def build_ticket_text(
             quantity=quantity,
             note=note,
             selected_modifiers=selected_modifiers,
+            is_takeaway=is_takeaway,
         )
     )
     lines.extend(["---------------------------------", "[ --- CUT TICKET --- ]", ""])
@@ -124,7 +128,7 @@ def build_batch_ticket_text(
 ) -> str:
     """One combined kitchen slip for a submit batch (no prices).
 
-    ``items`` entries: item_name, quantity, note?, selected_modifiers?
+    ``items`` entries: item_name, quantity, note?, selected_modifiers?, is_takeaway?
     """
     lines = _ticket_header_lines(
         route=route,
@@ -152,6 +156,7 @@ def build_batch_ticket_text(
                     quantity=int(raw.get("quantity") or 1),
                     note=raw.get("note"),
                     selected_modifiers=raw.get("selected_modifiers") or [],
+                    is_takeaway=bool(raw.get("is_takeaway")),
                 )
             )
 

@@ -61,8 +61,24 @@ def build_receipt_text(
     for item in items:
         name = str(item.get("name") or item.get("menu_item_name") or "Item")
         qty = int(item.get("quantity") or 1)
+        if qty < 1:
+            qty = 1
+        # Review #18: line amount is pre-tax (base − discount + modifiers) × qty.
         line_total = float(item.get("subtotal") or 0.0)
-        lines.append(f"{qty}x {name}")
+        try:
+            unit_tax = float(item.get("unit_tax_at_sale") or 0.0)
+        except (TypeError, ValueError):
+            unit_tax = 0.0
+        pre_tax_raw = item.get("line_amount_pre_tax")
+        if pre_tax_raw is not None:
+            try:
+                line_display = float(pre_tax_raw)
+            except (TypeError, ValueError):
+                line_display = max(line_total - (unit_tax * qty), 0.0)
+        else:
+            line_display = max(line_total - (unit_tax * qty), 0.0)
+        display_name = f"{name} (ပါဆယ်)" if bool(item.get("is_takeaway")) else name
+        lines.append(f"{qty}x {display_name}")
         for raw in item.get("selected_modifiers") or []:
             if not isinstance(raw, dict):
                 continue
@@ -84,7 +100,10 @@ def build_receipt_text(
                 lines.append(f"    + {mod_name}  {_money(mod_total)}")
             else:
                 lines.append(f"    + {mod_name} x{mod_qty}  {_money(mod_total)}")
-        lines.append(f"    {_money(line_total)}")
+        note = str(item.get("note") or item.get("special_instructions") or "").strip()
+        if note:
+            lines.append(f"    *** Note: {note} ***")
+        lines.append(f"    {_money(line_display)}")
     lines.extend(
         [
             "---------------------------------",

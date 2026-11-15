@@ -149,7 +149,7 @@ def test_printer_crud_persists_windows_printer_name(client, db_session, auth_hea
 
 
 def test_checkout_windows_backend_sends_raw_receipt(
-    client, db_session, auth_headers, monkeypatch
+    client, db_session, auth_headers, monkeypatch, tmp_path
 ):
     _set_windows_backend(db_session)
     seed_default_printers(db_session)
@@ -168,6 +168,7 @@ def test_checkout_windows_backend_sends_raw_receipt(
     def _fake_send(name: str, payload: bytes) -> None:
         sent.append((name, payload))
 
+    monkeypatch.setenv("KITCHEN_PRINT_OUTPUT_DIR", str(tmp_path))
     monkeypatch.setattr(
         "services.printing.service.send_raw_to_windows_printer",
         _fake_send,
@@ -197,6 +198,12 @@ def test_checkout_windows_backend_sends_raw_receipt(
         assert "Grand Total:" in text
         assert "40.00" in text or "40" in text
         assert "Change:" in text or "change" in text.lower()
+        # Windows/LAN print still mirrors receipt text to cashier_printer_output.txt
+        archive = Path(tmp_path) / "cashier_printer_output.txt"
+        assert archive.exists()
+        archived = archive.read_text(encoding="utf-8")
+        assert f"Order: #{order.id}" in archived
+        assert "Grand Total:" in archived
     finally:
         _purge_order(db_session, order.id)
         _restore_file_backend(db_session)

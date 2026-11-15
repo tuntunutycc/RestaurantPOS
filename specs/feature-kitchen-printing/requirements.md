@@ -54,18 +54,19 @@ Server resolves route → LAN IP:port and prints one ticket per submitted line i
     - `food` → `food_printer_output.txt`
   - No physical printer required for tests/dev.
 
-### FR-6: Ticket Content (Combined batch slip)
-On each order submit, print **one combined kitchen slip per printer route** (not one slip per line item).
+### FR-6: Ticket Content (One slip per line item)
+On each order submit, print **one kitchen slip per submitted line item** (not one combined slip per route).
 Each slip must include:
 - Route/printer label (for debugging in file mode)
 - Dine-in: table number OR Takeaway: customer header block
-- Order ID, timestamp, batch number
-- All items for that route in the submit batch:
-  - Quantity × item name (Myanmar/Unicode as stored in menu)
-  - Selected modifiers under the item (Pattern A; no prices)
+- Order ID, timestamp
+- That line only:
+  - Quantity × item name (Myanmar/Unicode as stored in menu); if line `is_takeaway`, append ` (ပါဆယ်)` on the same line (see `specs/feature-menu-pricing/` FR-P6)
+  - Selected modifiers under the item (Pattern A; no prices) — e.g. မုန့်ဟင်းခါး + ပဲကြော် on the **same** slip
   - Note/special instructions (if present)
 - Cut marker / ESC/POS cut command
 - No money / price lines on kitchen slips
+- Multiple lines in one submit → multiple slips (modifiers never float to another item’s slip)
 
 ### FR-7: Non-blocking Print Failures (Critical)
 - Print failures must NOT fail order submit.
@@ -83,7 +84,7 @@ Each slip must include:
 - `text` mode keeps the existing ESC/POS text behavior.
 - `image` mode renders the kitchen ticket on the server as a monochrome image before printing.
 - Image mode is intended for Myanmar Unicode text on printers that cannot render Myanmar code pages.
-- Image mode must preserve combined batch-slip behavior (one raster per route slip).
+- Image mode must preserve per-line slip behavior (one raster per line ticket).
 
 ### FR-10: Render Settings
 - Admin can configure:

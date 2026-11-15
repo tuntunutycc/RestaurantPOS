@@ -212,11 +212,15 @@
     const langLabel = lang === "my" ? "မြန်မာ" : "EN";
     const showChangePassword = PASSWORD_ROLES.indexOf(role) !== -1 && PIN_ROLES.indexOf(role) === -1;
     const showTakeOrders = role === "cashier" || role === "waiter";
+    const showOrderHistory = role === "root" || role === "admin" || role === "cashier";
     const changePasswordBtn = showChangePassword
       ? '<button type="button" id="pos-change-password-btn" data-i18n="change_password" class="px-3 py-1.5 bg-amber-600 text-white text-sm font-medium rounded hover:bg-amber-700">Change Password</button>'
       : "";
     const takeOrdersLink = showTakeOrders
       ? '<a href="/waiter" id="pos-take-orders-link" class="px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded hover:bg-emerald-700">Take Orders</a>'
+      : "";
+    const orderHistoryLink = showOrderHistory
+      ? '<a href="/order-history" id="pos-order-history-link" class="px-3 py-1.5 bg-teal-600 text-white text-sm font-medium rounded hover:bg-teal-700">Order History</a>'
       : "";
     container.innerHTML =
       '<div class="flex flex-wrap items-center justify-between gap-2 mb-4 p-3 bg-slate-200 rounded-lg">' +
@@ -230,6 +234,7 @@
       "</div>" +
       '<div class="flex items-center gap-2 flex-wrap justify-end">' +
       takeOrdersLink +
+      orderHistoryLink +
       changePasswordBtn +
       `<button type="button" id="pos-lang-toggle-btn" class="px-3 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded hover:bg-indigo-700">` +
       `${escapeHtml(langLabel)} / မြန်မာ</button>` +

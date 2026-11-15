@@ -7,18 +7,28 @@ from typing import Any
 from pydantic import BaseModel, field_validator
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from auth import get_current_user, require_roles
 from database import get_db
 from models import MenuItem, Order, OrderItem, Table, User
-from rbac import CHECKOUT_ROLES, POS_ORDER_ROLES
+from rbac import CHECKOUT_ROLES, ORDER_HISTORY_ROLES, POS_ORDER_ROLES
+from services.order_history import (
+    active_lines,
+    build_daily_history_xlsx,
+    parse_history_date,
+    query_daily_paid_orders,
+)
 from services.printing.health import check_route_health, warning_for_offline_routes
 from services.printing.routes import resolve_printer_route
 from services.printing.service import dispatch_cashier_receipt, dispatch_kitchen_ticket
 from schemas import (
     ActiveTakeawayOrderResponse,
+    DailyOrderHistoryLine,
+    DailyOrderHistoryOrder,
+    DailyOrderHistoryResponse,
     OrderCheckoutRequest,
     OrderCheckoutResponse,
     OrderCreateResponse,
@@ -32,6 +42,7 @@ from schemas import (
     OrderStatusLiteral,
     OrderSubmitRequest,
     OrderSubmitResponse,
+    SelectedModifier,
 )
 
 router = APIRouter(prefix="/api")
@@ -403,7 +414,15 @@ def _order_lines_tax_total(order: Order) -> float:
 
 
 def _order_price_breakdown(order: Order) -> dict[str, float]:
-    """Subtotal, discount, tax, and grand total for non-cancelled lines."""
+    """Subtotal, discount, tax, and grand total for non-cancelled lines.
+
+    Prefer sale snapshots: Subtotal = (base + modifiers) × qty,
+    Discount = item unit discounts × qty, Tax = unit tax × qty,
+    Grand = stored line subtotals (already discounted + taxed + modifiers).
+
+    Legacy lines without ``unit_price_at_sale`` fall back to
+    Subtotal ≈ line.subtotal − tax so Subtotal − Discount + Tax = Grand.
+    """
     breakdown_subtotal = 0.0
     breakdown_discount_total = 0.0
     breakdown_tax_total = 0.0
@@ -412,14 +431,24 @@ def _order_price_breakdown(order: Order) -> dict[str, float]:
         if _normalized_item_status_value(getattr(oi, "item_status", None)) == "cancelled":
             continue
         qty = int(getattr(oi, "quantity", 0) or 0)
-        base = float(getattr(oi, "unit_price_at_sale", 0.0) or 0.0)
-        unit_discount = float(getattr(oi, "unit_discount_at_sale", 0.0) or 0.0)
+        line_subtotal = float(getattr(oi, "subtotal", 0.0) or 0.0)
         unit_tax = float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0)
-        modifiers_total = _selected_modifiers_total(getattr(oi, "selected_modifiers", []) or [])
+        line_tax = unit_tax * qty
+        raw_base = getattr(oi, "unit_price_at_sale", None)
+        if raw_base is None:
+            breakdown_subtotal += max(line_subtotal - line_tax, 0.0)
+            breakdown_tax_total += line_tax
+            breakdown_grand_total += line_subtotal
+            continue
+        base = float(raw_base or 0.0)
+        unit_discount = float(getattr(oi, "unit_discount_at_sale", 0.0) or 0.0)
+        modifiers_total = _selected_modifiers_total(
+            getattr(oi, "selected_modifiers", []) or []
+        )
         breakdown_subtotal += (base + modifiers_total) * qty
         breakdown_discount_total += unit_discount * qty
-        breakdown_tax_total += unit_tax * qty
-        breakdown_grand_total += float(getattr(oi, "subtotal", 0.0) or 0.0)
+        breakdown_tax_total += line_tax
+        breakdown_grand_total += line_subtotal
     return {
         "breakdown_subtotal": _round_money(breakdown_subtotal),
         "breakdown_discount_total": _round_money(breakdown_discount_total),
@@ -571,11 +600,15 @@ async def create_order(
                     menu_item_name=menu_item.name,
                     quantity=line.quantity,
                     subtotal=subtotal,
+                    unit_price_at_sale=base_price,
+                    unit_discount_at_sale=unit_discount,
+                    unit_tax_at_sale=unit_tax,
                     menu_item_image_url=getattr(menu_item, "image_url", None),
                     waiter_name=current_user.username,
                     selected_modifiers=selected_modifiers,
                     note=note_value,
                     special_instructions=note_value,
+                    is_takeaway=is_takeaway,
                 )
             )
         existing.total_amount = _round_money(existing_total)
@@ -917,6 +950,102 @@ async def cancel_order(
     return {"id": order.id, "status": order.status}
 
 
+def _daily_history_line(oi: OrderItem) -> DailyOrderHistoryLine:
+    raw_mods = getattr(oi, "selected_modifiers", None) or []
+    modifiers: list[SelectedModifier] = []
+    for raw in raw_mods:
+        if isinstance(raw, SelectedModifier):
+            modifiers.append(raw)
+            continue
+        if not isinstance(raw, dict):
+            continue
+        try:
+            modifiers.append(SelectedModifier.model_validate(raw))
+        except Exception:
+            name = str(raw.get("name") or "").strip()
+            if not name:
+                continue
+            modifiers.append(
+                SelectedModifier(
+                    name=name,
+                    price=float(raw.get("price") or 0.0),
+                    group=raw.get("group"),
+                    quantity=max(1, int(raw.get("quantity") or 1)),
+                )
+            )
+    return DailyOrderHistoryLine(
+        id=int(oi.id),
+        menu_item_name=_display_menu_item_name(oi),
+        quantity=int(getattr(oi, "quantity", 1) or 1),
+        subtotal=float(getattr(oi, "subtotal", 0.0) or 0.0),
+        is_takeaway=bool(getattr(oi, "is_takeaway", False)),
+        selected_modifiers=modifiers,
+        note=(getattr(oi, "note", None) or getattr(oi, "special_instructions", None)),
+    )
+
+
+def _build_daily_history_response(day_label: str, orders: list[Order]) -> DailyOrderHistoryResponse:
+    payload: list[DailyOrderHistoryOrder] = []
+    grand = 0.0
+    for order in orders:
+        total = float(getattr(order, "total_amount", 0.0) or 0.0)
+        grand += total
+        payload.append(
+            DailyOrderHistoryOrder(
+                id=int(order.id),
+                created_at=order.created_at,
+                total_amount=total,
+                order_type=getattr(order, "order_type", "dine_in") or "dine_in",
+                customer_name=getattr(order, "customer_name", None),
+                table_id=getattr(order, "table_id", None),
+                payment_method=getattr(order, "payment_method", None),
+                items=[_daily_history_line(oi) for oi in active_lines(order)],
+            )
+        )
+    return DailyOrderHistoryResponse(
+        date=day_label,
+        orders=payload,
+        order_count=len(payload),
+        grand_total=round(grand, 2),
+    )
+
+
+@router.get("/orders/daily-history", response_model=DailyOrderHistoryResponse)
+def list_daily_order_history(
+    date: str = Query(..., description="Calendar day YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(ORDER_HISTORY_ROLES)),
+):
+    """Paid/completed orders for one day (Admin/Cashier)."""
+    try:
+        day = parse_history_date(date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD") from None
+    orders = query_daily_paid_orders(db, day)
+    return _build_daily_history_response(day.isoformat(), orders)
+
+
+@router.get("/orders/daily-history/export")
+def export_daily_order_history_excel(
+    date: str = Query(..., description="Calendar day YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(ORDER_HISTORY_ROLES)),
+):
+    """Download daily paid orders as .xlsx (one row per line item)."""
+    try:
+        day = parse_history_date(date)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD") from None
+    orders = query_daily_paid_orders(db, day)
+    content = build_daily_history_xlsx(orders, day)
+    filename = f"order-history-{day.isoformat()}.xlsx"
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/orders/{order_id}/details", response_model=OrderDetailsResponse)
 def get_order_details(
     order_id: int,
@@ -1148,8 +1277,8 @@ async def submit_order(
 
     batch_total = 0.0
     batch_items_detail: list[OrderItemDetail] = []
-    # One combined kitchen slip per printer route for this submit batch (no prices).
-    route_print_items: dict[str, list[dict]] = {}
+    # One kitchen slip per submitted line (modifiers stay under that line — Pattern A).
+    print_jobs: list[tuple[str, dict[str, Any]]] = []
     print_meta: dict[str, Any] = {
         "table_number": table_number if table_number is not None else None,
         "order_id": None,  # filled after order exists
@@ -1203,23 +1332,31 @@ async def submit_order(
                 menu_item_name=menu_item.name,
                 quantity=line.quantity,
                 subtotal=subtotal,
+                unit_price_at_sale=base_price,
+                unit_discount_at_sale=unit_discount,
+                unit_tax_at_sale=unit_tax,
                 batch_number=new_batch_number,
                 menu_item_image_url=getattr(menu_item, "image_url", None),
                 waiter_name=current_user.username,
                 selected_modifiers=selected_modifiers,
                 note=note_value,
                 special_instructions=note_value,
+                is_takeaway=is_takeaway,
             )
         )
         category = getattr(menu_item, "category", None)
         printer_route = resolve_printer_route(getattr(category, "printer_route", None))
-        route_print_items.setdefault(printer_route, []).append(
-            {
-                "item_name": menu_item.name,
-                "quantity": line.quantity,
-                "note": note_value,
-                "selected_modifiers": selected_modifiers,
-            }
+        print_jobs.append(
+            (
+                printer_route,
+                {
+                    "item_name": menu_item.name,
+                    "quantity": line.quantity,
+                    "note": note_value,
+                    "selected_modifiers": selected_modifiers,
+                    "is_takeaway": is_takeaway,
+                },
+            )
         )
 
     # Update order running total and persist
@@ -1259,50 +1396,58 @@ async def submit_order(
 
     # Probe + print: order is already saved; offline printers only produce a warning.
     print_warning: str | None = None
-    if route_print_items:
-        health_results = [
-            check_route_health(db, route) for route in route_print_items.keys()
-        ]
+    if print_jobs:
+        routes_used = {route for route, _ in print_jobs}
+        health_results = [check_route_health(db, route) for route in routes_used]
         print_warning = warning_for_offline_routes(health_results)
 
-        route_list = list(route_print_items.keys())
+        dispatch_payloads = [
+            (
+                printer_route,
+                {
+                    **item_payload,
+                    "table_number": print_meta["table_number"],
+                    "order_id": print_meta["order_id"],
+                    "date": print_meta["date"],
+                },
+            )
+            for printer_route, item_payload in print_jobs
+        ]
         print_results = await asyncio.gather(
             *[
                 dispatch_kitchen_ticket(
                     printer_route,
-                    {
-                        "items": items,
-                        "table_number": print_meta["table_number"],
-                        "order_id": print_meta["order_id"],
-                        "date": print_meta["date"],
-                        "batch_number": print_meta["batch_number"],
-                    },
+                    ticket_payload,
                     order_type=getattr(order, "order_type", "dine_in"),
                     customer_name=getattr(order, "customer_name", None),
                     db=db,
                 )
-                for printer_route, items in route_print_items.items()
+                for printer_route, ticket_payload in dispatch_payloads
             ],
             return_exceptions=True,
         )
         failed_parts: list[str] = []
-        for route, result in zip(route_list, print_results, strict=True):
+        for (route, ticket_payload), result in zip(
+            dispatch_payloads, print_results, strict=True
+        ):
             if isinstance(result, BaseException):
                 detail = str(result).strip() or result.__class__.__name__
-                failed_parts.append(f"{route} ({detail})")
+                item_label = str(ticket_payload.get("item_name") or route)
+                failed_parts.append(f"{route}/{item_label} ({detail})")
                 logger.error(
-                    "Kitchen print failed route=%s order_id=%s: %s",
+                    "Kitchen print failed route=%s order_id=%s item=%s: %s",
                     route,
                     order.id,
+                    item_label,
                     detail,
                 )
             else:
                 logger.info(
-                    "Kitchen print OK route=%s order_id=%s batch=%s items=%s",
+                    "Kitchen print OK route=%s order_id=%s batch=%s item=%s",
                     route,
                     order.id,
                     print_meta["batch_number"],
-                    len(route_print_items.get(route) or []),
+                    ticket_payload.get("item_name"),
                 )
         if failed_parts:
             fail_msg = (
@@ -1472,20 +1617,34 @@ async def checkout_order(
                 for oi in (order.order_items or [])
                 if _normalized_item_status_value(getattr(oi, "item_status", None)) != "cancelled"
             ]
-            receipt_items = [
-                {
-                    "name": (
-                        getattr(getattr(oi, "menu_item", None), "name", None)
-                        or DELETED_ITEM_LABEL
-                    ),
-                    "quantity": int(getattr(oi, "quantity", 1) or 1),
-                    "subtotal": float(getattr(oi, "subtotal", 0.0) or 0.0),
-                    "selected_modifiers": list(
-                        getattr(oi, "selected_modifiers", None) or []
-                    ),
-                }
-                for oi in active_items
-            ]
+            receipt_items = []
+            for oi in active_items:
+                qty = int(getattr(oi, "quantity", 1) or 1)
+                if qty < 1:
+                    qty = 1
+                line_sub = float(getattr(oi, "subtotal", 0.0) or 0.0)
+                unit_tax = float(getattr(oi, "unit_tax_at_sale", 0.0) or 0.0)
+                snap_name = (getattr(oi, "menu_item_name_at_sale", None) or "").strip()
+                live_name = getattr(getattr(oi, "menu_item", None), "name", None)
+                receipt_items.append(
+                    {
+                        "name": snap_name or live_name or DELETED_ITEM_LABEL,
+                        "quantity": qty,
+                        "subtotal": line_sub,
+                        "unit_tax_at_sale": unit_tax,
+                        "line_amount_pre_tax": _round_money(
+                            max(line_sub - (unit_tax * qty), 0.0)
+                        ),
+                        "selected_modifiers": list(
+                            getattr(oi, "selected_modifiers", None) or []
+                        ),
+                        "is_takeaway": bool(getattr(oi, "is_takeaway", False)),
+                        "note": (
+                            getattr(oi, "note", None)
+                            or getattr(oi, "special_instructions", None)
+                        ),
+                    }
+                )
             order_type = (getattr(order, "order_type", None) or "dine_in").strip().lower()
             if order_type == "takeaway":
                 customer = (getattr(order, "customer_name", None) or "").strip()
@@ -1495,15 +1654,24 @@ async def checkout_order(
                 location_label = str(table_name) if table_name is not None else f"Table #{getattr(order, 'table_id', '')}"
             created_at = getattr(order, "created_at", None)
             created_at_str = created_at.isoformat(sep=" ", timespec="seconds") if created_at else None
+            # Receipt footer: Subtotal = base+modifiers, Discount = item+order,
+            # Tax separate, Grand = payable (line totals − order discount).
+            # Payment math above stays on tax-inclusive line subtotals.
+            money = _order_price_breakdown(order)
+            receipt_subtotal = money["breakdown_subtotal"]
+            receipt_discount = _round_money(
+                money["breakdown_discount_total"] + discount_amount
+            )
+            receipt_tax = money["breakdown_tax_total"]
             await dispatch_cashier_receipt(
                 order_id=order.id,
                 served_by=detail.waiter_name,
                 cashier_name=getattr(order, "cashier_name", None),
                 location_label=location_label,
                 items=receipt_items,
-                subtotal=subtotal,
-                discount_amount=discount_amount,
-                tax_amount=_round_money(tax_amount),
+                subtotal=receipt_subtotal,
+                discount_amount=receipt_discount,
+                tax_amount=receipt_tax,
                 grand_total=_round_money(final_total),
                 payment_method=payment["payment_method"],
                 amount_tendered=_round_money(tendered),

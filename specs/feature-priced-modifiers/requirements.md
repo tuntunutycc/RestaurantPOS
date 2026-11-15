@@ -30,6 +30,7 @@ Order line subtotal (existing formula): `(discounted_base + unit_tax + modifiers
 
 ### FR-1 Admin configuration
 - Menu create/update payload must persist admin-edited `modifiers_config` (must not force `[]`).
+- **Legacy DB safety:** `modifiers_config` NULL (or missing) is treated as `[]`. Startup adds the column if missing and backfills NULLs. Flat legacy option lists `[{name, price}]` are coerced to one group so Admin menu list/add keep working on older databases.
 - Counter UI is **option-only**: add/edit/remove toppings as `{ name, price }` (no group name field in the UI).
 - Saved shape remains one optional API group: `[{ group: "", is_required: false, options: [...] }]` for contract compatibility.
 - Empty config remains valid (item has no sub-menu).

@@ -14,6 +14,7 @@ __pycache__/
 .eggs/
 *.egg-info/
 *.egg
+.pip_pkgs/
 
 # Database (local dev)
 *.db
@@ -31,3 +32,7 @@ Thumbs.db
 
 # Runtime printer diagnostics (created on first print)
 logs/
+
+# Local/dev printer file-backend output (recreated on print)
+*_printer_output.txt
+*_printer_output.png

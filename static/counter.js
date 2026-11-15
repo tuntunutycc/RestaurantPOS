@@ -1705,6 +1705,45 @@ function computeOrderLineTaxTotal(items) {
   }, 0));
 }
 
+function selectedModifiersMoneyTotal(mods) {
+  return (mods || []).reduce((sum, m) => {
+    const unit = Number(m?.price) || 0;
+    const q = Math.max(1, Math.floor(Number(m?.quantity) || 1));
+    return sum + unit * q;
+  }, 0);
+}
+
+/** Receipt/checkout footer: base+mods, item discounts, tax (payable stays line.subtotal). */
+function computeCheckoutPriceBreakdown(items) {
+  let preDiscountSubtotal = 0;
+  let itemDiscountTotal = 0;
+  let taxTotal = 0;
+  let payableSubtotal = 0;
+  for (const item of items || []) {
+    const qty = Number(item?.quantity) || 0;
+    const lineSub = Number(item?.subtotal) || 0;
+    payableSubtotal += lineSub;
+    const unitTax = Number(item?.unit_tax_at_sale ?? 0) || 0;
+    taxTotal += unitTax * qty;
+    if (item?.unit_price_at_sale != null && Number.isFinite(Number(item.unit_price_at_sale))) {
+      const base = Number(item.unit_price_at_sale) || 0;
+      const unitDisc = Number(item?.unit_discount_at_sale ?? 0) || 0;
+      const mods = selectedModifiersMoneyTotal(item?.selected_modifiers);
+      preDiscountSubtotal += (base + mods) * qty;
+      itemDiscountTotal += unitDisc * qty;
+    } else {
+      // Legacy lines without snapshot: approximate pre-tax after discounts.
+      preDiscountSubtotal += Math.max(lineSub - unitTax * qty, 0);
+    }
+  }
+  return {
+    preDiscountSubtotal: roundMoney(preDiscountSubtotal),
+    itemDiscountTotal: roundMoney(itemDiscountTotal),
+    taxTotal: roundMoney(taxTotal),
+    payableSubtotal: roundMoney(payableSubtotal),
+  };
+}
+
 function syncTaxValueFieldState() {
   const taxTypeEl = document.getElementById('item-tax-type');
   const taxValueEl = document.getElementById('item-tax-value');
@@ -1715,18 +1754,22 @@ function syncTaxValueFieldState() {
 }
 
 function recalculateCheckoutTotals() {
-  const subtotal = Number.isFinite(selectedOrderSubtotal) ? selectedOrderSubtotal : 0;
+  const money = computeCheckoutPriceBreakdown(selectedOrderVisibleItems);
+  const payable = Number.isFinite(selectedOrderSubtotal)
+    ? selectedOrderSubtotal
+    : money.payableSubtotal;
   const { type, value } = getCheckoutDiscountState();
-  const discountAmount = roundMoney(calculateOrderDiscountAmount(subtotal, type, value));
-  const taxAmount = computeOrderLineTaxTotal(selectedOrderVisibleItems);
-  const finalTotal = roundMoney(Math.max(subtotal - discountAmount, 0));
+  const orderDiscountAmount = roundMoney(calculateOrderDiscountAmount(payable, type, value));
+  const displayDiscount = roundMoney(money.itemDiscountTotal + orderDiscountAmount);
+  const taxAmount = money.taxTotal;
+  const finalTotal = roundMoney(Math.max(payable - orderDiscountAmount, 0));
 
   const subtotalEl = document.getElementById('receipt-subtotal');
   const discountEl = document.getElementById('receipt-discount-amount');
   const taxEl = document.getElementById('receipt-tax-amount');
   const grandTotalEl = document.getElementById('receipt-grand-total');
-  if (subtotalEl) subtotalEl.textContent = formatMoney(subtotal);
-  if (discountEl) discountEl.textContent = formatMoneyNegative(discountAmount);
+  if (subtotalEl) subtotalEl.textContent = formatMoney(money.preDiscountSubtotal);
+  if (discountEl) discountEl.textContent = formatMoneyNegative(displayDiscount);
   if (taxEl) taxEl.textContent = formatMoney(taxAmount);
   if (grandTotalEl) grandTotalEl.textContent = `${t('grand_total', 'Grand Total')}: ${formatMoney(finalTotal)}`;
 
@@ -2042,18 +2085,43 @@ function selectOrder(order, source = null) {
   if (checkoutHeaderEl) {
     checkoutHeaderEl.textContent = `${t('checkout', 'Checkout')} - ${cashierOrderDisplayLabel(order, cashierCheckoutSource)}`;
   }
-  const itemsRows = visibleItems
-    .map((i) => {
-      const mods = Array.isArray(i.selected_modifiers) ? i.selected_modifiers : [];
-      const modsHtml = mods.length
-        ? `<div class="text-xs text-slate-500">${mods.map((m) => {
-            const q = Math.max(1, Math.floor(Number(m?.quantity) || 1));
-            return q > 1
-              ? `+ ${escapeHtml(m?.name || '')} ×${q}`
-              : `+ ${escapeHtml(m?.name || '')}`;
-          }).join('<br/>')}</div>`
-        : '';
-      return `<tr><td class="py-1">${escapeHtml(i.menu_item_name)}${modsHtml}</td><td class="py-1 text-right align-top">${i.quantity}</td><td class="py-1 text-right align-top">${formatMoney(Number(i.subtotal))}</td></tr>`;
+  // Review #23/#30: group by batch with separators. #18: show pre-tax line amount.
+  const batchGroups = new Map();
+  visibleItems.forEach((i) => {
+    const batch = Math.max(1, Math.floor(Number(i?.batch_number) || 1));
+    if (!batchGroups.has(batch)) batchGroups.set(batch, []);
+    batchGroups.get(batch).push(i);
+  });
+  const sortedBatches = Array.from(batchGroups.keys()).sort((a, b) => a - b);
+  const itemsRows = sortedBatches
+    .map((batch, batchIdx) => {
+      const header = sortedBatches.length > 1
+        ? `<tr class="border-t border-dashed border-slate-300"><td colspan="3" class="pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">${escapeHtml(t('batch', 'Batch'))} #${batch}</td></tr>`
+        : (batchIdx === 0 ? '' : '');
+      const rows = batchGroups.get(batch).map((i) => {
+        const mods = Array.isArray(i.selected_modifiers) ? i.selected_modifiers : [];
+        const modsHtml = mods.length
+          ? `<div class="text-xs text-slate-500">${mods.map((m) => {
+              const q = Math.max(1, Math.floor(Number(m?.quantity) || 1));
+              return q > 1
+                ? `+ ${escapeHtml(m?.name || '')} ×${q}`
+                : `+ ${escapeHtml(m?.name || '')}`;
+            }).join('<br/>')}</div>`
+          : '';
+        const takeawayBadge = i.is_takeaway
+          ? `<div class="text-xs font-semibold text-orange-700">🛍️ ${escapeHtml(t('takeaway', 'Takeaway'))} / ပါဆယ်</div>`
+          : '';
+        const noteText = String(i.note || i.special_instructions || '').trim();
+        const noteHtml = noteText
+          ? `<div class="text-xs text-amber-700">📝 ${escapeHtml(noteText)}</div>`
+          : '';
+        const qty = Math.max(1, Math.floor(Number(i.quantity) || 1));
+        const unitTax = Number(i.unit_tax_at_sale ?? 0) || 0;
+        const lineSub = Number(i.subtotal) || 0;
+        const preTax = Math.max(lineSub - unitTax * qty, 0);
+        return `<tr><td class="py-1">${escapeHtml(i.menu_item_name)}${takeawayBadge}${modsHtml}${noteHtml}</td><td class="py-1 text-right align-top">${i.quantity}</td><td class="py-1 text-right align-top">${formatMoney(preTax)}</td></tr>`;
+      }).join('');
+      return `${header}${rows}`;
     })
     .join('');
   const receiptContent = document.getElementById('receipt-content');
@@ -3498,8 +3566,7 @@ function renderCategories(categories) {
             <button type="button" data-edit-category-id="${c.id}" data-category-name="${escapeAttr(c.name)}" class="text-xs px-2 py-1.5 border border-slate-300 text-slate-700 rounded-md hover:bg-slate-50 font-medium" title="Edit category name">Edit</button>
             <button type="button" data-delete-category-id="${c.id}" data-category-name="${escapeAttr(c.name)}" class="text-xs px-2 py-1.5 border border-red-200 text-red-700 rounded-md hover:bg-red-50 font-medium" title="Delete category">Delete</button>
             <select data-category-route-id="${c.id}" class="text-sm px-2 py-1 border border-slate-300 rounded-md">
-              <option value="" ${currentRoute === '' ? 'selected' : ''}>Default (Food)</option>
-              <option value="food" ${currentRoute === 'food' ? 'selected' : ''}>Food counter</option>
+              <option value="" ${currentRoute === '' || currentRoute === 'food' ? 'selected' : ''}>Default (Food counter)</option>
               <option value="drinks" ${currentRoute === 'drinks' ? 'selected' : ''}>Drinks</option>
             </select>
             <button type="button" data-save-category-route-id="${c.id}" class="text-xs px-2 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save</button>

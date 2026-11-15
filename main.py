@@ -205,6 +205,18 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         pass
+    # Backfill NULL leftovers so list/create responses never fail validation.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE menu_items SET modifiers_config = '[]' "
+                    "WHERE modifiers_config IS NULL"
+                )
+            )
+    except Exception:
+        pass
     try:
         from sqlalchemy import text
         with engine.begin() as conn:
@@ -799,6 +811,14 @@ def setup_page():
 def account_page():
     """Read-only reports for account role."""
     return FileResponse(static_dir / "account.html")
+
+
+@app.get("/order-history")
+@app.get("/admin/sales-history")
+@app.get("/cashier/history")
+def order_history_page():
+    """Daily paid-order history + Excel export (admin/cashier)."""
+    return FileResponse(static_dir / "order-history.html")
 
 
 @app.get("/login")

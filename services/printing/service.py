@@ -137,6 +137,14 @@ async def _dispatch_payload(
                 "(set it on the cashier Printer in Admin)"
             )
 
+    # Always archive cashier receipt text to cashier_printer_output.txt, even when
+    # Windows/LAN also prints (kitchen file backend already writes food/drinks txt).
+    cashier_text_archived = False
+    if route == CASHIER_PRINTER_ROUTE:
+        await asyncio.to_thread(send_file_ticket, config, route, ticket_text)
+        cashier_text_archived = True
+        logger.info("Cashier receipt text archived to file route=%s", route)
+
     if config.render_mode == "image":
         image = render_ticket_image(
             ticket_text,
@@ -241,8 +249,11 @@ async def _dispatch_payload(
             logger.exception("LAN print failed route=%s", route)
             raise
         return
-    await asyncio.to_thread(send_file_ticket, config, route, ticket_text)
-    logger.info("File text print wrote route=%s", route)
+    if not cashier_text_archived:
+        await asyncio.to_thread(send_file_ticket, config, route, ticket_text)
+        logger.info("File text print wrote route=%s", route)
+    else:
+        logger.info("File text print wrote route=%s (archive already written)", route)
     if kitchen_file_fallback:
         raise RuntimeError(
             f"Kitchen route '{route}' has no LAN host under windows_printer; "
@@ -261,12 +272,13 @@ async def dispatch_kitchen_ticket(
 ) -> None:
     """Dispatch a kitchen ticket.
 
-    Preferred payload (combined batch slip, no prices):
+    Preferred payload (one slip per line; modifiers under that line):
+      ``{ item_name, quantity, note?, selected_modifiers?, is_takeaway?,
+          table_number, order_id, date }``
+
+    Optional combined multi-item payload still accepted (tests / tools):
       ``{ items: [{item_name, quantity, note?, selected_modifiers?}, ...],
           table_number, order_id, date, batch_number? }``
-
-    Legacy single-item payload still accepted:
-      ``{ item_name, quantity, note?, selected_modifiers?, ... }``
     """
     items = item_ticket.get("items")
     if isinstance(items, list) and items:
@@ -296,6 +308,7 @@ async def dispatch_kitchen_ticket(
             order_type=order_type,
             customer_name=customer_name,
             selected_modifiers=item_ticket.get("selected_modifiers") or [],
+            is_takeaway=bool(item_ticket.get("is_takeaway")),
         )
     endpoint_override: PrinterEndpoint | None = None
     if db is not None:
@@ -380,9 +393,29 @@ async def dispatch_cashier_receipt(
                 db, printer_id=printer_id
             )
             if printer_id is not None and endpoint_override is None:
-                raise RuntimeError(
-                    f"Cashier printer id={printer_id} not found or inactive"
+                # Selected cashier row may have no LAN host (common for file
+                # backend / printer-not-plugged-in testing). Only fail hard when
+                # the row is missing, or network backend needs a host.
+                from models import Printer
+
+                selected = (
+                    db.query(Printer)
+                    .filter(
+                        Printer.id == printer_id,
+                        Printer.role == "cashier",
+                        Printer.is_active.is_(True),
+                    )
+                    .first()
                 )
+                if selected is None:
+                    raise RuntimeError(
+                        f"Cashier printer id={printer_id} not found or inactive"
+                    )
+                if config.backend == "escpos_network":
+                    raise RuntimeError(
+                        f"Cashier printer id={printer_id} has no host:port "
+                        "(required for escpos_network)"
+                    )
     await _dispatch_payload(
         route=CASHIER_PRINTER_ROUTE,
         ticket_text=receipt_text,

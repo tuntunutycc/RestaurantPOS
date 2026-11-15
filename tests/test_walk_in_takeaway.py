@@ -364,21 +364,24 @@ def test_takeaway_submit_prints_kitchen_ticket_with_takeaway_header(
     client, db_session, auth_headers, monkeypatch
 ):
     """Takeaway submit must dispatch kitchen print with TAKEAWAY / customer header."""
-    from services.printing.ticket import build_batch_ticket_text
+    from services.printing.ticket import build_ticket_text
 
     menu_item = _seed_menu_item(db_session)
     captured = []
 
     async def _capture(route, ticket, **kwargs):
-        text = build_batch_ticket_text(
+        text = build_ticket_text(
             route=route,
-            items=ticket.get("items") or [],
+            item_name=str(ticket.get("item_name") or ""),
+            quantity=int(ticket.get("quantity") or 1),
+            note=ticket.get("note"),
             table_number=ticket.get("table_number"),
             order_id=int(ticket.get("order_id") or 0),
             created_at=str(ticket.get("date") or ""),
             order_type=kwargs.get("order_type") or "dine_in",
             customer_name=kwargs.get("customer_name"),
-            batch_number=ticket.get("batch_number"),
+            selected_modifiers=ticket.get("selected_modifiers") or [],
+            is_takeaway=bool(ticket.get("is_takeaway")),
         )
         captured.append(
             {
@@ -386,7 +389,7 @@ def test_takeaway_submit_prints_kitchen_ticket_with_takeaway_header(
                 "order_type": kwargs.get("order_type"),
                 "customer_name": kwargs.get("customer_name"),
                 "text": text,
-                "items": ticket.get("items"),
+                "ticket": ticket,
             }
         )
 
@@ -409,11 +412,11 @@ def test_takeaway_submit_prints_kitchen_ticket_with_takeaway_header(
         },
     )
     assert res.status_code == 200, res.text
-    assert len(captured) == 1, "takeaway submit should print one kitchen slip per route"
+    assert len(captured) == 1, "one line → one kitchen slip"
     job = captured[0]
     assert job["order_type"] == "takeaway"
     assert job["customer_name"] == "Ko Aung"
-    assert job["items"] and job["items"][0]["quantity"] == 2
+    assert job["ticket"]["quantity"] == 2
     assert "TAKEAWAY" in job["text"] or "ပါဆယ်" in job["text"]
     assert "Ko Aung" in job["text"]
     assert menu_item.name in job["text"]
