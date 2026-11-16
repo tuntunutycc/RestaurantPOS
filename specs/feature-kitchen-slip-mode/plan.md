@@ -8,7 +8,8 @@
 6. **Print jobs** — `services/printing/print_jobs.py`: combined label, drop cancelled lines at send time, skip when none remain, hide from the failed list.
 7. **UI** — `static/counter.html`, `static/counter.js`: **Kitchen slip** select.
 8. **Tests** — `tests/test_kitchen_slip_mode.py`.
-9. **Docs** — kitchen-printing spec, `api-reference.md`, `database-schema.md`, `CHANGELOG.md`.
+9. **Copies (FR-SM7)** — setting + API, N jobs per route, `COPY n / N` banner in `ticket.py` (text / ESC/POS) and `image_renderer.py`, UI select.
+10. **Docs** — kitchen-printing spec, `api-reference.md`, `database-schema.md`, `CHANGELOG.md`.
 
 | File | Change |
 |------|--------|

@@ -3945,6 +3945,20 @@ if (predefinedInstructionForm) {
   });
 }
 
+function clampKitchenSlipCopies(value) {
+  const n = Math.trunc(Number(value));
+  return n >= 1 && n <= 3 ? n : 1;
+}
+
+// Copies only apply to the combined slip; grey the control out otherwise.
+function syncKitchenSlipCopiesEnabled() {
+  const modeEl = document.getElementById('printer-kitchen-slip-mode');
+  const copiesEl = document.getElementById('printer-kitchen-slip-copies');
+  if (!modeEl || !copiesEl) return;
+  copiesEl.disabled = modeEl.value !== 'combined';
+}
+document.getElementById('printer-kitchen-slip-mode')?.addEventListener('change', syncKitchenSlipCopiesEnabled);
+
 const kitchenPrinterForm = document.getElementById('form-kitchen-printers');
 if (kitchenPrinterForm) {
   kitchenPrinterForm.addEventListener('submit', async (e) => {
@@ -3961,6 +3975,8 @@ if (kitchenPrinterForm) {
     // Left out when the control is missing, so the server keeps its stored mode.
     const slipModeEl = document.getElementById('printer-kitchen-slip-mode');
     if (slipModeEl) payload.kitchen_slip_mode = slipModeEl.value === 'combined' ? 'combined' : 'per_item';
+    const slipCopiesEl = document.getElementById('printer-kitchen-slip-copies');
+    if (slipCopiesEl) payload.kitchen_slip_copies = clampKitchenSlipCopies(slipCopiesEl.value);
     try {
       const res = await fetch(`${API_BASE}/api/admin/kitchen-printers`, {
         method: 'PUT',
@@ -4079,6 +4095,9 @@ async function loadKitchenPrinterSettings() {
     if (paperWidthEl) paperWidthEl.value = String(data.paper_width_px || 576);
     const slipModeEl = document.getElementById('printer-kitchen-slip-mode');
     if (slipModeEl) slipModeEl.value = data.kitchen_slip_mode === 'combined' ? 'combined' : 'per_item';
+    const slipCopiesEl = document.getElementById('printer-kitchen-slip-copies');
+    if (slipCopiesEl) slipCopiesEl.value = String(clampKitchenSlipCopies(data.kitchen_slip_copies));
+    syncKitchenSlipCopiesEnabled();
     syncPrinterModalConnectionFields();
   } catch (err) {
     console.error(err);

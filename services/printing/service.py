@@ -300,6 +300,8 @@ async def dispatch_kitchen_ticket(
                 if item_ticket.get("batch_number") is not None
                 else None
             ),
+            copy_number=item_ticket.get("copy_number"),
+            copy_total=item_ticket.get("copy_total"),
         )
     else:
         ticket_text = build_ticket_text(

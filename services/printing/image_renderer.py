@@ -13,11 +13,15 @@ from services.printing.myanmar_shaper import (
     shaping_backend,
 )
 from services.printing.print_log import ensure_print_file_logging
+from services.printing.ticket import banner_text, is_banner_line
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_FONT_SIZE = 28
 LINE_GAP_PX = 8
+# Banner lines (e.g. "COPY 2 / 3"): white text on a full-width black bar.
+BANNER_FONT_SIZE = 60
+BANNER_PADDING_Y_PX = 16
 PADDING_X_PX = 18
 PADDING_Y_PX = 16
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -299,6 +303,27 @@ def _draw_line(
         cursor_x += max(bbox[2] - bbox[0], 0)
 
 
+def _banner_height(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
+    bbox = _text_bbox(draw, text or " ", font)
+    return max(bbox[3] - bbox[1], DEFAULT_FONT_SIZE) + 2 * BANNER_PADDING_Y_PX
+
+
+def _draw_banner(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    *,
+    y: int,
+    width: int,
+    height: int,
+    font: ImageFont.ImageFont,
+) -> None:
+    draw.rectangle((0, y, width, y + height), fill=0)
+    bbox = _text_bbox(draw, text or " ", font)
+    text_w, text_h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    x = max((width - text_w) // 2, 0)
+    draw.text((x - bbox[0], y + (height - text_h) // 2 - bbox[1]), text, fill=255, font=font)
+
+
 def render_ticket_image(
     ticket_text: str,
     *,
@@ -315,11 +340,17 @@ def render_ticket_image(
     )
     myanmar_font, latin_font, myanmar_font_path = _load_font_chain(font_path)
     lines = ticket_text.rstrip("\n").splitlines() or [""]
+    banner_font: ImageFont.ImageFont | None = None
+    if any(is_banner_line(line) for line in lines):
+        banner_font = _load_font_chain(font_path, BANNER_FONT_SIZE)[1]
 
     probe = Image.new("L", (width, 10), 255)
     draw = ImageDraw.Draw(probe)
     line_heights: list[int] = []
     for line in lines:
+        if banner_font is not None and is_banner_line(line):
+            line_heights.append(_banner_height(draw, banner_text(line), banner_font))
+            continue
         _line_width, line_height = _measure_line(
             draw,
             line,
@@ -335,6 +366,12 @@ def render_ticket_image(
 
     y = PADDING_Y_PX
     for line, line_height in zip(lines, line_heights, strict=True):
+        if banner_font is not None and is_banner_line(line):
+            _draw_banner(
+                draw, banner_text(line), y=y, width=width, height=line_height, font=banner_font
+            )
+            y += line_height + LINE_GAP_PX
+            continue
         _draw_line(
             draw,
             line,

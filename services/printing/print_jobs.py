@@ -122,12 +122,14 @@ def create_kitchen_jobs_for_batch(
     batch_number: int | None,
     order_type: str,
     customer_name: str | None,
+    copies: int = 1,
 ) -> list[PrintJob]:
     """Add (not commit) the kitchen slips of one submit.
 
     ``lines``: (printer route, item payload, order line id) in submission order.
     ``per_item`` → one slip per line. ``combined`` → one slip per printer route
-    listing that route's lines (specs/feature-kitchen-slip-mode).
+    listing that route's lines, printed ``copies`` times; each copy is its own
+    job so a failed copy is retried alone (specs/feature-kitchen-slip-mode).
     """
     meta = {"table_number": table_number, "order_id": order_id, "date": date}
     if slip_mode != SLIP_MODE_COMBINED:
@@ -147,18 +149,26 @@ def create_kitchen_jobs_for_batch(
     by_route: dict[str, list[dict[str, Any]]] = {}
     for route, item, line_id in lines:
         by_route.setdefault(route, []).append({**item, "order_item_id": line_id})
-    return [
-        create_kitchen_job(
-            db,
-            order_id=order_id,
-            order_item_id=None,
-            route=route,
-            ticket={"items": items, **meta, "batch_number": batch_number},
-            order_type=order_type,
-            customer_name=customer_name,
-        )
-        for route, items in by_route.items()
-    ]
+    copy_total = max(int(copies or 1), 1)
+    jobs: list[PrintJob] = []
+    for route, items in by_route.items():
+        for copy_number in range(1, copy_total + 1):
+            ticket: dict[str, Any] = {"items": items, **meta, "batch_number": batch_number}
+            if copy_total > 1:
+                ticket["copy_number"] = copy_number
+                ticket["copy_total"] = copy_total
+            jobs.append(
+                create_kitchen_job(
+                    db,
+                    order_id=order_id,
+                    order_item_id=None,
+                    route=route,
+                    ticket=ticket,
+                    order_type=order_type,
+                    customer_name=customer_name,
+                )
+            )
+    return jobs
 
 
 def create_receipt_job(
@@ -265,6 +275,9 @@ def job_to_dict(job: PrintJob) -> dict[str, Any]:
             session = object_session(job)
             remaining = _active_items(session, combined) if session is not None else combined
             item_label = _combined_label(remaining or combined)
+            copy_total = int(ticket.get("copy_total") or 1)
+            if copy_total > 1:
+                item_label += f" (copy {int(ticket.get('copy_number') or 1)}/{copy_total})"
         else:
             name = str(ticket.get("item_name") or "Kitchen slip")
             item_label = f"{name} x{int(ticket.get('quantity') or 1)}"

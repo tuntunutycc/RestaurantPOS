@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-11-16 — Kitchen slip copies with a large COPY banner
+
+### Summary
+With **All items on one slip**, admins can print each kitchen slip 1, 2 or 3 times. Every copy starts with a large `COPY 1 / 3` banner (white on a black bar across the paper) so staff can tell the copies apart and see how many there should be.
+
+### Added
+- `kitchen_printer_settings.kitchen_slip_copies` (1–3, default 1); added to existing databases at startup.
+- `GET/PUT /api/admin/kitchen-printers`: `kitchen_slip_copies` (optional on PUT; omitted keeps the stored value; anything but an integer 1–3 → `422`).
+- Menu Management → Kitchen Printer Settings: **Copies** select next to **Kitchen slip**; greyed out while **One slip per item** is selected.
+
+### Behaviour
+- Copies apply only to combined kitchen slips. Single-item slips and receipts are always printed once.
+- Each copy is its own print job, sent one after another to the same printer. A copy that fails is listed as `… (copy 2/3)` under **Print failed** and Retry prints only that copy.
+- With 1 copy nothing changes: no banner, same jobs, same bytes sent to the printer.
+- Banner by print mode: image mode draws a black bar with large white text; text mode uses ESC/POS centre + double size + reverse; the file backend writes a framed three-line block.
+- The setting is read when the order is submitted, like the slip mode.
+
+### Spec
+- `specs/feature-kitchen-slip-mode/` (FR-SM7, plan step 9, validation), `api-reference.md`, `database-schema.md`.
+
+### Tests
+- `tests/test_kitchen_slip_mode.py` (52). Suite: 374 passed.
+
+### Review checklist
+- Security: no new endpoint; the value is bounded by the schema (1–3, strict integer), so a request cannot make the printer produce an arbitrary number of slips. A bad value already in the database behaves as 1.
+- Roles: only root/admin can change it (`403` waiter/cashier/account — tested).
+- Money/state: copies add print jobs only; order lines and totals are unchanged (tested).
+- Edge cases: 1 copy, `per_item` with copies stored, food + drinks order, one copy failing, printer lost between copies, line cancelled before retry, older client that does not send the field, existing database without the column.
+- Not verified: a real thermal printer. In text mode the banner needs ESC/POS reverse printing (`GS B`); a printer without it shows the banner large but black on white.
+
 ## 2026-11-16 — Kitchen slip mode: one slip per item or all items on one slip
 
 ### Summary
@@ -17,12 +47,14 @@ Admins can choose how an order is printed for the kitchen: **One slip per item**
 
 ### Fixed (tests)
 - `tests/conftest.py` now points the app database at a throwaway file before anything imports `database`. `test_order_history_page_routes` boots the real app lifespan, which was running `create_all` / `ALTER TABLE` / startup clean-up on the developer's real `pos.db` on every test run.
+- `tests/conftest.py` also sends the file print backend to a throwaway folder, so test slips are no longer appended to the local `*_printer_output.txt` files.
 
 ### Spec
 - `specs/feature-kitchen-slip-mode/` (requirements, plan, validation); kitchen-printing, print-queue, `api-reference.md`, `database-schema.md`.
 
 ### Tests
-- `tests/test_kitchen_slip_mode.py` (24). Suite: 346 passed.
+- `tests/test_kitchen_slip_mode.py` (28). Suite: 350 passed.
+- Includes real-socket tests with one listener per printer: in both modes kitchen slips reach only the kitchen printer and the receipt only the cashier printer (LAN and Windows cashier queue).
 
 ### Review checklist
 - Security: no new endpoint; the setting is validated by the schema (`422` for anything but the two values).

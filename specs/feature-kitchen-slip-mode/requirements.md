@@ -20,6 +20,9 @@ An admin setting chooses how kitchen slips are printed when an order is submitte
 | When the mode is read | At submit. A slip already recorded keeps its form: **Retry** reprints it the way it was created, even if the mode changed since |
 | Cancelled lines | A combined slip that is sent late or retried leaves out lines cancelled in the meantime. If every line is cancelled it is not printed |
 | Receipts | Not affected |
+| Copies | `combined` mode can print each slip 1–3 times. `per_item` always prints one |
+| Copy marking | Every copy carries a large `COPY n / N` banner at the top so a duplicate is not cooked twice |
+| Copy failures | Each copy is its own print job: only the copy that failed is retried |
 
 ## Functional requirements
 
@@ -57,8 +60,23 @@ An admin setting chooses how kitchen slips are printed when an order is submitte
 - Menu Management → Kitchen Printer Settings: **Kitchen slip** select with the two modes, saved with **Save Print Mode**.
 - Applies to the next submitted order; no restart needed.
 
+### FR-SM7: Copies of a combined slip
+- Column `kitchen_printer_settings.kitchen_slip_copies` `Integer NOT NULL DEFAULT 1`; values `1`–`3`. Added to existing databases at startup. A stored value outside the range behaves as `1`.
+- API: `kitchen_slip_copies` on `KitchenPrinterSettingsResponse`; optional on `KitchenPrinterSettingsUpdate` (omitted → unchanged; outside 1–3 or not a whole number → `422`).
+- Applies only when the mode is `combined`. In `per_item` the value is stored but ignored.
+- With N > 1, submit records N `print_jobs` rows per printer route (copy 1…N, then the next route). Each ticket payload carries `copy_number` and `copy_total`. With N = 1 nothing is added and the slip is unchanged.
+- Each copy starts with a banner `COPY n / N`:
+  - image mode: full-width black bar with large white text;
+  - text mode: centred, double-size, reversed ESC/POS text;
+  - file backend: a framed three-line block.
+- `PrintJobResponse.item_label` of a copy ends with ` (copy n/N)`.
+- Queue behaviour is that of any slip (FR-SM5): copies are sent one after another with the usual pause; a failed copy is retried alone; cancelled lines are left out of every copy.
+- Admin UI: **Copies** select (1 / 2 / 3) next to **Kitchen slip**, disabled while **One slip per item** is selected.
+
 ## Non-goals
 - A different mode per printer.
 - Letting the waiter choose per order.
 - Combining food and drinks on one slip.
 - Re-printing slips that were already printed when the mode changes.
+- Copies of single-item slips or of receipts.
+- A different number of copies per printer.

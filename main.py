@@ -589,6 +589,17 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE kitchen_printer_settings "
+                    "ADD COLUMN kitchen_slip_copies INTEGER NOT NULL DEFAULT 1"
+                )
+            )
+    except Exception:
+        pass
     # Existing DBs that already have printers: mark seed done so wipe stays wiped.
     try:
         from sqlalchemy import text

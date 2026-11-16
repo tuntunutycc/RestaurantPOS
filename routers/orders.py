@@ -23,7 +23,7 @@ from services.order_history import (
 from services.printing.health import check_route_health, warning_for_offline_routes
 from services.printing.routes import resolve_printer_route
 from services.printing.print_log import get_print_logger
-from services.printing.settings import load_kitchen_slip_mode
+from services.printing.settings import load_kitchen_slip_copies, load_kitchen_slip_mode
 from services.printing.print_jobs import (
     create_kitchen_jobs_for_batch,
     create_receipt_job,
@@ -1426,6 +1426,7 @@ async def submit_order(
             jobs = create_kitchen_jobs_for_batch(
                 db,
                 slip_mode=load_kitchen_slip_mode(db),
+                copies=load_kitchen_slip_copies(db),
                 order_id=print_meta["order_id"],
                 lines=[
                     (printer_route, item_payload, order_line.id)

@@ -45,6 +45,8 @@ class KitchenPrinterSettings(Base):
     paper_width_px = Column(Integer, nullable=False, default=576)
     # per_item = one kitchen slip per order line; combined = one per printer route.
     kitchen_slip_mode = Column(String(16), nullable=False, default="per_item")
+    # Copies of each combined kitchen slip (1-3); ignored in per_item mode.
+    kitchen_slip_copies = Column(Integer, nullable=False, default=1)
     # Once true, empty printers table is treated as intentional (do not re-seed defaults).
     default_printers_seeded = Column(Boolean, nullable=False, default=False)
 

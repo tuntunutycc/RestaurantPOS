@@ -405,6 +405,28 @@ def normalize_kitchen_slip_mode(raw: str | None) -> str:
     return value if value in KITCHEN_SLIP_MODES else DEFAULT_KITCHEN_SLIP_MODE
 
 
+KITCHEN_SLIP_COPIES_MIN = 1
+KITCHEN_SLIP_COPIES_MAX = 3
+
+
+def normalize_kitchen_slip_copies(raw) -> int:
+    """Copies of a combined kitchen slip; anything outside 1–3 behaves as 1."""
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return KITCHEN_SLIP_COPIES_MIN
+    if KITCHEN_SLIP_COPIES_MIN <= value <= KITCHEN_SLIP_COPIES_MAX:
+        return value
+    return KITCHEN_SLIP_COPIES_MIN
+
+
+def load_kitchen_slip_copies(db: Session | None) -> int:
+    if db is None:
+        return KITCHEN_SLIP_COPIES_MIN
+    settings = db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    return normalize_kitchen_slip_copies(getattr(settings, "kitchen_slip_copies", None))
+
+
 def load_kitchen_slip_mode(db: Session | None) -> str:
     """``per_item`` (one slip per order line) or ``combined`` (one per printer route)."""
     if db is None:

@@ -11,6 +11,11 @@ from collections.abc import Generator
 _APP_DB_DIR = tempfile.mkdtemp(prefix="pos-tests-")
 atexit.register(shutil.rmtree, _APP_DB_DIR, ignore_errors=True)
 os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_APP_DB_DIR, 'app.db')}"
+# Same for the file print backend: without this, slips printed by tests are
+# appended to the developer's own *_printer_output.txt in the repo root.
+_PRINT_OUTPUT_DIR = os.path.join(_APP_DB_DIR, "print-output")
+os.makedirs(_PRINT_OUTPUT_DIR, exist_ok=True)
+os.environ["KITCHEN_PRINT_OUTPUT_DIR"] = _PRINT_OUTPUT_DIR
 
 import pytest
 from fastapi import FastAPI

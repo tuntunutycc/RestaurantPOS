@@ -173,7 +173,7 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 
 ## `kitchen_printer_settings`
 
-Singleton row `id=1`: `backend` (`file` \| `escpos_network` \| `windows_printer`), `render_mode`, `paper_width_px`, `kitchen_slip_mode` (`per_item` default \| `combined`; String(16) NOT NULL, added at startup on existing databases).
+Singleton row `id=1`: `backend` (`file` \| `escpos_network` \| `windows_printer`), `render_mode`, `paper_width_px`, `kitchen_slip_mode` (`per_item` default \| `combined`; String(16) NOT NULL, added at startup on existing databases), `kitchen_slip_copies` (Integer NOT NULL default 1; 1–3 copies of each combined slip, any other stored value behaves as 1; added at startup on existing databases).
 
 ---
 

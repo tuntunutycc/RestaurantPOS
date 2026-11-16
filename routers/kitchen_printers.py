@@ -18,6 +18,7 @@ from services.printing.backends.escpos_windows import (
     windows_printing_available,
 )
 from services.printing.settings import (
+    normalize_kitchen_slip_copies,
     normalize_kitchen_slip_mode,
     seed_kitchen_printer_settings,
 )
@@ -45,6 +46,9 @@ def _build_settings_response(db: Session) -> KitchenPrinterSettingsResponse:
         paper_width_px=paper_width_px,
         kitchen_slip_mode=normalize_kitchen_slip_mode(
             getattr(settings, "kitchen_slip_mode", None)
+        ),
+        kitchen_slip_copies=normalize_kitchen_slip_copies(
+            getattr(settings, "kitchen_slip_copies", None)
         ),
         routes=[],
     )
@@ -76,6 +80,8 @@ def update_kitchen_printer_settings(
     settings.paper_width_px = body.paper_width_px
     if body.kitchen_slip_mode is not None:
         settings.kitchen_slip_mode = body.kitchen_slip_mode
+    if body.kitchen_slip_copies is not None:
+        settings.kitchen_slip_copies = body.kitchen_slip_copies
     db.commit()
     return _build_settings_response(db)
 

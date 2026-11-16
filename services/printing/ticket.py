@@ -4,6 +4,42 @@ from __future__ import annotations
 
 from PIL import Image
 
+# A ticket line starting with this marker is a banner. It is printed large and
+# inverted (image mode, ESC/POS text) or as a framed block (plain text files),
+# so it cannot be overlooked. Used for "COPY n / N" on kitchen slip copies.
+BANNER_PREFIX = "@@BANNER@@ "
+TICKET_TEXT_WIDTH = 33
+
+
+def banner_line(text: str) -> str:
+    return f"{BANNER_PREFIX}{text.strip()}"
+
+
+def is_banner_line(line: str) -> bool:
+    return line.startswith(BANNER_PREFIX)
+
+
+def banner_text(line: str) -> str:
+    return line[len(BANNER_PREFIX):].strip()
+
+
+def copy_banner_text(copy_number: int, copy_total: int) -> str:
+    return f"COPY {copy_number} / {copy_total}"
+
+
+def plain_ticket_text(text: str) -> str:
+    """Ticket text for plain files: each banner becomes a framed three-line block."""
+    if BANNER_PREFIX not in text:
+        return text
+    edge = "#" * TICKET_TEXT_WIDTH
+    out: list[str] = []
+    for line in text.split("\n"):
+        if is_banner_line(line):
+            out.extend([edge, f"###{banner_text(line).center(TICKET_TEXT_WIDTH - 6)}###", edge])
+        else:
+            out.append(line)
+    return "\n".join(out)
+
 
 def _modifier_ticket_lines(selected_modifiers) -> list[str]:
     """Pattern A: list each topping under the parent item."""
@@ -125,10 +161,13 @@ def build_batch_ticket_text(
     order_type: str = "dine_in",
     customer_name: str | None = None,
     batch_number: int | None = None,
+    copy_number: int | None = None,
+    copy_total: int | None = None,
 ) -> str:
     """One combined kitchen slip for a submit batch (no prices).
 
     ``items`` entries: item_name, quantity, note?, selected_modifiers?, is_takeaway?
+    With ``copy_total`` > 1 the slip starts with a ``COPY n / N`` banner.
     """
     lines = _ticket_header_lines(
         route=route,
@@ -142,6 +181,8 @@ def build_batch_ticket_text(
     if batch_number is not None:
         # Insert batch after Time line (index 4 is Time, 5 is separator)
         lines.insert(5, f"Batch: #{batch_number}")
+    if copy_number and copy_total and int(copy_total) > 1:
+        lines.insert(0, banner_line(copy_banner_text(int(copy_number), int(copy_total))))
 
     body_items = list(items or [])
     if not body_items:
@@ -164,11 +205,39 @@ def build_batch_ticket_text(
     return "\n".join(lines)
 
 
+_ESC_ALIGN_CENTER = b"\x1b\x61\x01"
+_ESC_ALIGN_LEFT = b"\x1b\x61\x00"
+_GS_SIZE_DOUBLE = b"\x1d\x21\x11"  # double width + double height
+_GS_SIZE_NORMAL = b"\x1d\x21\x00"
+_GS_REVERSE_ON = b"\x1d\x42\x01"  # white on black
+_GS_REVERSE_OFF = b"\x1d\x42\x00"
+
+
+def _escpos_text_with_banners(text: str) -> bytes:
+    """Text body where banner lines are centred, double-size and reversed."""
+    body = bytearray()
+    lines = text.split("\n")
+    for index, line in enumerate(lines):
+        if is_banner_line(line):
+            body.extend(_ESC_ALIGN_CENTER + _GS_SIZE_DOUBLE + _GS_REVERSE_ON)
+            body.extend(f" {banner_text(line)} ".encode("utf-8"))
+            body.extend(_GS_REVERSE_OFF + _GS_SIZE_NORMAL)
+            body.extend(b"\n" + _ESC_ALIGN_LEFT)
+            continue
+        body.extend(line.encode("utf-8"))
+        if index < len(lines) - 1:
+            body.extend(b"\n")
+    return bytes(body)
+
+
 def build_escpos_text_payload(text: str) -> bytes:
     """Minimal ESC/POS payload: initialize, UTF-8 text, feed, full cut."""
     payload = bytearray()
     payload.extend(b"\x1b\x40")  # ESC @ initialize
-    payload.extend(text.encode("utf-8"))
+    if BANNER_PREFIX in text:
+        payload.extend(_escpos_text_with_banners(text))
+    else:
+        payload.extend(text.encode("utf-8"))
     payload.extend(b"\n\n")
     payload.extend(b"\x1d\x56\x00")  # GS V 0 full cut
     return bytes(payload)

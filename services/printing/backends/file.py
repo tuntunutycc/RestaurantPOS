@@ -11,11 +11,13 @@ from services.printing.config import (
     route_output_filename,
     route_output_image_filename,
 )
+from services.printing.ticket import plain_ticket_text
 
 
 def send_file_ticket(config: PrinterConfig, route: str, ticket_text: str) -> None:
     filename = route_output_filename(route)
     output_path = os.path.join(config.output_dir, filename)
+    ticket_text = plain_ticket_text(ticket_text)
     with open(output_path, "a", encoding="utf-8") as handle:
         handle.write(ticket_text)
         if not ticket_text.endswith("\n"):

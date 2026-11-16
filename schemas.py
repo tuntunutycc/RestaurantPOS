@@ -173,6 +173,8 @@ class KitchenPrinterSettingsResponse(BaseModel):
     render_mode: PrinterRenderModeLiteral = "text"
     paper_width_px: int = 576
     kitchen_slip_mode: KitchenSlipModeLiteral = "per_item"
+    # Copies of each combined kitchen slip; ignored in per_item mode.
+    kitchen_slip_copies: int = 1
     routes: list[PrinterRouteEndpointResponse] = Field(default_factory=list)
 
 
@@ -184,6 +186,8 @@ class KitchenPrinterSettingsUpdate(BaseModel):
     paper_width_px: int = Field(default=576)
     # Omitted = keep the stored mode (clients that predate this field).
     kitchen_slip_mode: KitchenSlipModeLiteral | None = None
+    # Omitted = keep the stored value. strict: "2" or 2.0 are not accepted.
+    kitchen_slip_copies: int | None = Field(default=None, ge=1, le=3, strict=True)
     routes: list[PrinterRouteEndpointUpdate] = Field(default_factory=list)
 
     @model_validator(mode="after")
