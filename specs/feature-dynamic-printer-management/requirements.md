@@ -12,7 +12,9 @@ Admins manage an unlimited number of named LAN printers via CRUD. Fresh installs
 ## Seed (minimal)
 1. Default Cashier Printer — `role=cashier`
 2. Default Kitchen Printer — `role=kitchen`
-- Invoked from lifespan + `scripts/seed_root.py` (idempotent when any printer exists after migration)
+3. Default Bar Printer — only when legacy/env drinks host exists (why some installs see **3** defaults)
+- Invoked from lifespan + `scripts/seed_root.py`
+- **Once-only:** `KitchenPrinterSettings.default_printers_seeded` marks first seed done. After that, deleting all printers leaves the table empty (list/resolve must **not** re-create defaults).
 
 ## Admin API
 | Method | Path | Roles |
@@ -21,6 +23,7 @@ Admins manage an unlimited number of named LAN printers via CRUD. Fresh installs
 | POST | `/api/printers` | Admin |
 | PUT | `/api/printers/{id}` | Admin |
 | DELETE | `/api/printers/{id}` | Admin |
+| POST | `/api/printers/{id}/test-print` | Admin | See `feature-printer-test-print` |
 
 ## UI
-Menu Management (counter): dynamic printer table + Add/Edit modal + Delete; keep print-mode controls.
+Menu Management (counter): dynamic printer table + Add/Edit modal + Delete + **Print Test**; keep print-mode controls.

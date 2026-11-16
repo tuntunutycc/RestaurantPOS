@@ -43,6 +43,8 @@ class KitchenPrinterSettings(Base):
     backend = Column(String(32), nullable=False, default="file")
     render_mode = Column(String(32), nullable=False, default="text")
     paper_width_px = Column(Integer, nullable=False, default=576)
+    # Once true, empty printers table is treated as intentional (do not re-seed defaults).
+    default_printers_seeded = Column(Boolean, nullable=False, default=False)
 
 
 class PrinterRouteEndpoint(Base):

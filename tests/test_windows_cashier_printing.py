@@ -114,7 +114,7 @@ def test_windows_printers_list_role_gate(client, auth_headers, monkeypatch):
 
 
 def test_printer_crud_persists_windows_printer_name(client, db_session, auth_headers):
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     create = client.post(
         "/api/printers",
         headers=auth_headers("admin"),
@@ -152,7 +152,7 @@ def test_checkout_windows_backend_sends_raw_receipt(
     client, db_session, auth_headers, monkeypatch, tmp_path
 ):
     _set_windows_backend(db_session)
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     cashier = (
         db_session.query(Printer)
         .filter(Printer.role == "cashier", Printer.is_active.is_(True))
@@ -213,7 +213,7 @@ def test_checkout_windows_missing_queue_soft_fails(
     client, db_session, auth_headers, monkeypatch
 ):
     _set_windows_backend(db_session)
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     for row in db_session.query(Printer).filter(Printer.role == "cashier").all():
         row.windows_printer_name = None
     db_session.commit()
@@ -248,7 +248,7 @@ def test_kitchen_ticket_windows_backend_file_backup_then_fails_without_lan_host(
 ):
     """windows_printer + no kitchen LAN host: write file backup, then raise (no silent OK)."""
     _set_windows_backend(db_session)
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     for row in db_session.query(Printer).filter(Printer.role == "kitchen").all():
         row.host = None
     db_session.commit()
@@ -292,7 +292,7 @@ def test_kitchen_ticket_windows_backend_keeps_lan_when_host_set(
     client, db_session, auth_headers, monkeypatch
 ):
     _set_windows_backend(db_session)
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     kitchen = (
         db_session.query(Printer)
         .filter(Printer.role == "kitchen", Printer.is_active.is_(True))
@@ -361,6 +361,35 @@ def test_windows_print_error_messages_are_actionable(monkeypatch):
         msg = str(exc).lower()
         assert "offline" in msg or "disconnected" in msg
         assert "posprinter" in msg.lower()
+
+
+def test_list_windows_printers_merges_local_and_connection_queues(monkeypatch):
+    """LOCAL-only and CONNECTIONS-only rows must both appear (not network-only)."""
+    from services.printing.backends import escpos_windows as win_mod
+
+    class FakeWin32:
+        PRINTER_ENUM_LOCAL = 1
+        PRINTER_ENUM_CONNECTIONS = 2
+        PRINTER_ENUM_NETWORK = 4
+
+        @staticmethod
+        def EnumPrinters(flags, name=None, level=1):
+            # Combined LOCAL|CONNECTIONS often misses USB on Win11 — return empty.
+            if flags == (1 | 2):
+                return []
+            if flags == 1 and level == 4:
+                return [("POSPrinter POS-80(300DPI)", "", 0)]
+            if flags == 2 and level == 1:
+                return [(0, "Network", "\\\\office\\HP LaserJet", "")]
+            if flags == 4 and level == 1:
+                return [(0, "Dir", "Directory Printer", "")]
+            return []
+
+    monkeypatch.setattr(win_mod, "win32print", FakeWin32)
+    names = win_mod.list_windows_printers()
+    assert "POSPrinter POS-80(300DPI)" in names
+    assert "\\\\office\\HP LaserJet" in names
+    assert "Directory Printer" in names
 
 
 def test_put_kitchen_printers_accepts_windows_backend(client, db_session, auth_headers):

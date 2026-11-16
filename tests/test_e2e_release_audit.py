@@ -277,7 +277,7 @@ def test_split_payment_change_due_5000_mobile_3000_cash_3000(
 def test_admin_printer_create_persists_and_delete_missing_returns_404(
     client, db_session, auth_headers
 ):
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
 
     missing = client.delete(
         "/api/printers/999999",

@@ -196,7 +196,7 @@ Dynamic named printers (Admin CRUD). LAN uses `host`/`port`; Windows cashier rec
 | `role` | String(32) | `cashier` \| `kitchen` \| `bar` \| `other` |
 | `is_active` | Boolean | |
 
-Seed defaults: Default Cashier + Default Kitchen. Category map: `food`→kitchen, `drinks`→bar (fallback kitchen).
+Seed defaults: Default Cashier + Default Kitchen (optional Default Bar if drinks host in env/legacy). `kitchen_printer_settings.default_printers_seeded` prevents re-seeding after an admin deletes all printers. Category map: `food`→kitchen, `drinks`→bar (fallback kitchen).
 
 ---
 

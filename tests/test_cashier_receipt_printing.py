@@ -112,7 +112,7 @@ def test_checkout_file_backend_with_printer_id_no_host_writes_txt(
     monkeypatch.setenv("SHOP_NAME", "File Test Cafe")
     monkeypatch.delenv("PRINTER_CASHIER_HOST", raising=False)
     seed_kitchen_printer_settings(db_session)
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     settings = db_session.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
     settings.backend = "file"
     settings.render_mode = "text"
@@ -296,7 +296,7 @@ def test_receipt_text_includes_note_and_pre_tax_line_amount():
 def test_checkout_printer_connection_error_returns_warning(
     client, db_session, auth_headers, monkeypatch
 ):
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     cashier = (
         db_session.query(Printer)
         .filter(Printer.role == "cashier")
@@ -369,7 +369,7 @@ def test_checkout_skip_receipt_does_not_dispatch(client, db_session, auth_header
 
 def test_list_cashier_printers_api(client, db_session, auth_headers):
     seed_kitchen_printer_settings(db_session)
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     if db_session.query(Printer).filter(Printer.role == "cashier").count() < 2:
         db_session.add(
             Printer(
@@ -400,7 +400,7 @@ def test_checkout_with_printer_id_targets_selected_printer(
     client, db_session, auth_headers, monkeypatch
 ):
     seed_kitchen_printer_settings(db_session)
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     printer = Printer(
         name="Terminal A",
         host="10.0.0.55",
@@ -475,7 +475,7 @@ def test_checkout_invalid_printer_id_returns_400(client, db_session, auth_header
 
 
 def test_printer_crud_create_update_delete(client, db_session, auth_headers):
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     create = client.post(
         "/api/printers",
         headers=auth_headers("admin"),
@@ -513,9 +513,28 @@ def test_printer_crud_create_update_delete(client, db_session, auth_headers):
 def test_seed_default_printers_creates_cashier_and_kitchen(db_session):
     db_session.query(Printer).delete()
     db_session.commit()
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     roles = {p.role for p in db_session.query(Printer).all()}
     assert "cashier" in roles
     assert "kitchen" in roles
     # Fresh seed without drinks host should not force a bar printer
     assert db_session.query(Printer).count() == 2
+
+
+def test_delete_all_printers_does_not_reseed_on_list(client, db_session, auth_headers):
+    """Admin wipe must stick — GET /api/printers must not recreate defaults."""
+    seed_kitchen_printer_settings(db_session)
+    seed_default_printers(db_session, force=True)
+    assert db_session.query(Printer).count() >= 2
+
+    for row in db_session.query(Printer).all():
+        res = client.delete(f"/api/printers/{row.id}", headers=auth_headers("admin"))
+        assert res.status_code == 200, res.text
+
+    assert db_session.query(Printer).count() == 0
+    listing = client.get("/api/printers", headers=auth_headers("admin"))
+    assert listing.status_code == 200, listing.text
+    assert listing.json() == []
+    assert db_session.query(Printer).count() == 0
+    # Shared in-memory DB: restore defaults for later tests
+    seed_default_printers(db_session, force=True)

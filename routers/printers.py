@@ -12,6 +12,7 @@ from schemas import (
     PrinterHealthResponse,
     PrinterResponse,
     PrinterRouteHealthItem,
+    PrinterTestPrintResponse,
     PrinterUpdate,
 )
 from services.printing.config import PRINTER_ROLES
@@ -19,6 +20,7 @@ from services.printing.health import (
     check_kitchen_printers_health,
     warning_for_offline_routes,
 )
+from services.printing.service import dispatch_printer_test
 from services.printing.settings import load_printer_config, seed_default_printers
 
 router = APIRouter(prefix="/api")
@@ -168,3 +170,27 @@ def delete_printer(
     db.delete(row)
     db.commit()
     return {"ok": True, "id": printer_id}
+
+
+@router.post(
+    "/printers/{printer_id}/test-print",
+    response_model=PrinterTestPrintResponse,
+)
+async def test_print_printer(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
+):
+    """Send a short TEST PRINT slip to this printer. Admin/root only."""
+    try:
+        result = await dispatch_printer_test(printer_id=printer_id, db=db)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Test print failed: {exc}",
+        ) from exc
+    return PrinterTestPrintResponse(**result)

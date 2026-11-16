@@ -112,6 +112,7 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | POST | `/api/printers` | Admin | Create (optional `windows_printer_name`) |
 | PUT | `/api/printers/{id}` | Admin | Update |
 | DELETE | `/api/printers/{id}` | Admin | Delete |
+| POST | `/api/printers/{id}/test-print` | Admin | Short TEST PRINT slip to that row; `PrinterTestPrintResponse` or `502` |
 
 ---
 

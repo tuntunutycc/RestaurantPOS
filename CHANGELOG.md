@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-11-16 — Stop re-seeding default printers after admin delete-all
+
+### Summary
+Deleting every printer no longer brings back Default Cashier / Kitchen / Bar on the next list. First-install seed still runs once; `KitchenPrinterSettings.default_printers_seeded` records that. (Three defaults appear when `.env` has a drinks LAN host.)
+
+### Spec
+- `specs/feature-dynamic-printer-management/`
+
+## 2026-11-16 — Admin Print Test on Printers table
+
+### Summary
+Each Printers row has **Print Test** (admin/root). `POST /api/printers/{id}/test-print` sends a short TEST PRINT slip to that printer (Windows queue / LAN host / file) and returns success or a clear `502` error. Does not replace LAN health **Check now**.
+
+### Spec
+- `specs/feature-printer-test-print/`
+
+## 2026-11-16 — Restore full Windows printer queue list for cashier setup
+
+### Summary
+Admin cashier printer setup again lists **all** Windows queues (USB / Bluetooth / local / network), not a partial network-only set. Enumeration now merges separate LOCAL + CONNECTIONS (+ NETWORK) passes across info levels. Opening Add/Edit Printer refreshes print mode from the API so the Windows queue field is not stuck behind LAN-only fields. Queue picker is a datalist input (select or type exact name).
+
+### Spec
+- `specs/feature-windows-cashier-printing/` FR-W3
+
 ## 2026-11-15 — seed_root creates tables before inserting root
 
 ### Summary

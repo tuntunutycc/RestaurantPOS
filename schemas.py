@@ -534,6 +534,18 @@ class PrinterHealthResponse(BaseModel):
     warning: str | None = None
 
 
+class PrinterTestPrintResponse(BaseModel):
+    """Result of admin Print Test for one named printer."""
+
+    ok: bool
+    printer_id: int
+    printer_name: str
+    role: str
+    backend: str
+    target: str
+    message: str
+
+
 class OrderCreateResponse(BaseModel):
     """Response for create-order endpoint with summary fields."""
 

@@ -16,10 +16,14 @@ from services.printing.backends.escpos_network import (
 )
 from services.printing.backends.escpos_windows import send_raw_to_windows_printer
 from services.printing.backends.file import send_file_ticket, send_file_ticket_image
-from services.printing.config import CASHIER_PRINTER_ROUTE, PrinterEndpoint
+from services.printing.config import (
+    CASHIER_PRINTER_ROUTE,
+    ROLE_TO_LEGACY_ROUTE,
+    PrinterEndpoint,
+)
 from services.printing.image_renderer import render_ticket_image
 from services.printing.print_log import ensure_print_file_logging
-from services.printing.receipt import build_receipt_text
+from services.printing.receipt import build_receipt_text, shop_name
 from services.printing.routes import category_route_to_printer_role
 from services.printing.settings import (
     load_printer_config,
@@ -423,3 +427,79 @@ async def dispatch_cashier_receipt(
         endpoint_override=endpoint_override,
         windows_printer_name=windows_name,
     )
+
+
+def _test_print_route_for_role(role: str) -> str:
+    normalized = (role or "").strip().lower()
+    if normalized in ROLE_TO_LEGACY_ROUTE:
+        return ROLE_TO_LEGACY_ROUTE[normalized]
+    return "other" if normalized == "other" else "food"
+
+
+def build_printer_test_ticket_text(*, printer_name: str, role: str) -> str:
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return (
+        f"{'=' * 32}\n"
+        f"  TEST PRINT\n"
+        f"  {shop_name()}\n"
+        f"{'=' * 32}\n"
+        f"Printer: {printer_name}\n"
+        f"Role: {role}\n"
+        f"Time: {now}\n"
+        f"{'=' * 32}\n"
+    )
+
+
+async def dispatch_printer_test(*, printer_id: int, db: Session) -> dict[str, Any]:
+    """Send a short test slip to the named printer row. Raises on failure."""
+    from models import Printer
+
+    row = db.query(Printer).filter(Printer.id == printer_id).first()
+    if row is None:
+        raise LookupError(f"Printer id={printer_id} not found")
+
+    config = load_printer_config(db)
+    role = (row.role or "").strip().lower()
+    route = _test_print_route_for_role(role)
+    ticket_text = build_printer_test_ticket_text(printer_name=row.name, role=role)
+
+    windows_name: str | None = None
+    endpoint_override: PrinterEndpoint | None = None
+    host = (row.host or "").strip()
+
+    if role == "cashier" and config.backend == "windows_printer":
+        windows_name = (row.windows_printer_name or "").strip() or None
+        if not windows_name:
+            raise RuntimeError(
+                f"Cashier printer '{row.name}' has no Windows queue name — "
+                "set it in Admin before Print Test"
+            )
+        target = f"windows_queue={windows_name}"
+    elif host:
+        endpoint_override = PrinterEndpoint(host=host, port=int(row.port or 9100))
+        target = f"lan={endpoint_override.host}:{endpoint_override.port}"
+    elif config.backend == "escpos_network":
+        raise RuntimeError(
+            f"Printer '{row.name}' has no host:port (required for LAN print mode)"
+        )
+    else:
+        target = "file"
+
+    await _dispatch_payload(
+        route=route,
+        ticket_text=ticket_text,
+        db=db,
+        endpoint_override=endpoint_override,
+        windows_printer_name=windows_name,
+    )
+    return {
+        "ok": True,
+        "printer_id": int(row.id),
+        "printer_name": row.name,
+        "role": role,
+        "backend": config.backend,
+        "target": target,
+        "message": f"Test print sent to {row.name} ({target})",
+    }

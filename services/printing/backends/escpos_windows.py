@@ -19,29 +19,74 @@ def windows_printing_available() -> bool:
     return win32print is not None
 
 
+def _printer_name_from_row(row: Any, level: int) -> str | None:
+    """Extract queue name from EnumPrinters row (tuple or dict, levels 1/2/4/5)."""
+    if isinstance(row, dict):
+        for key in ("pPrinterName", "PrinterName", "name"):
+            val = row.get(key)
+            if val:
+                name = str(val).strip()
+                return name or None
+        return None
+    if not isinstance(row, (list, tuple)) or not row:
+        return None
+    # Level 1: (flags:int, description, name, comment) — name at index 2
+    if level == 1 or (isinstance(row[0], int) and len(row) >= 3):
+        try:
+            name = str(row[2]).strip()
+            return name or None
+        except Exception:
+            return None
+    # Level 4/5 (and many Level 2 tuple layouts): name at index 0
+    try:
+        name = str(row[0]).strip()
+        return name or None
+    except Exception:
+        return None
+
+
 def list_windows_printers() -> list[str]:
-    """Return installed local/connection printer queue names (sorted, unique)."""
+    """Return all installed Windows print queue names (USB, Bluetooth, network, etc.).
+
+    Enumerates LOCAL and CONNECTIONS separately (and combined), across common
+    info levels — a single LOCAL|CONNECTIONS call often misses USB queues on
+    Windows 10/11.
+    """
     ensure_print_file_logging()
     if win32print is None:
         logger.warning(
             "Windows printer list unavailable: pywin32 not installed or not on Windows"
         )
         return []
-    flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
-    try:
-        rows: list[Any] = win32print.EnumPrinters(flags)
-    except Exception as exc:
-        logger.error("Failed to enumerate Windows printers: %s", exc)
-        return []
+
+    flag_candidates: list[int] = []
+    for attr in ("PRINTER_ENUM_LOCAL", "PRINTER_ENUM_CONNECTIONS", "PRINTER_ENUM_NETWORK"):
+        if hasattr(win32print, attr):
+            flag_candidates.append(int(getattr(win32print, attr)))
+    # Combined LOCAL|CONNECTIONS (legacy single-call path)
+    local = int(getattr(win32print, "PRINTER_ENUM_LOCAL", 0) or 0)
+    connections = int(getattr(win32print, "PRINTER_ENUM_CONNECTIONS", 0) or 0)
+    if local and connections:
+        flag_candidates.append(local | connections)
+
+    levels = (4, 1, 2, 5)
     names: set[str] = set()
-    for row in rows or []:
-        # EnumPrinters returns tuples; name is typically index 2.
-        try:
-            name = str(row[2]).strip()
-        except Exception:
+    for flags in flag_candidates:
+        if not flags:
             continue
-        if name:
-            names.add(name)
+        for level in levels:
+            try:
+                rows: list[Any] = win32print.EnumPrinters(flags, None, level)
+            except Exception as exc:
+                logger.debug(
+                    "EnumPrinters flags=%s level=%s failed: %s", flags, level, exc
+                )
+                continue
+            for row in rows or []:
+                name = _printer_name_from_row(row, level)
+                if name:
+                    names.add(name)
+
     found = sorted(names)
     logger.info("Windows printer queues found=%s names=%s", len(found), found)
     return found

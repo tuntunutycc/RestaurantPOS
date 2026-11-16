@@ -567,6 +567,30 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE kitchen_printer_settings "
+                    "ADD COLUMN default_printers_seeded BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+    except Exception:
+        pass
+    # Existing DBs that already have printers: mark seed done so wipe stays wiped.
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "UPDATE kitchen_printer_settings SET default_printers_seeded = 1 "
+                    "WHERE id = 1 AND default_printers_seeded = 0 "
+                    "AND (SELECT COUNT(*) FROM printers) > 0"
+                )
+            )
+    except Exception:
+        pass
     # One active order per table: at most one row per table_number with status open/dining
     try:
         from sqlalchemy import text

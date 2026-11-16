@@ -52,7 +52,7 @@ def test_submit_with_offline_lan_warns_but_saves(
     client, db_session, auth_headers, monkeypatch
 ):
     seed_kitchen_printer_settings(db_session)
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     settings = db_session.query(KitchenPrinterSettings).filter_by(id=1).first()
     settings.backend = "escpos_network"
     db_session.commit()
@@ -138,7 +138,7 @@ def test_windows_backend_without_kitchen_lan_warns_on_submit(
     db_session.commit()
 
     # Active kitchen row with NO host → previous code fell back to file quietly.
-    seed_default_printers(db_session)
+    seed_default_printers(db_session, force=True)
     kitchen = (
         db_session.query(Printer)
         .filter(Printer.role == "kitchen", Printer.is_active.is_(True))

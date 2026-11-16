@@ -3988,11 +3988,12 @@ function isWindowsPrintBackend() {
 }
 
 async function loadWindowsPrinterOptions(selectedName = '') {
-  const select = document.getElementById('printer-form-windows-name');
+  const input = document.getElementById('printer-form-windows-name');
+  const datalist = document.getElementById('printer-form-windows-datalist');
   const hint = document.getElementById('printer-form-windows-hint');
-  if (!select) return;
+  if (!input) return;
   const wanted = String(selectedName || '').trim();
-  select.innerHTML = '<option value="">— Select installed printer —</option>';
+  if (datalist) datalist.innerHTML = '';
   if (hint) hint.textContent = 'Loading Windows printers…';
   try {
     const res = await fetch(`${API_BASE}/api/admin/windows-printers`, {
@@ -4004,34 +4005,31 @@ async function loadWindowsPrinterOptions(selectedName = '') {
     const printers = Array.isArray(data.printers) ? data.printers : [];
     printers.forEach((p) => {
       const name = String(p.name || '').trim();
-      if (!name) return;
+      if (!name || !datalist) return;
       const opt = document.createElement('option');
       opt.value = name;
-      opt.textContent = name;
-      select.appendChild(opt);
+      datalist.appendChild(opt);
     });
     if (wanted) {
-      const exists = Array.from(select.options).some((o) => o.value === wanted);
-      if (!exists) {
-        const opt = document.createElement('option');
-        opt.value = wanted;
-        opt.textContent = `${wanted} (saved)`;
-        select.appendChild(opt);
-      }
-      select.value = wanted;
+      input.value = wanted;
+    } else if (!input.value) {
+      input.value = '';
     }
     if (hint) {
       if (!data.available) {
         hint.textContent = data.message || 'Windows printer list unavailable on this host.';
       } else if (!printers.length) {
-        hint.textContent = data.message || 'No Windows printers found.';
+        hint.textContent =
+          data.message ||
+          'No Windows printers found — type the exact queue name from Settings → Printers.';
       } else {
-        hint.textContent = 'Choose the Windows queue for cashier receipts (e.g. POSPrinter POS-80).';
+        hint.textContent =
+          `Found ${printers.length} queue(s). Pick one or type the exact name (USB/Bluetooth/network).`;
       }
     }
   } catch (err) {
     console.error(err);
-    if (hint) hint.textContent = 'Could not load Windows printers.';
+    if (hint) hint.textContent = 'Could not load Windows printers — you can still type the queue name.';
   }
 }
 
@@ -4042,6 +4040,22 @@ function syncPrinterModalConnectionFields() {
   const showWindows = isWindowsPrintBackend() && role === 'cashier';
   if (lanFields) lanFields.classList.toggle('hidden', showWindows);
   if (winFields) winFields.classList.toggle('hidden', !showWindows);
+  if (!showWindows && role === 'cashier' && !isWindowsPrintBackend()) {
+    const lanHintId = 'printer-form-lan-windows-hint';
+    let lanHint = document.getElementById(lanHintId);
+    if (lanFields && !lanHint) {
+      lanHint = document.createElement('p');
+      lanHint.id = lanHintId;
+      lanHint.className = 'text-xs text-amber-700';
+      lanFields.appendChild(lanHint);
+    }
+    if (lanHint) {
+      lanHint.textContent =
+        'Windows USB/Bluetooth queues appear when Print mode = “Windows printer (USB / installed queue)” above.';
+    }
+  } else {
+    document.getElementById('printer-form-lan-windows-hint')?.remove();
+  }
 }
 
 async function loadKitchenPrinterSettings() {
@@ -4109,6 +4123,13 @@ function bindPrinterHealthCheck() {
 async function openPrinterModal(printer = null) {
   const modal = document.getElementById('printer-modal');
   if (!modal) return;
+  // Refresh print mode from API so cashier Windows fields are not stuck on LAN
+  // when the DOM select still shows the HTML default (file / network).
+  try {
+    await loadKitchenPrinterSettings();
+  } catch (err) {
+    console.error(err);
+  }
   const title = document.getElementById('printer-modal-title');
   const idEl = document.getElementById('printer-edit-id');
   const nameEl = document.getElementById('printer-form-name');
@@ -4116,6 +4137,7 @@ async function openPrinterModal(printer = null) {
   const portEl = document.getElementById('printer-form-port');
   const roleEl = document.getElementById('printer-form-role');
   const activeEl = document.getElementById('printer-form-active');
+  const windowsNameEl = document.getElementById('printer-form-windows-name');
   const windowsName = printer?.windows_printer_name || '';
   if (printer) {
     if (title) title.textContent = 'Edit Printer';
@@ -4133,7 +4155,9 @@ async function openPrinterModal(printer = null) {
     if (portEl) portEl.value = 9100;
     if (roleEl) roleEl.value = 'cashier';
     if (activeEl) activeEl.checked = true;
+    if (windowsNameEl) windowsNameEl.value = '';
   }
+  if (windowsNameEl && windowsName) windowsNameEl.value = windowsName;
   syncPrinterModalConnectionFields();
   if (isWindowsPrintBackend()) {
     await loadWindowsPrinterOptions(windowsName);
@@ -4183,6 +4207,7 @@ async function loadPrintersAdmin() {
         <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.windows_printer_name || '—')}</td>
         <td class="px-3 py-2 text-slate-600">${p.is_active ? 'Yes' : 'No'}</td>
         <td class="px-3 py-2 text-right space-x-2 whitespace-nowrap">
+          <button type="button" class="printer-test-btn text-emerald-700 hover:underline" data-id="${p.id}">Print Test</button>
           <button type="button" class="printer-edit-btn text-blue-600 hover:underline" data-id="${p.id}">Edit</button>
           <button type="button" class="printer-delete-btn text-red-600 hover:underline" data-id="${p.id}">Delete</button>
         </td>
@@ -4190,6 +4215,45 @@ async function loadPrintersAdmin() {
       )
       .join('');
 
+    tbody.querySelectorAll('.printer-test-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = Number(btn.getAttribute('data-id'));
+        const printer = printers.find((x) => x.id === id);
+        const label = printer?.name || `Printer #${id}`;
+        const ok = await dialogConfirm(
+          `Send a short TEST PRINT to “${label}”?`,
+          'Print Test'
+        );
+        if (!ok) return;
+        btn.disabled = true;
+        try {
+          const res = await fetch(`${API_BASE}/api/printers/${id}/test-print`, {
+            method: 'POST',
+            headers: { ...window.auth.getAuthHeaders() },
+          });
+          if (window.auth && window.auth.checkUnauthorized(res)) return;
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            await dialogAlert(
+              body.detail || 'Test print failed.',
+              'error',
+              'Print Test'
+            );
+            return;
+          }
+          await dialogAlert(
+            body.message || `Test print sent (${body.target || 'ok'}).`,
+            'success',
+            'Print Test'
+          );
+        } catch (err) {
+          console.error(err);
+          await dialogAlert('Test print failed.', 'error', 'Print Test');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
     tbody.querySelectorAll('.printer-edit-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = Number(btn.getAttribute('data-id'));

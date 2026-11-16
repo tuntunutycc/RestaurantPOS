@@ -113,13 +113,39 @@ def seed_kitchen_printer_settings(db: Session) -> None:
     seed_default_printers(db)
 
 
-def seed_default_printers(db: Session) -> None:
+def _mark_default_printers_seeded(db: Session) -> None:
+    settings = (
+        db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    )
+    if settings is None:
+        return
+    if not bool(getattr(settings, "default_printers_seeded", False)):
+        settings.default_printers_seeded = True
+        db.commit()
+
+
+def seed_default_printers(db: Session, *, force: bool = False) -> None:
     """
-    Ensure minimal printers exist: 1 cashier + 1 kitchen.
-    Idempotent when any printer rows already exist (after migration).
+    Ensure minimal printers exist once: 1 cashier + 1 kitchen (+ bar if drinks host).
+
+    Idempotent when any printer rows already exist. After the first successful seed
+    (or when printers already existed on upgrade), an empty table is treated as an
+    intentional admin wipe — defaults are NOT re-created on list/resolve.
+    Pass force=True only for explicit re-bootstrap (tests / rare ops).
     """
     migrate_legacy_cashier_printers(db)
     if db.query(Printer).count() > 0:
+        _mark_default_printers_seeded(db)
+        return
+
+    settings = (
+        db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    )
+    already_seeded = bool(
+        settings is not None
+        and getattr(settings, "default_printers_seeded", False)
+    )
+    if already_seeded and not force:
         return
 
     cashier_host = None
@@ -188,6 +214,8 @@ def seed_default_printers(db: Session) -> None:
                 is_active=True,
             )
         )
+    if settings is not None:
+        settings.default_printers_seeded = True
     db.commit()
 
 
