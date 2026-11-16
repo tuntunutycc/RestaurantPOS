@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-16 — Printer Check (online) + clearer print errors
+
+### Summary
+Each Printers row has **Check** (Windows queue / LAN reachability, no paper) plus clearer **Print Test** failure dialogs (`message` + hint to `logs/printing/print.log`). Admin **Check now** also lists every named printer status.
+
+### Spec
+- `specs/feature-printer-test-print/` FR-TP5
+
 ## 2026-11-16 — Stop re-seeding default printers after admin delete-all
 
 ### Summary

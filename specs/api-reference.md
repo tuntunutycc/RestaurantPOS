@@ -112,7 +112,9 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | POST | `/api/printers` | Admin | Create (optional `windows_printer_name`) |
 | PUT | `/api/printers/{id}` | Admin | Update |
 | DELETE | `/api/printers/{id}` | Admin | Delete |
-| POST | `/api/printers/{id}/test-print` | Admin | Short TEST PRINT slip to that row; `PrinterTestPrintResponse` or `502` |
+| GET | `/api/printers/health` | POS order roles | Kitchen route probe; **admin/root** also get `named_printers[]` |
+| GET | `/api/printers/{id}/health` | Admin | One printer row: Windows queue / LAN TCP probe (`PrinterNamedHealthItem`) |
+| POST | `/api/printers/{id}/test-print` | Admin | Short TEST PRINT slip; `502` detail may be `{message,hint,error}` |
 
 ---
 

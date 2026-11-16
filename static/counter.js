@@ -4080,6 +4080,22 @@ async function loadKitchenPrinterSettings() {
   }
 }
 
+function formatPrinterApiDetail(detail) {
+  if (detail == null) return '';
+  if (typeof detail === 'string') return detail;
+  if (typeof detail === 'object') {
+    const parts = [detail.message || detail.error || ''].filter(Boolean);
+    if (detail.hint) parts.push(`Hint: ${detail.hint}`);
+    if (parts.length) return parts.join('\n');
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return String(detail);
+    }
+  }
+  return String(detail);
+}
+
 async function loadPrinterHealthStatus() {
   const summaryEl = document.getElementById('printer-health-summary');
   const listEl = document.getElementById('printer-health-list');
@@ -4091,20 +4107,29 @@ async function loadPrinterHealthStatus() {
     if (window.auth && window.auth.checkUnauthorized(res)) return;
     if (!res.ok) throw new Error('Health check failed');
     const data = await res.json();
-    const offline = (data.printers || []).filter((p) => p.status === 'offline');
-    if (offline.length) {
-      summaryEl.textContent = data.warning || `Offline: ${offline.map((p) => p.route).join(', ')}`;
+    const routeOffline = (data.printers || []).filter((p) => p.status === 'offline');
+    const namedOffline = (data.named_printers || []).filter((p) => p.status === 'offline');
+    if (routeOffline.length || namedOffline.length || data.warning) {
+      summaryEl.textContent =
+        data.warning ||
+        `Offline: ${[...routeOffline.map((p) => p.route), ...namedOffline.map((p) => p.name)].join(', ')}`;
       summaryEl.className = 'text-sm text-red-700 mb-2';
     } else {
-      summaryEl.textContent = `OK — backend ${data.backend || '?'}` + (data.all_online ? '' : '');
+      summaryEl.textContent = `OK — backend ${data.backend || '?'}`;
       summaryEl.className = 'text-sm text-emerald-700 mb-2';
     }
-    listEl.innerHTML = (data.printers || []).map((p) => {
+    const routeLines = (data.printers || []).map((p) => {
       const target = p.host ? `${escapeHtml(p.host)}:${p.port || 9100}` : '—';
       const tone =
         p.status === 'offline' ? 'text-red-700' : p.status === 'online' ? 'text-emerald-700' : 'text-slate-600';
-      return `<li class="${tone}"><span class="font-medium">${escapeHtml(p.route)}</span> · ${escapeHtml(p.status)} · ${target} · ${escapeHtml(p.message || '')}</li>`;
-    }).join('');
+      return `<li class="${tone}"><span class="font-medium">route:${escapeHtml(p.route)}</span> · ${escapeHtml(p.status)} · ${target} · ${escapeHtml(p.message || '')}</li>`;
+    });
+    const namedLines = (data.named_printers || []).map((p) => {
+      const tone =
+        p.status === 'offline' ? 'text-red-700' : p.status === 'online' ? 'text-emerald-700' : 'text-slate-600';
+      return `<li class="${tone}"><span class="font-medium">${escapeHtml(p.name)}</span> (${escapeHtml(p.role)}) · ${escapeHtml(p.status)} · ${escapeHtml(p.target || '—')} · ${escapeHtml(p.message || '')}</li>`;
+    });
+    listEl.innerHTML = [...routeLines, ...namedLines].join('') || '<li class="text-slate-500">No printers to check.</li>';
   } catch (err) {
     console.error(err);
     summaryEl.textContent = 'Could not check printer status.';
@@ -4207,6 +4232,7 @@ async function loadPrintersAdmin() {
         <td class="px-3 py-2 text-slate-600">${escapePrinterHtml(p.windows_printer_name || '—')}</td>
         <td class="px-3 py-2 text-slate-600">${p.is_active ? 'Yes' : 'No'}</td>
         <td class="px-3 py-2 text-right space-x-2 whitespace-nowrap">
+          <button type="button" class="printer-check-btn text-amber-700 hover:underline" data-id="${p.id}">Check</button>
           <button type="button" class="printer-test-btn text-emerald-700 hover:underline" data-id="${p.id}">Print Test</button>
           <button type="button" class="printer-edit-btn text-blue-600 hover:underline" data-id="${p.id}">Edit</button>
           <button type="button" class="printer-delete-btn text-red-600 hover:underline" data-id="${p.id}">Delete</button>
@@ -4215,6 +4241,45 @@ async function loadPrintersAdmin() {
       )
       .join('');
 
+    tbody.querySelectorAll('.printer-check-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = Number(btn.getAttribute('data-id'));
+        const printer = printers.find((x) => x.id === id);
+        const label = printer?.name || `Printer #${id}`;
+        btn.disabled = true;
+        try {
+          const res = await fetch(`${API_BASE}/api/printers/${id}/health`, {
+            headers: { ...window.auth.getAuthHeaders() },
+          });
+          if (window.auth && window.auth.checkUnauthorized(res)) return;
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            await dialogAlert(
+              formatPrinterApiDetail(body.detail) || 'Check failed.',
+              'error',
+              'Printer Check'
+            );
+            return;
+          }
+          const tone = body.status === 'offline' ? 'error' : 'success';
+          const lines = [
+            `${label} — ${body.status || '?'}`,
+            body.target ? `Target: ${body.target}` : null,
+            body.backend ? `Backend: ${body.backend}` : null,
+            body.message || null,
+            body.status === 'offline'
+              ? 'Fix the issue above, then use Print Test to send paper.'
+              : 'Online/ready — use Print Test to confirm paper comes out.',
+          ].filter(Boolean);
+          await dialogAlert(lines.join('\n'), tone, 'Printer Check');
+        } catch (err) {
+          console.error(err);
+          await dialogAlert('Could not check printer.', 'error', 'Printer Check');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
     tbody.querySelectorAll('.printer-test-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const id = Number(btn.getAttribute('data-id'));
@@ -4234,21 +4299,32 @@ async function loadPrintersAdmin() {
           if (window.auth && window.auth.checkUnauthorized(res)) return;
           const body = await res.json().catch(() => ({}));
           if (!res.ok) {
+            const detail = formatPrinterApiDetail(body.detail) || 'Test print failed.';
             await dialogAlert(
-              body.detail || 'Test print failed.',
+              `${detail}\n\nAlso check logs/printing/print.log`,
               'error',
               'Print Test'
             );
             return;
           }
           await dialogAlert(
-            body.message || `Test print sent (${body.target || 'ok'}).`,
+            [
+              body.message || `Test print sent (${body.target || 'ok'}).`,
+              body.target ? `Target: ${body.target}` : null,
+              'If no paper came out, run Check first and verify Print mode / queue / USB.',
+            ]
+              .filter(Boolean)
+              .join('\n'),
             'success',
             'Print Test'
           );
         } catch (err) {
           console.error(err);
-          await dialogAlert('Test print failed.', 'error', 'Print Test');
+          await dialogAlert(
+            'Test print failed (network/client error). See browser console and logs/printing/print.log',
+            'error',
+            'Print Test'
+          );
         } finally {
           btn.disabled = false;
         }

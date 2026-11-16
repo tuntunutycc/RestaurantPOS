@@ -477,6 +477,9 @@ async def dispatch_printer_test(*, printer_id: int, db: Session) -> dict[str, An
                 "set it in Admin before Print Test"
             )
         target = f"windows_queue={windows_name}"
+    elif config.backend == "file":
+        # File mode never sends to LAN/Windows even if host/queue fields are filled.
+        target = "file"
     elif host:
         endpoint_override = PrinterEndpoint(host=host, port=int(row.port or 9100))
         target = f"lan={endpoint_override.host}:{endpoint_override.port}"

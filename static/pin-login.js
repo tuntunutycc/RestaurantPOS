@@ -114,19 +114,33 @@
     updateDots();
   }
 
-  // Already logged in → redirect by role
-  if (window.auth && window.auth.getToken() && window.auth.getUser()) {
+  // Already logged in → validate session, then redirect by role
+  (async function resumeIfSessionValid() {
+    if (!(window.auth && window.auth.getToken() && window.auth.getUser())) return;
     const user = window.auth.getUser();
     if (!["waiter", "cashier", "account"].includes(user.role)) {
-      window.auth.clearAuth();
+      localStorage.removeItem("pos_token");
+      localStorage.removeItem("pos_user");
       return;
     }
-    let page = "/counter";
-    if (user.role === "waiter") page = "/waiter";
-    else if (user.role === "account") page = "/account";
-    window.location.href = page;
-    return;
-  }
+    try {
+      const res = await fetch("/api/auth/me", {
+        headers: { ...window.auth.getAuthHeaders() },
+      });
+      if (!res.ok) {
+        localStorage.removeItem("pos_token");
+        localStorage.removeItem("pos_user");
+        return;
+      }
+      let page = "/counter";
+      if (user.role === "waiter") page = "/waiter";
+      else if (user.role === "account") page = "/account";
+      window.location.href = page;
+    } catch {
+      localStorage.removeItem("pos_token");
+      localStorage.removeItem("pos_user");
+    }
+  })();
 
   // Numpad digit buttons
   document.querySelectorAll(".numpad-btn[data-digit]").forEach((btn) => {

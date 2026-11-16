@@ -21,15 +21,33 @@
     })
     .catch(() => {});
 
-  if (window.auth && window.auth.getToken() && window.auth.getUser()) {
+  // Stale tokens (e.g. after DB reset / wiped sessions) used to auto-redirect to
+  // /counter; APIs then returned 401 and felt like "Unauthorized". Validate first.
+  function clearStoredAuthStayOnLogin() {
+    localStorage.removeItem("pos_token");
+    localStorage.removeItem("pos_user");
+  }
+
+  (async function resumeIfSessionValid() {
+    if (!(window.auth && window.auth.getToken() && window.auth.getUser())) return;
     const user = window.auth.getUser();
     if (!PASSWORD_ROLES.includes(user.role)) {
-      window.auth.clearAuth();
+      clearStoredAuthStayOnLogin();
       return;
     }
-    redirectForRole(user.role);
-    return;
-  }
+    try {
+      const res = await fetch("/api/auth/me", {
+        headers: { ...window.auth.getAuthHeaders() },
+      });
+      if (!res.ok) {
+        clearStoredAuthStayOnLogin();
+        return;
+      }
+      redirectForRole(user.role);
+    } catch {
+      clearStoredAuthStayOnLogin();
+    }
+  })();
 
   const params = new URLSearchParams(window.location.search);
   if (params.get("unauthorized") === "1" && unauthorizedEl) {

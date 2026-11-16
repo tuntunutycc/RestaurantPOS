@@ -10,6 +10,7 @@ from rbac import ADMIN_PANEL_ROLES, CHECKOUT_ROLES, POS_ORDER_ROLES
 from schemas import (
     PrinterCreate,
     PrinterHealthResponse,
+    PrinterNamedHealthItem,
     PrinterResponse,
     PrinterRouteHealthItem,
     PrinterTestPrintResponse,
@@ -17,7 +18,9 @@ from schemas import (
 )
 from services.printing.config import PRINTER_ROLES
 from services.printing.health import (
+    check_all_named_printers_health,
     check_kitchen_printers_health,
+    check_named_printer_health,
     warning_for_offline_routes,
 )
 from services.printing.service import dispatch_printer_test
@@ -43,10 +46,36 @@ def get_printers_health(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
 ):
-    """Probe kitchen food/drinks LAN reachability. Never blocks ordering."""
+    """Probe kitchen food/drinks LAN; admin also gets each named printer probe."""
     config = load_printer_config(db)
     results = check_kitchen_printers_health(db)
     warning = warning_for_offline_routes(results)
+    named: list[PrinterNamedHealthItem] = []
+    user_role = (current_user.role or "").strip().lower()
+    if user_role in ("admin", "root"):
+        named = [
+            PrinterNamedHealthItem(
+                printer_id=n.printer_id,
+                name=n.name,
+                role=n.role,
+                online=n.online,
+                status=n.status,  # type: ignore[arg-type]
+                target=n.target,
+                message=n.message,
+                backend=n.backend,
+            )
+            for n in check_all_named_printers_health(db)
+        ]
+        named_offline = [n for n in named if n.status == "offline"]
+        if named_offline:
+            extra = ", ".join(f"{n.name} ({n.message})" for n in named_offline[:5])
+            warning = (
+                f"{warning} | Named printers offline: {extra}"
+                if warning
+                else f"Printer offline: {extra}"
+            )
+    route_ok = all(r.status != "offline" for r in results)
+    named_ok = all(n.status != "offline" for n in named) if named else True
     return PrinterHealthResponse(
         backend=config.backend,
         printers=[
@@ -60,7 +89,8 @@ def get_printers_health(
             )
             for r in results
         ],
-        all_online=all(r.status != "offline" for r in results),
+        named_printers=named,
+        all_online=route_ok and named_ok,
         warning=warning,
     )
 
@@ -172,6 +202,32 @@ def delete_printer(
     return {"ok": True, "id": printer_id}
 
 
+@router.get(
+    "/printers/{printer_id}/health",
+    response_model=PrinterNamedHealthItem,
+)
+def get_named_printer_health(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
+):
+    """Probe one printer row (Windows queue / LAN). Admin/root only. No print job."""
+    try:
+        result = check_named_printer_health(db, printer_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return PrinterNamedHealthItem(
+        printer_id=result.printer_id,
+        name=result.name,
+        role=result.role,
+        online=result.online,
+        status=result.status,  # type: ignore[arg-type]
+        target=result.target,
+        message=result.message,
+        backend=result.backend,
+    )
+
+
 @router.post(
     "/printers/{printer_id}/test-print",
     response_model=PrinterTestPrintResponse,
@@ -187,10 +243,24 @@ async def test_print_printer(
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": str(exc),
+                "hint": (
+                    "Check Print mode, Windows queue / LAN host, USB cable, and "
+                    "logs/printing/print.log"
+                ),
+                "error": str(exc),
+            },
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Test print failed: {exc}",
+            detail={
+                "message": f"Test print failed: {exc}",
+                "hint": "See logs/printing/print.log for spooler / LAN details",
+                "error": str(exc),
+            },
         ) from exc
     return PrinterTestPrintResponse(**result)

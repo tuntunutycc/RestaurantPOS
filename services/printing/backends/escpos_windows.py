@@ -109,6 +109,76 @@ def _format_windows_print_error(printer_name: str, exc: BaseException) -> str:
     return f"Windows print failed for '{printer_name}': {raw} ({hint})"
 
 
+# Common Win32 PRINTER_STATUS_* bits (see winspool.h).
+_PRINTER_STATUS_BITS: tuple[tuple[int, str], ...] = (
+    (0x00000001, "paused"),
+    (0x00000002, "error"),
+    (0x00000008, "paper jam"),
+    (0x00000010, "paper out"),
+    (0x00000040, "paper problem"),
+    (0x00000080, "offline"),
+    (0x00000200, "busy"),
+    (0x00000400, "printing"),
+    (0x00001000, "not available"),
+    (0x00100000, "user intervention needed"),
+    (0x00400000, "door open"),
+)
+
+_OFFLINE_STATUS_MASK = (
+    0x00000002  # ERROR
+    | 0x00000080  # OFFLINE
+    | 0x00001000  # NOT_AVAILABLE
+    | 0x00000010  # PAPER_OUT
+    | 0x00000008  # PAPER_JAM
+    | 0x00400000  # DOOR_OPEN
+)
+
+
+def probe_windows_queue(queue_name: str) -> tuple[bool, str]:
+    """Open a Windows queue and report spooler status (no print job sent)."""
+    ensure_print_file_logging()
+    if win32print is None:
+        return (
+            False,
+            "Windows printing unavailable — install pywin32 on Windows "
+            "(pip install -r requirements-windows.txt)",
+        )
+    name = (queue_name or "").strip()
+    if not name:
+        return False, "No Windows queue name configured"
+    try:
+        handle = win32print.OpenPrinter(name)
+    except Exception as exc:
+        return False, _format_windows_print_error(name, exc)
+
+    try:
+        status = 0
+        try:
+            info = win32print.GetPrinter(handle, 2)
+            if isinstance(info, dict):
+                status = int(info.get("Status", 0) or 0)
+            elif isinstance(info, (list, tuple)) and len(info) > 0:
+                # Some pywin32 builds return a tuple; Status is often near the end.
+                # Prefer dict path; fall back to 0 if unknown layout.
+                status = 0
+        except Exception as exc:
+            logger.warning("GetPrinter failed for '%s': %s", name, exc)
+            return True, f"Queue '{name}' opened OK (status unavailable: {exc})"
+
+        flags = [label for bit, label in _PRINTER_STATUS_BITS if status & bit]
+        if status & _OFFLINE_STATUS_MASK:
+            detail = ", ".join(flags) if flags else f"status=0x{status:X}"
+            return False, f"Windows queue '{name}' not ready: {detail}"
+        if flags:
+            return True, f"Windows queue '{name}' OK ({', '.join(flags)})"
+        return True, f"Windows queue '{name}' OK (ready)"
+    finally:
+        try:
+            win32print.ClosePrinter(handle)
+        except Exception:
+            pass
+
+
 def send_raw_to_windows_printer(printer_name: str, payload: bytes) -> None:
     """Write raw ESC/POS bytes to a Windows print queue using datatype RAW."""
     ensure_print_file_logging()

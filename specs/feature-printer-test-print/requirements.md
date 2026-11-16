@@ -32,7 +32,15 @@ Short slip (text or image per global render mode):
 ## FR-TP4: UI
 - Menu Management → Printers table → each row **Print Test** next to Edit/Delete
 - Confirm optional; show success/error dialog with `message` / `target`
+- Failures show actionable `detail` (+ hint to `logs/printing/print.log`)
+
+## FR-TP5: Per-printer Check (online)
+- `GET /api/printers/{id}/health` (admin/root) — no print job
+- Cashier + `windows_printer` → open Windows queue / spooler status
+- Else if host set → TCP probe
+- `file` backend → `skipped` with explanatory message
+- Printers table **Check** button; Admin **Check now** also lists `named_printers`
 
 ## Non-goals
 - Does not block orders
-- Does not replace `/api/printers/health`
+- Kitchen route probe `/api/printers/health` remains for waiter badge

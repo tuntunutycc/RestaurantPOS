@@ -163,6 +163,14 @@ def test_printer_test_print_windows_cashier_missing_queue_502(client, db_session
             headers=auth_headers("admin"),
         )
         assert res.status_code == 502
-        assert "Windows queue" in res.json()["detail"] or "queue" in res.json()["detail"].lower()
+        detail = res.json()["detail"]
+        detail_text = (
+            detail
+            if isinstance(detail, str)
+            else " ".join(
+                str(detail.get(k) or "") for k in ("message", "error", "hint")
+            )
+        )
+        assert "queue" in detail_text.lower()
     finally:
         _restore_file_backend(db_session)

@@ -527,9 +527,23 @@ class PrinterRouteHealthItem(BaseModel):
     message: str
 
 
+class PrinterNamedHealthItem(BaseModel):
+    """Per Admin printer-row probe (Windows queue or LAN TCP)."""
+
+    printer_id: int
+    name: str
+    role: str
+    online: bool
+    status: Literal["online", "offline", "skipped"]
+    target: str | None = None
+    message: str
+    backend: str
+
+
 class PrinterHealthResponse(BaseModel):
     backend: str
     printers: list[PrinterRouteHealthItem] = Field(default_factory=list)
+    named_printers: list[PrinterNamedHealthItem] = Field(default_factory=list)
     all_online: bool
     warning: str | None = None
 
@@ -544,6 +558,8 @@ class PrinterTestPrintResponse(BaseModel):
     backend: str
     target: str
     message: str
+    error: str | None = None
+    hint: str | None = None
 
 
 class OrderCreateResponse(BaseModel):
