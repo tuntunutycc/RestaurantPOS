@@ -17,7 +17,7 @@ from functools import partial
 from typing import Any
 
 from sqlalchemy import and_, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from models import Order, OrderItem, PrintJob
 from services.printing.config import CASHIER_PRINTER_ROUTE
@@ -50,6 +50,9 @@ KIND_RECEIPT = "receipt"
 PRINT_JOB_EVENT = "print_job_updated"
 INTERRUPTED_MESSAGE = "Server restarted before this slip was printed"
 SKIPPED_PREFIX = "Skipped:"
+ALL_ITEMS_CANCELLED_MESSAGE = f"{SKIPPED_PREFIX} all items were cancelled"
+SLIP_MODE_COMBINED = "combined"
+COMBINED_LABEL_ITEMS = 3
 ERROR_MESSAGE_MAX = 1000
 FAILED_LIST_LIMIT = 200
 
@@ -108,6 +111,56 @@ def create_kitchen_job(
     return job
 
 
+def create_kitchen_jobs_for_batch(
+    db: Session,
+    *,
+    slip_mode: str,
+    order_id: int,
+    lines: list[tuple[str, dict[str, Any], int]],
+    table_number: Any,
+    date: str,
+    batch_number: int | None,
+    order_type: str,
+    customer_name: str | None,
+) -> list[PrintJob]:
+    """Add (not commit) the kitchen slips of one submit.
+
+    ``lines``: (printer route, item payload, order line id) in submission order.
+    ``per_item`` → one slip per line. ``combined`` → one slip per printer route
+    listing that route's lines (specs/feature-kitchen-slip-mode).
+    """
+    meta = {"table_number": table_number, "order_id": order_id, "date": date}
+    if slip_mode != SLIP_MODE_COMBINED:
+        return [
+            create_kitchen_job(
+                db,
+                order_id=order_id,
+                order_item_id=line_id,
+                route=route,
+                ticket={**item, **meta},
+                order_type=order_type,
+                customer_name=customer_name,
+            )
+            for route, item, line_id in lines
+        ]
+
+    by_route: dict[str, list[dict[str, Any]]] = {}
+    for route, item, line_id in lines:
+        by_route.setdefault(route, []).append({**item, "order_item_id": line_id})
+    return [
+        create_kitchen_job(
+            db,
+            order_id=order_id,
+            order_item_id=None,
+            route=route,
+            ticket={"items": items, **meta, "batch_number": batch_number},
+            order_type=order_type,
+            customer_name=customer_name,
+        )
+        for route, items in by_route.items()
+    ]
+
+
 def create_receipt_job(
     db: Session,
     *,
@@ -129,6 +182,67 @@ def create_receipt_job(
     return job
 
 
+# —— Combined slips (one slip, several order lines) ——
+
+
+def _combined_items(job: PrintJob) -> list[dict[str, Any]] | None:
+    """The lines of a combined kitchen slip, or None for any other job."""
+    if job.kind != KIND_KITCHEN:
+        return None
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    ticket = payload.get("ticket")
+    items = ticket.get("items") if isinstance(ticket, dict) else None
+    if not isinstance(items, list) or not items:
+        return None
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _active_items(db: Session, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop lines whose order line was cancelled or no longer exists."""
+    line_ids = [
+        int(item["order_item_id"]) for item in items if item.get("order_item_id") is not None
+    ]
+    if not line_ids:
+        return list(items)
+    rows = (
+        db.query(OrderItem.id, OrderItem.item_status)
+        .filter(OrderItem.id.in_(line_ids))
+        .all()
+    )
+    active = {
+        int(line_id)
+        for line_id, status in rows
+        if str(getattr(status, "value", status) or "").strip().lower() != "cancelled"
+    }
+    return [
+        item
+        for item in items
+        if item.get("order_item_id") is None or int(item["order_item_id"]) in active
+    ]
+
+
+def _kitchen_ticket_to_send(db: Session, job: PrintJob) -> dict[str, Any] | None:
+    """Ticket payload for dispatch; None when a combined slip has no line left."""
+    payload = job.payload if isinstance(job.payload, dict) else {}
+    ticket = payload.get("ticket") if isinstance(payload.get("ticket"), dict) else {}
+    items = _combined_items(job)
+    if items is None:
+        return ticket
+    remaining = _active_items(db, items)
+    if not remaining:
+        return None
+    return {**ticket, "items": remaining}
+
+
+def _combined_label(items: list[dict[str, Any]]) -> str:
+    shown = [
+        f"{item.get('item_name') or 'Item'} x{int(item.get('quantity') or 1)}"
+        for item in items[:COMBINED_LABEL_ITEMS]
+    ]
+    more = len(items) - len(shown)
+    return ", ".join(shown) + (f" +{more} more" if more > 0 else "")
+
+
 # —— Presentation ——
 
 
@@ -145,8 +259,15 @@ def job_to_dict(job: PrintJob) -> dict[str, Any]:
             location = text if text.lower().startswith("table") else f"Table {text}"
     else:
         ticket = payload.get("ticket") if isinstance(payload.get("ticket"), dict) else {}
-        name = str(ticket.get("item_name") or "Kitchen slip")
-        item_label = f"{name} x{int(ticket.get('quantity') or 1)}"
+        combined = _combined_items(job)
+        if combined is not None:
+            # Show what a reprint would contain: cancelled lines are left out.
+            session = object_session(job)
+            remaining = _active_items(session, combined) if session is not None else combined
+            item_label = _combined_label(remaining or combined)
+        else:
+            name = str(ticket.get("item_name") or "Kitchen slip")
+            item_label = f"{name} x{int(ticket.get('quantity') or 1)}"
         table_number = ticket.get("table_number")
         if str(payload.get("order_type") or "").strip().lower() == "takeaway":
             location = payload.get("customer_name") or table_number or "Takeaway"
@@ -196,6 +317,9 @@ def _skip_reason(db: Session, job: PrintJob) -> str | None:
         status = getattr(item.item_status, "value", item.item_status)
         if str(status or "").strip().lower() == "cancelled":
             return f"{SKIPPED_PREFIX} item was cancelled"
+    combined = _combined_items(job)
+    if combined is not None and not _active_items(db, combined):
+        return ALL_ITEMS_CANCELLED_MESSAGE
     return None
 
 
@@ -233,6 +357,12 @@ async def execute_print_job(db: Session, job_id: int) -> dict[str, Any] | None:
         return None
 
     error = _skip_reason(db, job)
+    ticket: dict[str, Any] | None = None
+    if error is None and job.kind == KIND_KITCHEN:
+        # A combined slip is sent without the lines cancelled since submit.
+        ticket = _kitchen_ticket_to_send(db, job)
+        if ticket is None:
+            error = ALL_ITEMS_CANCELLED_MESSAGE
     attempted = error is None
     if attempted:
         payload = job.payload if isinstance(job.payload, dict) else {}
@@ -240,7 +370,7 @@ async def execute_print_job(db: Session, job_id: int) -> dict[str, Any] | None:
             if job.kind == KIND_KITCHEN:
                 await dispatch_kitchen_ticket(
                     job.route,
-                    payload.get("ticket") or {},
+                    ticket or {},
                     order_type=payload.get("order_type") or "dine_in",
                     customer_name=payload.get("customer_name"),
                     db=db,
@@ -425,4 +555,12 @@ def list_failed_jobs(
     )
     if not include_receipts:
         query = query.filter(PrintJob.kind == KIND_KITCHEN)
-    return query.order_by(PrintJob.id.desc()).limit(FAILED_LIST_LIMIT).all()
+    jobs = query.order_by(PrintJob.id.desc()).limit(FAILED_LIST_LIMIT).all()
+    # A combined slip is tied to several lines; hide it once all are cancelled.
+    visible: list[PrintJob] = []
+    for job in jobs:
+        combined = _combined_items(job)
+        if combined is not None and not _active_items(db, combined):
+            continue
+        visible.append(job)
+    return visible

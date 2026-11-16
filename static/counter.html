@@ -686,6 +686,19 @@
               </select>
             </div>
           </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-600 mb-1" for="printer-kitchen-slip-mode">Kitchen slip</label>
+            <select id="printer-kitchen-slip-mode" name="kitchen_slip_mode"
+              class="w-full max-w-md px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+              <option value="per_item">One slip per item</option>
+              <option value="combined">All items on one slip</option>
+            </select>
+            <p class="text-xs text-slate-500 mt-1">
+              How an order is printed for the kitchen and bar. With <strong>All items on one slip</strong>,
+              food and drinks still print separately because they go to different printers.
+              Applies from the next order.
+            </p>
+          </div>
           <button type="submit" class="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700">Save Print Mode</button>
         </form>
         <div class="mt-4 pt-4 border-t border-slate-200">

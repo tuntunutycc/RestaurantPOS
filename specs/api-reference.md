@@ -101,7 +101,7 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET/PUT | `/api/admin/kitchen-printers` | Global backend: `file` \| `escpos_network` \| `windows_printer` |
+| GET/PUT | `/api/admin/kitchen-printers` | Global backend: `file` \| `escpos_network` \| `windows_printer`; `kitchen_slip_mode`: `per_item` \| `combined` (optional on PUT; omitted = unchanged) |
 | GET | `/api/admin/windows-printers` | List installed Windows queues (`available`, `printers[]`, `message`) |
 
 ## Cashier / terminal printers (dynamic)

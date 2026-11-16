@@ -396,6 +396,23 @@ def _load_printer_config_from_db(db: Session, *, seed_printers: bool = True) -> 
     )
 
 
+KITCHEN_SLIP_MODES = ("per_item", "combined")
+DEFAULT_KITCHEN_SLIP_MODE = "per_item"
+
+
+def normalize_kitchen_slip_mode(raw: str | None) -> str:
+    value = (raw or "").strip().lower()
+    return value if value in KITCHEN_SLIP_MODES else DEFAULT_KITCHEN_SLIP_MODE
+
+
+def load_kitchen_slip_mode(db: Session | None) -> str:
+    """``per_item`` (one slip per order line) or ``combined`` (one per printer route)."""
+    if db is None:
+        return DEFAULT_KITCHEN_SLIP_MODE
+    settings = db.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    return normalize_kitchen_slip_mode(getattr(settings, "kitchen_slip_mode", None))
+
+
 def load_printer_config(db: Session | None = None) -> PrinterConfig:
     """Load printer config from DB (UI settings), with env fallback for missing hosts."""
     if db is not None:

@@ -161,12 +161,18 @@ class PrinterRouteEndpointUpdate(BaseModel):
     port: int = Field(default=9100, ge=1, le=65535)
 
 
+# How kitchen slips are printed on submit (specs/feature-kitchen-slip-mode):
+# per_item = one slip per order line, combined = one slip per printer route.
+KitchenSlipModeLiteral = Literal["per_item", "combined"]
+
+
 class KitchenPrinterSettingsResponse(BaseModel):
     """Admin view of global print backend settings (hosts live on Printer CRUD)."""
 
     backend: PrinterBackendLiteral = "file"
     render_mode: PrinterRenderModeLiteral = "text"
     paper_width_px: int = 576
+    kitchen_slip_mode: KitchenSlipModeLiteral = "per_item"
     routes: list[PrinterRouteEndpointResponse] = Field(default_factory=list)
 
 
@@ -176,6 +182,8 @@ class KitchenPrinterSettingsUpdate(BaseModel):
     backend: PrinterBackendLiteral
     render_mode: PrinterRenderModeLiteral = "text"
     paper_width_px: int = Field(default=576)
+    # Omitted = keep the stored mode (clients that predate this field).
+    kitchen_slip_mode: KitchenSlipModeLiteral | None = None
     routes: list[PrinterRouteEndpointUpdate] = Field(default_factory=list)
 
     @model_validator(mode="after")

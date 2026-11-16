@@ -55,6 +55,8 @@ Server resolves route → LAN IP:port and prints one ticket per submitted line i
   - No physical printer required for tests/dev.
 
 ### FR-6: Ticket Content (One slip per line item)
+> Since 2026-11-16 this is the default of an admin setting. `kitchen_slip_mode = combined` prints one slip per printer route instead; see `specs/feature-kitchen-slip-mode/`.
+
 On each order submit, print **one kitchen slip per submitted line item** (not one combined slip per route).
 Each slip must include:
 - Route/printer label (for debugging in file mode)
@@ -135,7 +137,7 @@ Each slip must include:
 - Printing is a side effect; order state and totals are authoritative in DB.
 
 ### BL-4: One Item, One Ticket
-- No batch-combined kitchen ticket in v1.
+- Default mode. A batch-combined ticket is available as the `combined` kitchen slip mode (`specs/feature-kitchen-slip-mode/`).
 
 ### BL-5: Server-side Only
 - Printing is executed on POS server, not client WebView/browser.

@@ -1,5 +1,16 @@
+import atexit
 import os
+import shutil
+import tempfile
 from collections.abc import Generator
+
+# Must run before anything imports `database`: its module-level engine (used by
+# the real app lifespan for create_all / ALTER TABLE / startup clean-up) would
+# otherwise be the developer's real pos.db. Tests that boot `main.app` were
+# silently migrating that file.
+_APP_DB_DIR = tempfile.mkdtemp(prefix="pos-tests-")
+atexit.register(shutil.rmtree, _APP_DB_DIR, ignore_errors=True)
+os.environ["DATABASE_URL"] = f"sqlite:///{os.path.join(_APP_DB_DIR, 'app.db')}"
 
 import pytest
 from fastapi import FastAPI

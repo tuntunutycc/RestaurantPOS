@@ -3958,6 +3958,9 @@ if (kitchenPrinterForm) {
       paper_width_px: paperWidth,
       routes: [],
     };
+    // Left out when the control is missing, so the server keeps its stored mode.
+    const slipModeEl = document.getElementById('printer-kitchen-slip-mode');
+    if (slipModeEl) payload.kitchen_slip_mode = slipModeEl.value === 'combined' ? 'combined' : 'per_item';
     try {
       const res = await fetch(`${API_BASE}/api/admin/kitchen-printers`, {
         method: 'PUT',
@@ -4074,6 +4077,8 @@ async function loadKitchenPrinterSettings() {
     if (backendEl) backendEl.value = data.backend || 'file';
     if (renderModeEl) renderModeEl.value = data.render_mode || 'text';
     if (paperWidthEl) paperWidthEl.value = String(data.paper_width_px || 576);
+    const slipModeEl = document.getElementById('printer-kitchen-slip-mode');
+    if (slipModeEl) slipModeEl.value = data.kitchen_slip_mode === 'combined' ? 'combined' : 'per_item';
     syncPrinterModalConnectionFields();
   } catch (err) {
     console.error(err);

@@ -147,7 +147,12 @@ def test_order_history_page_routes():
     """Page routes live on the real FastAPI app (conftest mounts API routers only)."""
     from fastapi.testclient import TestClient
 
+    from database import engine
     from main import app as real_app
+
+    # The lifespan migrates whatever database the app engine points at; it must
+    # be the throwaway file from conftest, never the real pos.db.
+    assert "pos-tests-" in str(engine.url), engine.url
 
     with TestClient(real_app) as client:
         for path in ("/order-history", "/admin/sales-history", "/cashier/history"):

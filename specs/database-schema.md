@@ -173,7 +173,7 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 
 ## `kitchen_printer_settings`
 
-Singleton row `id=1`: `backend` (`file` \| `escpos_network` \| `windows_printer`), `render_mode`, `paper_width_px`.
+Singleton row `id=1`: `backend` (`file` \| `escpos_network` \| `windows_printer`), `render_mode`, `paper_width_px`, `kitchen_slip_mode` (`per_item` default \| `combined`; String(16) NOT NULL, added at startup on existing databases).
 
 ---
 
@@ -209,7 +209,7 @@ One row per slip sent to a printer (kitchen ticket per order line, or cashier re
 |--------|------|-------|
 | `id` | Integer PK | |
 | `order_id` | Integer FK `orders.id` | Required; deleted with the order |
-| `order_item_id` | Integer FK `order_items.id` nullable | Kitchen slips only |
+| `order_item_id` | Integer FK `order_items.id` nullable | Single-item kitchen slips only; null for receipts and combined kitchen slips (their lines are in `payload.ticket.items[].order_item_id`) |
 | `kind` | String(16) | `kitchen` \| `receipt` |
 | `route` | String(32) | `food` \| `drinks` \| `cashier` |
 | `printer_id` | Integer nullable | Cashier printer chosen at checkout (no FK) |

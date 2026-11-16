@@ -142,7 +142,7 @@ This POS system is currently built with:
 - Checkout `printer_id` + Cashier UI `localStorage.selectedCashierPrinterId` for terminal selection.
 - Kitchen print failures must not roll back order submit. Cashier receipt print failures must not roll back checkout; API may return `warning`.
 - **Print queue:** slips are never sent inside the request. Each slip is a `print_jobs` row (`pending` → `printed` \| `failed`) sent by `services/printing/print_queue.py`: one `asyncio.Queue` + worker per physical printer, one slip at a time, `PRINT_QUEUE_DELAY_SECONDS` (default 1) between slips. Started/stopped in the FastAPI lifespan. Failed slips are retried manually with `POST /api/orders/{id}/retry-print`. New print call sites must go through `services/printing/print_jobs.py`, not call `dispatch_*` directly.
-- See `specs/feature-kitchen-printing/`, `specs/feature-cashier-receipt-printing/`, `specs/feature-dynamic-printer-management/`, `specs/feature-print-queue/`.
+- See `specs/feature-kitchen-printing/`, `specs/feature-cashier-receipt-printing/`, `specs/feature-dynamic-printer-management/`, `specs/feature-print-queue/`, `specs/feature-kitchen-slip-mode/`.
 
 ## Test Strategy (required for SDD merge gate)
 - Introduce automated tests with a backend test runner (e.g., `pytest`) for each feature.

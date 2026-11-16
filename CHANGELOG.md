@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-11-16 — Kitchen slip mode: one slip per item or all items on one slip
+
+### Summary
+Admins can choose how an order is printed for the kitchen: **One slip per item** (default, as before) or **All items on one slip**. In combined mode each submit prints one slip per printer route, so a mixed order still gives one food slip and one drinks slip.
+
+### Added
+- `kitchen_printer_settings.kitchen_slip_mode` (`per_item` | `combined`); added to existing databases at startup.
+- `GET/PUT /api/admin/kitchen-printers`: `kitchen_slip_mode` (optional on PUT; omitted keeps the stored value).
+- Menu Management → Kitchen Printer Settings: **Kitchen slip** select.
+
+### Behaviour
+- The mode is read when the order is submitted. A slip already recorded keeps its form on **Retry**.
+- A combined slip sent late or retried leaves out lines cancelled since; if all are cancelled it is not printed and disappears from the **Print failed** list.
+- Totals, order lines, batch numbers and `OrderSubmitResponse` are the same in both modes.
+
+### Fixed (tests)
+- `tests/conftest.py` now points the app database at a throwaway file before anything imports `database`. `test_order_history_page_routes` boots the real app lifespan, which was running `create_all` / `ALTER TABLE` / startup clean-up on the developer's real `pos.db` on every test run.
+
+### Spec
+- `specs/feature-kitchen-slip-mode/` (requirements, plan, validation); kitchen-printing, print-queue, `api-reference.md`, `database-schema.md`.
+
+### Tests
+- `tests/test_kitchen_slip_mode.py` (24). Suite: 346 passed.
+
+### Review checklist
+- Security: no new endpoint; the setting is validated by the schema (`422` for anything but the two values).
+- Roles: only root/admin can read or change it (`401` anonymous, `403` waiter/cashier/account — tested).
+- Money/state: printing form never changes totals or lines (tested by submitting the same order in both modes).
+- Edge cases: mixed food/drinks, second batch, takeaway, cancelled lines, all lines cancelled, cancelled order, mode changed between failure and retry, unknown stored value, older client that does not send the field, existing database without the column.
+- Not verified: a real thermal printer (paper length / cut of a long combined slip), Myanmar-language label for the new control (the form is English-only like the rest of that section).
+
 ## 2026-11-16 — Print queue + retry
 
 ### Summary

@@ -23,8 +23,9 @@ from services.order_history import (
 from services.printing.health import check_route_health, warning_for_offline_routes
 from services.printing.routes import resolve_printer_route
 from services.printing.print_log import get_print_logger
+from services.printing.settings import load_kitchen_slip_mode
 from services.printing.print_jobs import (
-    create_kitchen_job,
+    create_kitchen_jobs_for_batch,
     create_receipt_job,
     enqueue_print_jobs,
     job_to_dict,
@@ -1287,7 +1288,8 @@ async def submit_order(
 
     batch_total = 0.0
     batch_items_detail: list[OrderItemDetail] = []
-    # One kitchen slip per submitted line (modifiers stay under that line — Pattern A).
+    # One entry per submitted line (modifiers stay under that line — Pattern A).
+    # Whether they print as separate slips or one combined slip is decided below.
     print_jobs: list[tuple[str, dict[str, Any]]] = []
     # Same order as print_jobs: the order line each slip belongs to.
     print_job_lines: list[OrderItem] = []
@@ -1419,25 +1421,24 @@ async def submit_order(
         try:
             order_type_value = getattr(order, "order_type", "dine_in")
             customer_name_value = getattr(order, "customer_name", None)
-            jobs = [
-                create_kitchen_job(
-                    db,
-                    order_id=print_meta["order_id"],
-                    order_item_id=order_line.id,
-                    route=printer_route,
-                    ticket={
-                        **item_payload,
-                        "table_number": print_meta["table_number"],
-                        "order_id": print_meta["order_id"],
-                        "date": print_meta["date"],
-                    },
-                    order_type=order_type_value,
-                    customer_name=customer_name_value,
-                )
-                for (printer_route, item_payload), order_line in zip(
-                    print_jobs, print_job_lines, strict=True
-                )
-            ]
+            # per_item: one slip per line; combined: one slip per printer route
+            # (specs/feature-kitchen-slip-mode).
+            jobs = create_kitchen_jobs_for_batch(
+                db,
+                slip_mode=load_kitchen_slip_mode(db),
+                order_id=print_meta["order_id"],
+                lines=[
+                    (printer_route, item_payload, order_line.id)
+                    for (printer_route, item_payload), order_line in zip(
+                        print_jobs, print_job_lines, strict=True
+                    )
+                ],
+                table_number=print_meta["table_number"],
+                date=print_meta["date"],
+                batch_number=print_meta["batch_number"],
+                order_type=order_type_value,
+                customer_name=customer_name_value,
+            )
             db.commit()
             await enqueue_print_jobs(db, [job.id for job in jobs])
         except Exception as exc:

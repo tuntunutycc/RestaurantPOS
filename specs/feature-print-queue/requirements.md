@@ -24,7 +24,7 @@ One row per slip.
 |---|---|
 | `id` | PK |
 | `order_id` | FK `orders.id`, required |
-| `order_item_id` | FK `order_items.id`; set for kitchen slips, null for receipts |
+| `order_item_id` | FK `order_items.id`; set for single-item kitchen slips, null for receipts and combined kitchen slips (`specs/feature-kitchen-slip-mode/`) |
 | `kind` | `kitchen` \| `receipt` |
 | `route` | `food` \| `drinks` \| `cashier` |
 | `printer_id` | cashier printer chosen at checkout (nullable, no FK: the printer row may be deleted later) |
