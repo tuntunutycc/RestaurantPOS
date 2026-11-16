@@ -23,6 +23,7 @@ from services.printing.config import (
 )
 from services.printing.image_renderer import render_ticket_image
 from services.printing.print_log import ensure_print_file_logging
+from services.printing.print_queue import file_key, get_print_queue, lan_key, windows_key
 from services.printing.receipt import build_receipt_text, shop_name
 from services.printing.routes import category_route_to_printer_role
 from services.printing.settings import (
@@ -477,25 +478,39 @@ async def dispatch_printer_test(*, printer_id: int, db: Session) -> dict[str, An
                 "set it in Admin before Print Test"
             )
         target = f"windows_queue={windows_name}"
+        queue_key = windows_key(windows_name)
     elif config.backend == "file":
         # File mode never sends to LAN/Windows even if host/queue fields are filled.
         target = "file"
+        queue_key = file_key(route)
     elif host:
         endpoint_override = PrinterEndpoint(host=host, port=int(row.port or 9100))
         target = f"lan={endpoint_override.host}:{endpoint_override.port}"
+        queue_key = lan_key(endpoint_override.host, endpoint_override.port)
     elif config.backend == "escpos_network":
         raise RuntimeError(
             f"Printer '{row.name}' has no host:port (required for LAN print mode)"
         )
     else:
-        target = "file"
+        # windows_printer + kitchen/bar/other row without a host. Refuse here:
+        # falling through would print on another row's (or the .env) LAN host
+        # for the same route and still report this row as the target.
+        raise RuntimeError(
+            f"Printer '{row.name}' ({role}) has no LAN host:port. Under Windows "
+            "print mode only cashier printers use a Windows queue; kitchen/bar/"
+            "other printers need IP:port."
+        )
 
-    await _dispatch_payload(
-        route=route,
-        ticket_text=ticket_text,
-        db=db,
-        endpoint_override=endpoint_override,
-        windows_printer_name=windows_name,
+    # Same per-printer queue as live slips, so a test cannot collide with them.
+    await get_print_queue().run(
+        queue_key,
+        lambda: _dispatch_payload(
+            route=route,
+            ticket_text=ticket_text,
+            db=db,
+            endpoint_override=endpoint_override,
+            windows_printer_name=windows_name,
+        ),
     )
     return {
         "ok": True,

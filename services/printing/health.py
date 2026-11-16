@@ -250,7 +250,14 @@ def check_all_named_printers_health(
 ) -> list[NamedPrinterHealth]:
     from models import Printer
 
-    rows = db.query(Printer).order_by(Printer.id.asc()).all()
+    # Inactive rows are never used for printing; probing them only produces
+    # false "offline" warnings. A single row can still be probed by id.
+    rows = (
+        db.query(Printer)
+        .filter(Printer.is_active.is_(True))
+        .order_by(Printer.id.asc())
+        .all()
+    )
     return [
         check_named_printer_health(db, int(row.id), timeout_seconds=timeout_seconds)
         for row in rows

@@ -28,6 +28,10 @@ Short slip (text or image per global render mode):
 - Cashier + `windows_printer` → that row’s `windows_printer_name`
 - Otherwise when `host` set → LAN `host:port` for that row
 - `file` backend → file output (still success for local/dev)
+- No usable target on that row → **502** with a clear message, never another printer:
+  - `escpos_network` and no `host`
+  - `windows_printer` and a non-cashier row with no `host` (kitchen/bar/other have no Windows queue)
+  - `windows_printer` and a cashier row with no `windows_printer_name`
 
 ## FR-TP4: UI
 - Menu Management → Printers table → each row **Print Test** next to Edit/Delete
@@ -37,9 +41,13 @@ Short slip (text or image per global render mode):
 ## FR-TP5: Per-printer Check (online)
 - `GET /api/printers/{id}/health` (admin/root) — no print job
 - Cashier + `windows_printer` → open Windows queue / spooler status
+  - Offline when `Status` has error/offline/not-available/paper-out/paper-jam/door-open **or** `Attributes` has work-offline (`0x400`; unplugged USB printers keep `Status=0`)
+  - Message includes the port (`pPortName`) and the number of waiting jobs (`cJobs`) so a stuck queue is visible
+  - "online" means the spooler would accept a job; it cannot prove paper came out
 - Else if host set → TCP probe
 - `file` backend → `skipped` with explanatory message
 - Printers table **Check** button; Admin **Check now** also lists `named_printers`
+- `named_printers` (aggregate) covers **active** printers only; an inactive row can still be probed by id
 
 ## Non-goals
 - Does not block orders

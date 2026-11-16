@@ -72,6 +72,7 @@ This POS system is currently built with:
   - `takeaways_updated`
   - `table_status_changed`
   - `table_grid_updated`
+  - `print_job_updated`
 - Each event payload should be documented in the feature spec (and validated where feasible).
 
 ## Coding Standards (SDD-aligned)
@@ -140,7 +141,8 @@ This POS system is currently built with:
 - Global print mode (backend/render/paper): `GET/PUT /api/admin/kitchen-printers` (no fixed host cards).
 - Checkout `printer_id` + Cashier UI `localStorage.selectedCashierPrinterId` for terminal selection.
 - Kitchen print failures must not roll back order submit. Cashier receipt print failures must not roll back checkout; API may return `warning`.
-- See `specs/feature-kitchen-printing/`, `specs/feature-cashier-receipt-printing/`, `specs/feature-dynamic-printer-management/`.
+- **Print queue:** slips are never sent inside the request. Each slip is a `print_jobs` row (`pending` → `printed` \| `failed`) sent by `services/printing/print_queue.py`: one `asyncio.Queue` + worker per physical printer, one slip at a time, `PRINT_QUEUE_DELAY_SECONDS` (default 1) between slips. Started/stopped in the FastAPI lifespan. Failed slips are retried manually with `POST /api/orders/{id}/retry-print`. New print call sites must go through `services/printing/print_jobs.py`, not call `dispatch_*` directly.
+- See `specs/feature-kitchen-printing/`, `specs/feature-cashier-receipt-printing/`, `specs/feature-dynamic-printer-management/`, `specs/feature-print-queue/`.
 
 ## Test Strategy (required for SDD merge gate)
 - Introduce automated tests with a backend test runner (e.g., `pytest`) for each feature.

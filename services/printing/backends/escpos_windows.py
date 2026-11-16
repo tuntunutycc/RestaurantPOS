@@ -124,6 +124,8 @@ _PRINTER_STATUS_BITS: tuple[tuple[int, str], ...] = (
     (0x00400000, "door open"),
 )
 
+_PRINTER_ATTRIBUTE_WORK_OFFLINE = 0x00000400
+
 _OFFLINE_STATUS_MASK = (
     0x00000002  # ERROR
     | 0x00000080  # OFFLINE
@@ -152,26 +154,46 @@ def probe_windows_queue(queue_name: str) -> tuple[bool, str]:
         return False, _format_windows_print_error(name, exc)
 
     try:
-        status = 0
         try:
             info = win32print.GetPrinter(handle, 2)
-            if isinstance(info, dict):
-                status = int(info.get("Status", 0) or 0)
-            elif isinstance(info, (list, tuple)) and len(info) > 0:
-                # Some pywin32 builds return a tuple; Status is often near the end.
-                # Prefer dict path; fall back to 0 if unknown layout.
-                status = 0
         except Exception as exc:
             logger.warning("GetPrinter failed for '%s': %s", name, exc)
             return True, f"Queue '{name}' opened OK (status unavailable: {exc})"
+        if not isinstance(info, dict):
+            return True, f"Queue '{name}' opened OK (status unavailable)"
+
+        status = int(info.get("Status", 0) or 0)
+        attributes = int(info.get("Attributes", 0) or 0)
+        jobs = int(info.get("cJobs", 0) or 0)
+        port = str(info.get("pPortName") or "").strip()
+        where = f"Windows queue '{name}'" + (f" on {port}" if port else "")
 
         flags = [label for bit, label in _PRINTER_STATUS_BITS if status & bit]
-        if status & _OFFLINE_STATUS_MASK:
+        # An unplugged / powered-off USB printer usually keeps Status=0 and is
+        # only marked through the queue's "work offline" attribute.
+        work_offline = bool(attributes & _PRINTER_ATTRIBUTE_WORK_OFFLINE)
+        if work_offline and "offline" not in flags:
+            flags.append("offline")
+        jobs_note = (
+            f" {jobs} job(s) waiting in the queue — if no paper comes out, the "
+            "queue is stuck: open the printer in Windows and cancel all documents."
+            if jobs > 0
+            else ""
+        )
+        logger.info(
+            "Windows queue probe queue=%s port=%s status=0x%X attributes=0x%X jobs=%s",
+            name,
+            port or "?",
+            status,
+            attributes,
+            jobs,
+        )
+        if work_offline or status & _OFFLINE_STATUS_MASK:
             detail = ", ".join(flags) if flags else f"status=0x{status:X}"
-            return False, f"Windows queue '{name}' not ready: {detail}"
+            return False, f"{where} not ready: {detail}.{jobs_note}"
         if flags:
-            return True, f"Windows queue '{name}' OK ({', '.join(flags)})"
-        return True, f"Windows queue '{name}' OK (ready)"
+            return True, f"{where} OK ({', '.join(flags)}).{jobs_note}"
+        return True, f"{where} OK (ready).{jobs_note}"
     finally:
         try:
             win32print.ClosePrinter(handle)

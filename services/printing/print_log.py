@@ -7,6 +7,7 @@ after a failed/garbled print without digging through the uvicorn console.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +30,11 @@ def ensure_print_file_logging() -> Path:
     parent = logging.getLogger("services.printing")
     parent.setLevel(logging.DEBUG)
 
-    target = str(PRINT_LOG_FILE.resolve())
+    # Must match how logging.FileHandler computes baseFilename (abspath, not
+    # resolve()). With resolve(), a project folder reached through a symlink /
+    # junction never matched, so every print added another handler and each
+    # log line was written one more time.
+    target = os.path.abspath(os.fspath(PRINT_LOG_FILE))
     already = False
     for handler in parent.handlers:
         if isinstance(handler, logging.FileHandler) and getattr(

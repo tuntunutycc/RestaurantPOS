@@ -196,6 +196,50 @@ class Order(Base):
         back_populates="order",
         cascade="all, delete-orphan",
     )
+    print_jobs = relationship(
+        "PrintJob",
+        back_populates="order",
+        cascade="all, delete-orphan",
+    )
+
+
+class PrintJob(Base):
+    """One slip (kitchen ticket or cashier receipt) and whether it printed.
+
+    The printer target is not stored: it is resolved when the slip is sent, so
+    a retry uses the printer settings as they are at that moment.
+    """
+
+    __tablename__ = "print_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "print_status IN ('pending','printed','failed')",
+            name="ck_print_jobs_status_valid",
+        ),
+        Index("ix_print_jobs_order_status", "order_id", "print_status"),
+        Index("ix_print_jobs_status_created_at", "print_status", "created_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False, index=True)
+    # Set for kitchen slips (one slip per order line); NULL for receipts.
+    order_item_id = Column(Integer, ForeignKey("order_items.id"), nullable=True)
+    kind = Column(String(16), nullable=False)  # kitchen | receipt
+    route = Column(String(32), nullable=False)  # food | drinks | cashier
+    # Cashier printer chosen at checkout. No FK: the printer row may be deleted.
+    printer_id = Column(Integer, nullable=True)
+    # Everything needed to render the slip again (see services/printing/print_jobs.py).
+    payload = Column(JSON, nullable=False)
+    print_status = Column(String(16), nullable=False, default="pending")
+    error_message = Column(String(1024), nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    printed_at = Column(DateTime, nullable=True)
+
+    order = relationship("Order", back_populates="print_jobs")
 
 
 class OrderItem(Base):

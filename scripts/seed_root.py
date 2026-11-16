@@ -24,9 +24,13 @@ from models import Base, User
 from rbac import ROLE_ROOT
 
 
-def ensure_schema() -> None:
-    """Create SQLite/Postgres tables if they do not exist yet (safe to re-run)."""
-    Base.metadata.create_all(bind=engine)
+def ensure_schema(db=None) -> None:
+    """Create SQLite/Postgres tables if they do not exist yet (safe to re-run).
+
+    With a session, tables are created in that session's database, not the
+    application database (tests pass an in-memory session).
+    """
+    Base.metadata.create_all(bind=db.get_bind() if db is not None else engine)
 
 
 def root_exists(db=None) -> bool:
@@ -52,7 +56,7 @@ def seed_root(username: str, password: str, db=None) -> User:
     if len(password) < 6:
         raise ValueError("password must be at least 6 characters")
 
-    ensure_schema()
+    ensure_schema(db)
 
     owns_db = db is None
     if db is None:

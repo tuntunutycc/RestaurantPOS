@@ -112,9 +112,9 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | POST | `/api/printers` | Admin | Create (optional `windows_printer_name`) |
 | PUT | `/api/printers/{id}` | Admin | Update |
 | DELETE | `/api/printers/{id}` | Admin | Delete |
-| GET | `/api/printers/health` | POS order roles | Kitchen route probe; **admin/root** also get `named_printers[]` |
+| GET | `/api/printers/health` | POS order roles | Kitchen route probe; **admin/root** also get `named_printers[]` (active printers only) |
 | GET | `/api/printers/{id}/health` | Admin | One printer row: Windows queue / LAN TCP probe (`PrinterNamedHealthItem`) |
-| POST | `/api/printers/{id}/test-print` | Admin | Short TEST PRINT slip; `502` detail may be `{message,hint,error}` |
+| POST | `/api/printers/{id}/test-print` | Admin | Short TEST PRINT slip, sent through that printer's queue; waits for the result. `502` detail may be `{message,hint,error}` |
 
 ---
 
@@ -133,13 +133,16 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | POST | `/api/orders/{order_id}/cancel` | `OrderStatusUpdateResponse` | API/test whole-order cancel |
 | GET | `/api/orders/{order_id}/details` | `OrderDetailsResponse` | **Full breakdown** + item snapshots |
 | PUT | `/api/orders/{order_id}/items/{item_id}/status` | `OrderResponseDetail` | Item status incl. `cancelled` |
-| POST | `/api/orders/submit` | `OrderSubmitResponse` | **Primary** submit; batching + kitchen print |
+| POST | `/api/orders/submit` | `OrderSubmitResponse` | **Primary** submit; batching + kitchen slips queued (`warning` = printer already offline, or slips not queued) |
 
 ### Checkout (`CHECKOUT_ROLES`: root, admin, cashier)
 
 | Method | Path |
 |--------|------|
 | POST/PUT | `/api/orders/{order_id}/checkout` | `OrderCheckoutResponse` |
+| POST | `/api/orders/{order_id}/retry-print` | `PrintRetryResponse` | Re-queue the order's `failed` slips; returns at once. Waiter: kitchen slips only. `404` unknown order |
+| GET | `/api/orders/{order_id}/print-jobs` | `PrintJobResponse[]` | Every slip recorded for the order |
+| GET | `/api/print-jobs/failed?hours=12` | `PrintJobResponse[]` | Retryable failed slips of the last `hours` (1–168), newest first. Waiter: kitchen slips only |
 
 **Checkout body (`OrderCheckoutRequest`):**
 - `payment_method` — `cash` \| `mobile_money` \| `split` (optional when `cash_amount` / `mobile_money_amount` provided)
@@ -150,7 +153,7 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 - `printer_id` — optional cashier printer id
 - `cashier_name` — optional free-text label printed on the receipt (blank → omitted / stored null)
 
-**Checkout response (`OrderCheckoutResponse`):** same fields as `OrderResponseDetail` plus optional `warning` (e.g. printer offline). Payment success is always reflected by HTTP 200 + `status=paid`; print failures do not roll back checkout.
+**Checkout response (`OrderCheckoutResponse`):** same fields as `OrderResponseDetail` plus optional `warning` (`Receipt was not printed: <reason>`, only when the receipt could not be queued). The receipt is printed by the print queue after the response; a failed print is a `failed` print job (`GET /api/orders/{id}/print-jobs`, WebSocket `print_job_updated`). Payment success is always reflected by HTTP 200 + `status=paid`; print failures do not roll back checkout.
 
 **Admin printers:** `GET/PUT /api/admin/kitchen-printers` manages global print mode only (`file` \| `escpos_network` \| `windows_printer`). `windows_printer` sends **cashier receipts** to a Windows queue; kitchen/bar keep **LAN** when `Printer.host` is set (else file). Named printers use `/api/printers` CRUD with roles `cashier|kitchen|bar|other` and optional `windows_printer_name`. `GET /api/admin/windows-printers` lists installed queues when `pywin32` is available. Category `food`→kitchen, `drinks`→bar (fallback kitchen). Cashier UI persists selection in `localStorage.selectedCashierPrinterId` and display name in `localStorage.currentCashierName`.
 
@@ -244,7 +247,7 @@ Query params: `start_date`, `end_date` where applicable.
 
 | Endpoint | Events (non-exhaustive) |
 |----------|-------------------------|
-| `/ws` | `new_order_batch`, `order_updated`, `order_cancelled`, `takeaways_updated`, `table_status_changed`, `table_grid_updated`, `menu_item_added`, `menu_item_updated`, `menu_item_availability_toggled` |
+| `/ws` | `new_order_batch`, `order_updated`, `order_cancelled`, `takeaways_updated`, `table_status_changed`, `table_grid_updated`, `menu_item_added`, `menu_item_updated`, `menu_item_availability_toggled`, `print_job_updated` (payload = `PrintJobResponse`, sent after every print attempt) |
 
 Payloads are feature-specific; see individual feature specs.
 

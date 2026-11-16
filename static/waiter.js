@@ -2206,6 +2206,10 @@ function connectWebSocket() {
         handleRemoteOrderClosed(msg.data);
         return;
       }
+      if (msg.event === 'print_job_updated') {
+        window.printJobs?.onEvent(msg.data);
+        return;
+      }
       if (
         msg.event === 'takeaways_updated' ||
         (msg.event === 'order_completed' && String(msg?.data?.order_type || '').toLowerCase() === 'takeaway')

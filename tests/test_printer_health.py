@@ -82,7 +82,7 @@ def test_submit_with_offline_lan_warns_but_saves(
     db_session.refresh(item)
 
     monkeypatch.setattr(
-        "routers.orders.dispatch_kitchen_ticket",
+        "services.printing.print_jobs.dispatch_kitchen_ticket",
         AsyncMock(side_effect=OSError("printer down")),
     )
 

@@ -2249,12 +2249,12 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     }
     await dialogAlert(t('payment_success', 'Payment processed successfully.'), 'success', t('success', 'Success'));
     if (data.warning && window.toast) {
-      window.toast.error(
-        t(
-          'receipt_printer_offline',
-          'Checkout successful, but receipt printer is offline!'
-        )
+      const base = t(
+        'receipt_printer_offline',
+        'Checkout successful, but receipt printer is offline!'
       );
+      // Show the server's reason too (wrong queue, no host, spooler error, ...).
+      window.toast.error(`${base} (${data.warning})`);
     }
 
     clearCheckoutSelection();
@@ -4655,6 +4655,9 @@ function connectCounterWebSocket() {
       }
       if (msg.event === 'order_cancelled' && msg.data) {
         handleRemoteOrderClosed(msg.data);
+      }
+      if (msg.event === 'print_job_updated') {
+        window.printJobs?.onEvent(msg.data);
       }
       if (msg.event === 'order_completed' && msg.data) {
         handleRemoteOrderClosed(msg.data);

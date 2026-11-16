@@ -393,7 +393,7 @@ def test_takeaway_submit_prints_kitchen_ticket_with_takeaway_header(
             }
         )
 
-    monkeypatch.setattr("routers.orders.dispatch_kitchen_ticket", _capture)
+    monkeypatch.setattr("services.printing.print_jobs.dispatch_kitchen_ticket", _capture)
 
     res = client.post(
         "/api/orders/submit",

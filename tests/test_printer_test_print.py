@@ -174,3 +174,49 @@ def test_printer_test_print_windows_cashier_missing_queue_502(client, db_session
         assert "queue" in detail_text.lower()
     finally:
         _restore_file_backend(db_session)
+
+
+def test_printer_test_print_windows_mode_kitchen_without_host_never_uses_other_printer(
+    client, db_session, auth_headers, monkeypatch
+):
+    """Row without host must fail clearly, not print on another row's LAN host."""
+    seed_kitchen_printer_settings(db_session)
+    seed_default_printers(db_session, force=True)
+    settings = db_session.query(KitchenPrinterSettings).filter(KitchenPrinterSettings.id == 1).first()
+    settings.backend = "windows_printer"
+    settings.render_mode = "text"
+    db_session.commit()
+
+    for row in db_session.query(Printer).filter(Printer.role == "kitchen").all():
+        row.host = None
+    db_session.commit()
+    no_host = db_session.query(Printer).filter(Printer.role == "kitchen").order_by(Printer.id.asc()).first()
+    other = Printer(name="Kitchen 2", host="192.168.1.88", port=9100, role="kitchen", is_active=True)
+    db_session.add(other)
+    db_session.commit()
+
+    sent: list[tuple[str, int]] = []
+
+    def _fake_send_network(config, route, escpos_payload, *, timeout_seconds=None):
+        endpoint = config.routes.get(route)
+        sent.append((endpoint.host, endpoint.port))
+
+    def _fake_lan(endpoint, payload, *, timeout_seconds=5.0, route_label="printer"):
+        sent.append((endpoint.host, endpoint.port))
+
+    monkeypatch.setattr("services.printing.service.send_network_ticket", _fake_send_network)
+    monkeypatch.setattr("services.printing.service.print_image_to_network", _fake_lan)
+    try:
+        res = client.post(
+            f"/api/printers/{no_host.id}/test-print",
+            headers=auth_headers("admin"),
+        )
+        assert sent == [], f"test slip was sent to another printer: {sent}"
+        assert res.status_code == 502, res.text
+        detail = res.json()["detail"]
+        text = detail if isinstance(detail, str) else str(detail.get("message") or "")
+        assert "host" in text.lower()
+    finally:
+        db_session.delete(other)
+        db_session.commit()
+        _restore_file_backend(db_session)

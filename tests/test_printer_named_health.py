@@ -108,3 +108,116 @@ def test_check_named_printer_health_helper_raises_missing(db_session):
         assert False, "expected LookupError"
     except LookupError:
         pass
+
+
+class _FakeSpooler:
+    """Minimal win32print stand-in for probe_windows_queue."""
+
+    def __init__(self, info):
+        self._info = info
+        self.closed = False
+
+    def OpenPrinter(self, name):
+        return "handle"
+
+    def GetPrinter(self, handle, level):
+        assert level == 2
+        return self._info
+
+    def ClosePrinter(self, handle):
+        self.closed = True
+
+
+def _probe(monkeypatch, info):
+    from services.printing.backends import escpos_windows as win_mod
+
+    fake = _FakeSpooler(info)
+    monkeypatch.setattr(win_mod, "win32print", fake)
+    ok, message = win_mod.probe_windows_queue("POS-80")
+    assert fake.closed is True
+    return ok, message
+
+
+def test_probe_windows_queue_ready(monkeypatch):
+    ok, message = _probe(
+        monkeypatch,
+        {"Status": 0, "Attributes": 0, "cJobs": 0, "pPortName": "USB001"},
+    )
+    assert ok is True
+    assert "USB001" in message
+    assert "ready" in message
+
+
+def test_probe_windows_queue_work_offline_attribute_is_offline(monkeypatch):
+    """Unplugged USB printers keep Status=0; only the work-offline attribute is set."""
+    ok, message = _probe(
+        monkeypatch,
+        {"Status": 0, "Attributes": 0x400, "cJobs": 0, "pPortName": "USB001"},
+    )
+    assert ok is False
+    assert "offline" in message
+
+
+def test_probe_windows_queue_status_paper_out_is_offline(monkeypatch):
+    ok, message = _probe(monkeypatch, {"Status": 0x10, "Attributes": 0, "cJobs": 0})
+    assert ok is False
+    assert "paper out" in message
+
+
+def test_probe_windows_queue_reports_stuck_jobs(monkeypatch):
+    ok, message = _probe(monkeypatch, {"Status": 0, "Attributes": 0, "cJobs": 3})
+    assert ok is True
+    assert "3 job(s) waiting" in message
+
+
+def test_aggregate_health_ignores_inactive_printers(client, db_session, auth_headers):
+    _set_backend(db_session, "escpos_network")
+    seed_default_printers(db_session, force=True)
+    spare = Printer(name="Spare (off)", host=None, port=9100, role="other", is_active=False)
+    db_session.add(spare)
+    db_session.commit()
+    try:
+        res = client.get("/api/printers/health", headers=auth_headers("admin"))
+        assert res.status_code == 200, res.text
+        names = [n["name"] for n in res.json()["named_printers"]]
+        assert "Spare (off)" not in names
+        # A single row can still be probed on demand.
+        one = client.get(f"/api/printers/{spare.id}/health", headers=auth_headers("admin"))
+        assert one.status_code == 200
+        assert one.json()["status"] == "offline"
+    finally:
+        db_session.delete(spare)
+        db_session.commit()
+        _set_backend(db_session, "file")
+
+
+def test_print_log_handler_not_duplicated_through_symlinked_path(tmp_path, monkeypatch):
+    """Repeated prints must not stack file handlers (one log line per event)."""
+    import logging
+
+    from services.printing import print_log
+
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real, target_is_directory=True)
+    monkeypatch.setattr(print_log, "PRINT_LOG_DIR", link)
+    monkeypatch.setattr(print_log, "PRINT_LOG_FILE", link / "print.log")
+
+    parent = logging.getLogger("services.printing")
+    alias = logging.getLogger("pos.printing")
+    before_parent, before_alias = list(parent.handlers), list(alias.handlers)
+    try:
+        for _ in range(5):
+            print_log.ensure_print_file_logging()
+        added = [h for h in parent.handlers if h not in before_parent]
+        assert len(added) == 1
+        logging.getLogger("services.printing.service").info("one-line-marker")
+        added[0].flush()
+        assert (link / "print.log").read_text(encoding="utf-8").count("one-line-marker") == 1
+    finally:
+        for handler in [h for h in parent.handlers if h not in before_parent]:
+            parent.removeHandler(handler)
+            handler.close()
+        for handler in [h for h in alias.handlers if h not in before_alias]:
+            alias.removeHandler(handler)

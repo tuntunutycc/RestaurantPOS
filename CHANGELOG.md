@@ -1,5 +1,73 @@
 # Changelog
 
+## 2026-11-16 — Print queue + retry
+
+### Summary
+Slips are no longer sent inside the request. Every kitchen slip and receipt is stored as a `print_jobs` row and sent by a background queue: one queue per physical printer, one slip at a time, with a pause between slips (`PRINT_QUEUE_DELAY_SECONDS`, default 1 s). Before, one order with five lines opened five connections to the same printer at once, which is what makes LAN thermal printers drop tickets. A slip that fails is recorded with its reason and can be reprinted.
+
+### Behaviour changes
+- `POST /api/orders/submit` and checkout return as soon as the slips are queued. Response shapes are unchanged.
+- `warning` on submit still reports a printer that is already offline. A slip that fails later is no longer in `warning`; it becomes `print_status='failed'`, is broadcast as WebSocket `print_job_updated`, and shows in the new **Print failed (N)** button.
+- `warning` on checkout is now set only when the receipt could not be queued. This replaces the `Receipt was not printed: <reason>` behaviour from the entry below: the reason is now on the failed print job and in the **Print failed** list.
+- Slips still `pending` when the server stops are marked `failed` at the next start (not printed automatically).
+- A kitchen slip whose line or order was cancelled while it waited is not printed.
+
+### Added
+- Table `print_jobs` (`print_status`: `pending` | `printed` | `failed`, `error_message`, `attempts`). Created automatically at startup.
+- `POST /api/orders/{order_id}/retry-print`, `GET /api/orders/{order_id}/print-jobs`, `GET /api/print-jobs/failed`.
+- `services/printing/print_queue.py`, `services/printing/print_jobs.py`; queue started/stopped in the FastAPI lifespan.
+- Waiter + counter: **Print failed (N)** button, list by order, **Retry** (`static/print-jobs.js`).
+- `.env.example`: `PRINT_QUEUE_DELAY_SECONDS`.
+
+### Changed
+- Print Test goes through the same per-printer queue.
+- LAN "no address" error now points to Menu Management > Printers instead of only `.env` variables.
+- `scripts/seed_root.py`: `seed_root(db=...)` creates tables in that session's database (a test was creating them in the real `pos.db`).
+
+### Spec
+- `specs/feature-print-queue/` (requirements, plan, validation)
+- `specs/feature-cashier-receipt-printing/`, `specs/feature-kitchen-printing/`, `specs/api-reference.md`, `specs/database-schema.md`, `specs/tech-stack.md`
+
+### Tests
+- `tests/test_print_queue.py` (36). Suite: 322 passed.
+
+### Review checklist
+- Security: new endpoints require a token; retry takes no body; job payloads (receipt amounts) are never returned, only labels. UI writes job text with `textContent`.
+- Roles: retry / lists = root, admin, cashier, waiter (`account` → 403). A waiter cannot see or reprint receipts.
+- Money/state: no change to totals, payment or order status; printing can never roll them back (tested).
+- Data consistency: retry only flips rows that are still `failed`, so a double click cannot print twice.
+- Edge cases: printer offline, failure mid-queue, cancelled line/order, unknown order, server restart, queue not running, slips cannot be queued.
+- Not verified: real thermal printer and Windows spooler, phone layout, Myanmar UI strings (see `validation.md`).
+
+## 2026-11-16 — Print path review: wrong-printer test slip, hidden receipt errors, false online/offline
+
+### Summary
+Review of every print path (kitchen/bar tickets, cashier receipt, Print Test, Check, print log). Kitchen/bar routing and receipt printing behaved correctly end to end over real TCP sockets; the fixes below are for diagnostics that could mislead.
+
+### Fixed
+- **Print Test could print on a different printer.** Under Windows print mode, a kitchen/bar/other row with no host reported `target=file` while the slip went to another row's (or the `.env`) LAN host for that route. It now fails with `502` and says the row needs IP:port.
+- **Checkout hid why the receipt did not print.** `warning` was always "Receipt printer offline or unreachable"; it is now `Receipt was not printed: <reason>`, the Counter toast shows that reason, and it is written to `logs/printing/print.log`.
+- **Windows Check could say "ready" for an unplugged USB printer.** The probe now also reads the queue's work-offline attribute, and reports the port and number of waiting jobs.
+- **Admin Check now warned about inactive printers.** Aggregate health lists active printers only.
+- **Print log lines could repeat.** When the project folder was reached through a symlink/junction, each print attached another log handler.
+- **Tests wrote into the real `logs/printing/print.log`.** Test runs now log to a temp folder.
+- **`.env.example` shipped live placeholder printer IPs** (`192.168.1.101-103`). They are now commented out. An existing `.env` copied from the old example still has them and must be edited by hand.
+
+### Spec
+- `specs/feature-printer-test-print/` FR-TP3, FR-TP5
+- `specs/feature-cashier-receipt-printing/` FR-CR3, FR-CR5
+- `specs/api-reference.md`
+
+### Tests
+- `tests/test_printer_test_print.py`, `tests/test_printer_named_health.py`, `tests/test_cashier_receipt_printing.py`, `tests/test_windows_cashier_printing.py`, `tests/conftest.py`
+
+### Review checklist
+- Security: no new endpoints; error text returned to the client is the exception message already shown by Print Test (no secrets, no stack traces).
+- Roles: unchanged (`test-print` / per-printer health admin+root; checkout roles unchanged).
+- Money/state: checkout still returns `200` + `paid` when printing fails; no change to totals or order transitions.
+- Edge cases: row without host, missing Windows queue name, inactive printers, unreachable LAN host, non-Windows host.
+- Not verified: real Windows spooler and physical printers (logic covered with a fake spooler and local TCP listeners only).
+
 ## 2026-11-16 — Printer Check (online) + clearer print errors
 
 ### Summary

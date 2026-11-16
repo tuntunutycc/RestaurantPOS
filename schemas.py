@@ -838,6 +838,35 @@ class OrderCheckoutResponse(OrderResponseDetail):
     warning: str | None = None
 
 
+class PrintJobResponse(BaseModel):
+    """One queued slip. Also the payload of WebSocket event `print_job_updated`."""
+
+    id: int
+    order_id: int
+    order_item_id: int | None = None
+    kind: Literal["kitchen", "receipt"]
+    route: str
+    print_status: Literal["pending", "printed", "failed"]
+    error_message: str | None = None
+    attempts: int = 0
+    # What the slip is ("Mohinga x2", "Receipt") and where it belongs (table / customer).
+    item_label: str
+    location_label: str | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+    printed_at: datetime | None = None
+
+
+class PrintRetryResponse(BaseModel):
+    """Result of POST /api/orders/{order_id}/retry-print."""
+
+    order_id: int
+    requeued: int
+    skipped: int
+    message: str
+    jobs: list[PrintJobResponse] = Field(default_factory=list)
+
+
 class PaymentMethodTotalsResponse(BaseModel):
     """Aggregated sales for one period grouped by payment method."""
 

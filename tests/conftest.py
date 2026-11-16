@@ -28,6 +28,25 @@ from websocket_manager import ConnectionManager
 TEST_DEVICE_ID = "pytest-device"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _isolate_print_log(tmp_path_factory):
+    """Keep test runs out of logs/printing/print.log.
+
+    That file is what an operator reads to diagnose a real printer; mocked
+    "print succeeded" lines from pytest made it misleading.
+    """
+    from services.printing import print_log
+
+    log_dir = tmp_path_factory.mktemp("print-log")
+    original = (print_log.PRINT_LOG_DIR, print_log.PRINT_LOG_FILE)
+    print_log.PRINT_LOG_DIR = log_dir
+    print_log.PRINT_LOG_FILE = log_dir / "print.log"
+    try:
+        yield
+    finally:
+        print_log.PRINT_LOG_DIR, print_log.PRINT_LOG_FILE = original
+
+
 @pytest.fixture(scope="session")
 def test_engine():
     engine = create_engine(

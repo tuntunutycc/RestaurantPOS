@@ -55,6 +55,11 @@ def _seed_open_order(db_session, *, total: float = 150.0):
 
 
 def _purge(db_session, order_id: int) -> None:
+    # Bulk deletes skip the ORM cascade; SQLite reuses ids, so a later order
+    # would otherwise inherit these print jobs.
+    from models import PrintJob
+
+    db_session.query(PrintJob).filter(PrintJob.order_id == order_id).delete()
     db_session.query(OrderItem).filter(OrderItem.order_id == order_id).delete()
     db_session.query(Order).filter(Order.id == order_id).delete()
     db_session.commit()

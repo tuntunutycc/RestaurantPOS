@@ -310,7 +310,7 @@ def test_two_bowls_different_toppings_cashier_details(
     """Friend scenario: bowl A pea fritters, bowl B duck egg — totals + composition."""
     item = _seed_mohinga(db_session, name="မုန့်ဟင်းခါး-2bowls", price=2000)
     monkeypatch.setattr(
-        "routers.orders.dispatch_kitchen_ticket",
+        "services.printing.print_jobs.dispatch_kitchen_ticket",
         AsyncMock(return_value=None),
     )
     res = client.post(
@@ -368,7 +368,7 @@ def test_kitchen_dispatch_receives_selected_modifiers(
     async def _fake_dispatch(route, item_ticket, **kwargs):
         captured.append({"route": route, "ticket": dict(item_ticket)})
 
-    monkeypatch.setattr("routers.orders.dispatch_kitchen_ticket", _fake_dispatch)
+    monkeypatch.setattr("services.printing.print_jobs.dispatch_kitchen_ticket", _fake_dispatch)
 
     res = client.post(
         "/api/orders/submit",
@@ -407,7 +407,7 @@ def test_kitchen_one_slip_per_line_same_route(
     async def _fake_dispatch(route, item_ticket, **kwargs):
         captured.append({"route": route, "ticket": dict(item_ticket)})
 
-    monkeypatch.setattr("routers.orders.dispatch_kitchen_ticket", _fake_dispatch)
+    monkeypatch.setattr("services.printing.print_jobs.dispatch_kitchen_ticket", _fake_dispatch)
 
     res = client.post(
         "/api/orders/submit",
@@ -550,7 +550,7 @@ def test_other_menu_item_can_use_same_modifier_pattern(
 ):
     """Modifiers are not mohinga-only."""
     monkeypatch.setattr(
-        "routers.orders.dispatch_kitchen_ticket",
+        "services.printing.print_jobs.dispatch_kitchen_ticket",
         AsyncMock(return_value=None),
     )
     cat = Category(name="Snacks")

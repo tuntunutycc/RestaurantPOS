@@ -57,6 +57,11 @@ def _seed_open_order(db_session, *, total: float = 10.0):
 
 
 def _purge_order(db_session, order_id: int) -> None:
+    # Bulk deletes skip the ORM cascade; SQLite reuses ids, so a later order
+    # would otherwise inherit these print jobs.
+    from models import PrintJob
+
+    db_session.query(PrintJob).filter(PrintJob.order_id == order_id).delete()
     db_session.query(OrderItem).filter(OrderItem.order_id == order_id).delete()
     db_session.query(Order).filter(Order.id == order_id).delete()
     db_session.commit()
@@ -293,7 +298,7 @@ def test_receipt_text_includes_note_and_pre_tax_line_amount():
     assert "Grand Total:  1901.80" in text
 
 
-def test_checkout_printer_connection_error_returns_warning(
+def test_checkout_printer_connection_error_records_failed_job(
     client, db_session, auth_headers, monkeypatch
 ):
     seed_default_printers(db_session, force=True)
@@ -341,7 +346,14 @@ def test_checkout_printer_connection_error_returns_warning(
         body = res.json()
         assert body["status"] == "paid"
         assert body["payment_method"] == "mobile_money"
-        assert body["warning"] == "Receipt printer offline or unreachable"
+        # Checkout no longer waits for the printer: the receipt is queued and
+        # the failure (with its real reason) is recorded on the print job.
+        assert body["warning"] is None
+        jobs = client.get(
+            f"/api/orders/{order.id}/print-jobs", headers=auth_headers("cashier")
+        ).json()
+        assert [(j["kind"], j["print_status"]) for j in jobs] == [("receipt", "failed")]
+        assert jobs[0]["error_message"] == "Connection refused"
     finally:
         _purge_order(db_session, order.id)
 
@@ -350,7 +362,7 @@ def test_checkout_skip_receipt_does_not_dispatch(client, db_session, auth_header
     order = _seed_open_order(db_session, total=5.0)
     try:
         mock_dispatch = AsyncMock()
-        monkeypatch.setattr("routers.orders.dispatch_cashier_receipt", mock_dispatch)
+        monkeypatch.setattr("services.printing.print_jobs.dispatch_cashier_receipt", mock_dispatch)
         res = client.put(
             f"/api/orders/{order.id}/checkout",
             headers=auth_headers("cashier"),

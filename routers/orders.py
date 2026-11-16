@@ -1,6 +1,5 @@
 """Orders API: create and manage orders."""
 
-import asyncio
 import logging
 from typing import Any
 
@@ -23,7 +22,16 @@ from services.order_history import (
 )
 from services.printing.health import check_route_health, warning_for_offline_routes
 from services.printing.routes import resolve_printer_route
-from services.printing.service import dispatch_cashier_receipt, dispatch_kitchen_ticket
+from services.printing.print_log import get_print_logger
+from services.printing.print_jobs import (
+    create_kitchen_job,
+    create_receipt_job,
+    enqueue_print_jobs,
+    job_to_dict,
+    list_failed_jobs,
+    list_order_jobs,
+    requeue_failed_jobs,
+)
 from schemas import (
     ActiveTakeawayOrderResponse,
     DailyOrderHistoryLine,
@@ -42,6 +50,8 @@ from schemas import (
     OrderStatusLiteral,
     OrderSubmitRequest,
     OrderSubmitResponse,
+    PrintJobResponse,
+    PrintRetryResponse,
     SelectedModifier,
 )
 
@@ -1279,6 +1289,8 @@ async def submit_order(
     batch_items_detail: list[OrderItemDetail] = []
     # One kitchen slip per submitted line (modifiers stay under that line — Pattern A).
     print_jobs: list[tuple[str, dict[str, Any]]] = []
+    # Same order as print_jobs: the order line each slip belongs to.
+    print_job_lines: list[OrderItem] = []
     print_meta: dict[str, Any] = {
         "table_number": table_number if table_number is not None else None,
         "order_id": None,  # filled after order exists
@@ -1307,26 +1319,26 @@ async def submit_order(
         )
         note_value = (line.note or line.special_instructions or "").strip() or None
         batch_total = _round_money(batch_total + subtotal)
-        db.add(
-            OrderItem(
-                order_id=order.id,
-                menu_item_id=line.menu_item_id,
-                quantity=line.quantity,
-                subtotal=_round_money(subtotal),
-                batch_number=new_batch_number,
-                batch_status="pending",
-                created_by_id=current_user.id,
-                selected_modifiers=selected_modifiers,
-                note=note_value,
-                special_instructions=note_value,
-                menu_item_name_at_sale=menu_item.name,
-                unit_price_at_sale=base_price,
-                unit_discount_at_sale=unit_discount,
-                unit_tax_at_sale=unit_tax,
-                category_name_at_sale=getattr(getattr(menu_item, "category", None), "name", None),
-                is_takeaway=is_takeaway,
-            )
+        order_line = OrderItem(
+            order_id=order.id,
+            menu_item_id=line.menu_item_id,
+            quantity=line.quantity,
+            subtotal=_round_money(subtotal),
+            batch_number=new_batch_number,
+            batch_status="pending",
+            created_by_id=current_user.id,
+            selected_modifiers=selected_modifiers,
+            note=note_value,
+            special_instructions=note_value,
+            menu_item_name_at_sale=menu_item.name,
+            unit_price_at_sale=base_price,
+            unit_discount_at_sale=unit_discount,
+            unit_tax_at_sale=unit_tax,
+            category_name_at_sale=getattr(getattr(menu_item, "category", None), "name", None),
+            is_takeaway=is_takeaway,
         )
+        db.add(order_line)
+        print_job_lines.append(order_line)
         batch_items_detail.append(
             OrderItemDetail(
                 menu_item_name=menu_item.name,
@@ -1394,66 +1406,53 @@ async def submit_order(
     if table and previous_status != table.status:
         await _broadcast_table_status_changed(request, table)
 
-    # Probe + print: order is already saved; offline printers only produce a warning.
+    # Order is already saved. Kitchen slips are recorded and queued per printer
+    # (specs/feature-print-queue); the request does not wait for the printer.
+    # `warning` carries the offline pre-check; send failures arrive later as
+    # print_status='failed' + WebSocket `print_job_updated`.
     print_warning: str | None = None
     if print_jobs:
         routes_used = {route for route, _ in print_jobs}
         health_results = [check_route_health(db, route) for route in routes_used]
         print_warning = warning_for_offline_routes(health_results)
 
-        dispatch_payloads = [
-            (
-                printer_route,
-                {
-                    **item_payload,
-                    "table_number": print_meta["table_number"],
-                    "order_id": print_meta["order_id"],
-                    "date": print_meta["date"],
-                },
+        try:
+            order_type_value = getattr(order, "order_type", "dine_in")
+            customer_name_value = getattr(order, "customer_name", None)
+            jobs = [
+                create_kitchen_job(
+                    db,
+                    order_id=print_meta["order_id"],
+                    order_item_id=order_line.id,
+                    route=printer_route,
+                    ticket={
+                        **item_payload,
+                        "table_number": print_meta["table_number"],
+                        "order_id": print_meta["order_id"],
+                        "date": print_meta["date"],
+                    },
+                    order_type=order_type_value,
+                    customer_name=customer_name_value,
+                )
+                for (printer_route, item_payload), order_line in zip(
+                    print_jobs, print_job_lines, strict=True
+                )
+            ]
+            db.commit()
+            await enqueue_print_jobs(db, [job.id for job in jobs])
+        except Exception as exc:
+            db.rollback()
+            reason = str(exc).strip() or exc.__class__.__name__
+            logger.exception(
+                "Kitchen slips could not be queued order_id=%s", print_meta["order_id"]
             )
-            for printer_route, item_payload in print_jobs
-        ]
-        print_results = await asyncio.gather(
-            *[
-                dispatch_kitchen_ticket(
-                    printer_route,
-                    ticket_payload,
-                    order_type=getattr(order, "order_type", "dine_in"),
-                    customer_name=getattr(order, "customer_name", None),
-                    db=db,
-                )
-                for printer_route, ticket_payload in dispatch_payloads
-            ],
-            return_exceptions=True,
-        )
-        failed_parts: list[str] = []
-        for (route, ticket_payload), result in zip(
-            dispatch_payloads, print_results, strict=True
-        ):
-            if isinstance(result, BaseException):
-                detail = str(result).strip() or result.__class__.__name__
-                item_label = str(ticket_payload.get("item_name") or route)
-                failed_parts.append(f"{route}/{item_label} ({detail})")
-                logger.error(
-                    "Kitchen print failed route=%s order_id=%s item=%s: %s",
-                    route,
-                    order.id,
-                    item_label,
-                    detail,
-                )
-            else:
-                logger.info(
-                    "Kitchen print OK route=%s order_id=%s batch=%s item=%s",
-                    route,
-                    order.id,
-                    print_meta["batch_number"],
-                    ticket_payload.get("item_name"),
-                )
-        if failed_parts:
+            get_print_logger().error(
+                "Kitchen slips could not be queued order_id=%s: %s",
+                print_meta["order_id"],
+                reason,
+            )
             fail_msg = (
-                "Kitchen print failed for: "
-                + "; ".join(failed_parts)
-                + ". Order was saved; check printer / logs/printing/print.log."
+                f"Order was saved, but kitchen slips could not be queued: {reason}"
             )
             print_warning = (
                 f"{print_warning} | {fail_msg}" if print_warning else fail_msg
@@ -1497,7 +1496,8 @@ async def checkout_order(
     - Ensure final total is never below 0
     - Validate amount_tendered >= final total
     - Set status = 'paid' and store payment + discount details
-    - Optionally print LAN receipt when issue_receipt=true (print failures become warning)
+    - Optionally queue the receipt when issue_receipt=true (never rolls back payment;
+      a failed print is recorded on its print job, see specs/feature-print-queue)
     """
     order = (
         db.query(Order)
@@ -1663,27 +1663,105 @@ async def checkout_order(
                 money["breakdown_discount_total"] + discount_amount
             )
             receipt_tax = money["breakdown_tax_total"]
-            await dispatch_cashier_receipt(
+            # Record + queue the receipt; do not wait for the printer. A failed
+            # print becomes print_status='failed' + WebSocket `print_job_updated`.
+            receipt_job = create_receipt_job(
+                db,
                 order_id=order.id,
-                served_by=detail.waiter_name,
-                cashier_name=getattr(order, "cashier_name", None),
-                location_label=location_label,
-                items=receipt_items,
-                subtotal=receipt_subtotal,
-                discount_amount=receipt_discount,
-                tax_amount=receipt_tax,
-                grand_total=_round_money(final_total),
-                payment_method=payment["payment_method"],
-                amount_tendered=_round_money(tendered),
-                change_amount=_round_money(change),
-                cash_amount=payment["cash_amount"],
-                mobile_money_amount=payment["mobile_money_amount"],
-                created_at=created_at_str,
                 printer_id=body.printer_id,
-                db=db,
+                receipt={
+                    "order_id": order.id,
+                    "served_by": detail.waiter_name,
+                    "cashier_name": getattr(order, "cashier_name", None),
+                    "location_label": location_label,
+                    "items": receipt_items,
+                    "subtotal": receipt_subtotal,
+                    "discount_amount": receipt_discount,
+                    "tax_amount": receipt_tax,
+                    "grand_total": _round_money(final_total),
+                    "payment_method": payment["payment_method"],
+                    "amount_tendered": _round_money(tendered),
+                    "change_amount": _round_money(change),
+                    "cash_amount": payment["cash_amount"],
+                    "mobile_money_amount": payment["mobile_money_amount"],
+                    "created_at": created_at_str,
+                },
             )
+            db.commit()
+            await enqueue_print_jobs(db, [receipt_job.id])
         except Exception as exc:
-            logger.error("Cashier receipt print failed for order %s: %s", order_id, exc)
-            warning = "Receipt printer offline or unreachable"
+            db.rollback()
+            reason = str(exc).strip() or exc.__class__.__name__
+            logger.exception("Cashier receipt could not be queued for order %s", order_id)
+            get_print_logger().error(
+                "Cashier receipt could not be queued order_id=%s printer_id=%s: %s",
+                order_id,
+                body.printer_id,
+                reason,
+            )
+            warning = f"Receipt was not printed: {reason}"
 
     return OrderCheckoutResponse(**detail.model_dump(), warning=warning)
+
+
+def _can_print_receipts(user: User) -> bool:
+    """Receipts belong to checkout roles; a waiter only handles kitchen slips."""
+    return str(getattr(user, "role", "") or "").strip().lower() in CHECKOUT_ROLES
+
+
+@router.get("/print-jobs/failed", response_model=list[PrintJobResponse])
+def get_failed_print_jobs(
+    hours: int = Query(12, ge=1, le=168),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
+):
+    """Recent slips that failed to print and can still be retried."""
+    jobs = list_failed_jobs(
+        db, hours=hours, include_receipts=_can_print_receipts(current_user)
+    )
+    return [PrintJobResponse(**job_to_dict(job)) for job in jobs]
+
+
+@router.get("/orders/{order_id}/print-jobs", response_model=list[PrintJobResponse])
+def get_order_print_jobs(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
+):
+    """Every slip recorded for this order, oldest first."""
+    if db.query(Order.id).filter(Order.id == order_id).first() is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return [PrintJobResponse(**job_to_dict(job)) for job in list_order_jobs(db, order_id)]
+
+
+@router.post("/orders/{order_id}/retry-print", response_model=PrintRetryResponse)
+async def retry_order_print(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
+):
+    """Re-queue this order's failed slips. Returns without waiting for the printer."""
+    if db.query(Order.id).filter(Order.id == order_id).first() is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    requeued_ids, skipped = requeue_failed_jobs(
+        db, order_id, include_receipts=_can_print_receipts(current_user)
+    )
+    if requeued_ids:
+        await enqueue_print_jobs(db, requeued_ids)
+
+    requeued_set = set(requeued_ids)
+    jobs = [job for job in list_order_jobs(db, order_id) if job.id in requeued_set]
+    if requeued_ids:
+        message = f"{len(requeued_ids)} slip(s) sent to the print queue"
+    elif skipped:
+        message = "Nothing to retry: the failed slips cannot be reprinted"
+    else:
+        message = "Nothing to retry: this order has no failed slips"
+    return PrintRetryResponse(
+        order_id=order_id,
+        requeued=len(requeued_ids),
+        skipped=skipped,
+        message=message,
+        jobs=[PrintJobResponse(**job_to_dict(job)) for job in jobs],
+    )

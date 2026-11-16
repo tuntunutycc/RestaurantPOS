@@ -10,6 +10,7 @@ Canonical ORM definition: `models.py`. Runtime column additions for SQLite dev: 
 
 ```
 Zone 1──* Table 1──* Order 1──* OrderItem *──1 MenuItem
+                              ├──* PrintJob (*──0..1 OrderItem)
                               │
                               └── checked_out_by → User
 OrderItem.created_by → User
@@ -197,6 +198,29 @@ Dynamic named printers (Admin CRUD). LAN uses `host`/`port`; Windows cashier rec
 | `is_active` | Boolean | |
 
 Seed defaults: Default Cashier + Default Kitchen (optional Default Bar if drinks host in env/legacy). `kitchen_printer_settings.default_printers_seeded` prevents re-seeding after an admin deletes all printers. Category map: `food`→kitchen, `drinks`→bar (fallback kitchen).
+
+---
+
+## `print_jobs`
+
+One row per slip sent to a printer (kitchen ticket per order line, or cashier receipt). See `specs/feature-print-queue/`.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | Integer PK | |
+| `order_id` | Integer FK `orders.id` | Required; deleted with the order |
+| `order_item_id` | Integer FK `order_items.id` nullable | Kitchen slips only |
+| `kind` | String(16) | `kitchen` \| `receipt` |
+| `route` | String(32) | `food` \| `drinks` \| `cashier` |
+| `printer_id` | Integer nullable | Cashier printer chosen at checkout (no FK) |
+| `payload` | JSON | Data needed to render the slip again |
+| `print_status` | String(16) | `pending` \| `printed` \| `failed` (check constraint `ck_print_jobs_status_valid`) |
+| `error_message` | String(1024) nullable | Reason of the last failure |
+| `attempts` | Integer | Send attempts |
+| `created_at`, `updated_at` | DateTime | UTC |
+| `printed_at` | DateTime nullable | UTC |
+
+Indexes: `(order_id, print_status)`, `(print_status, created_at)`. Created by `Base.metadata.create_all` at startup (no `ALTER TABLE`). On startup every `pending` row becomes `failed`.
 
 ---
 

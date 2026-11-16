@@ -57,6 +57,11 @@ def _seed_open_order(db_session, *, total: float = 25.5):
 
 
 def _purge_order(db_session, order_id: int) -> None:
+    # Bulk deletes skip the ORM cascade; SQLite reuses ids, so a later order
+    # would otherwise inherit these print jobs.
+    from models import PrintJob
+
+    db_session.query(PrintJob).filter(PrintJob.order_id == order_id).delete()
     db_session.query(OrderItem).filter(OrderItem.order_id == order_id).delete()
     db_session.query(Order).filter(Order.id == order_id).delete()
     db_session.commit()
@@ -237,7 +242,14 @@ def test_checkout_windows_missing_queue_soft_fails(
         assert res.status_code == 200, res.text
         body = res.json()
         assert body["status"] == "paid"
-        assert body.get("warning")
+        # The cashier must see why nothing printed, not a generic "offline":
+        # the reason is recorded on the receipt's print job.
+        assert body["warning"] is None
+        jobs = client.get(
+            f"/api/orders/{order.id}/print-jobs", headers=auth_headers("cashier")
+        ).json()
+        assert [(j["kind"], j["print_status"]) for j in jobs] == [("receipt", "failed")]
+        assert "queue" in jobs[0]["error_message"].lower()
     finally:
         _purge_order(db_session, order.id)
         _restore_file_backend(db_session)

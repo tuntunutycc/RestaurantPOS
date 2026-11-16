@@ -178,7 +178,7 @@ def test_submit_succeeds_when_print_dispatch_raises(
     )
 
     with patch(
-        "routers.orders.dispatch_kitchen_ticket",
+        "services.printing.print_jobs.dispatch_kitchen_ticket",
         new=AsyncMock(side_effect=RuntimeError("printer offline")),
     ):
         res = _submit_items(

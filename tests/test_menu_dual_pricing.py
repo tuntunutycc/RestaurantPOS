@@ -291,7 +291,7 @@ def test_dine_in_submit_passes_is_takeaway_to_kitchen_dispatch(
     async def _capture(route, ticket, **kwargs):
         captured.append({"route": route, "ticket": ticket, "kwargs": kwargs})
 
-    monkeypatch.setattr("routers.orders.dispatch_kitchen_ticket", _capture)
+    monkeypatch.setattr("services.printing.print_jobs.dispatch_kitchen_ticket", _capture)
 
     res = client.post(
         "/api/orders/submit",

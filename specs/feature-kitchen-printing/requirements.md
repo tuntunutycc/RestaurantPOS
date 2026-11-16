@@ -70,6 +70,7 @@ Each slip must include:
 
 ### FR-7: Non-blocking Print Failures (Critical)
 - Print failures must NOT fail order submit.
+- Slips are not sent inside the request: each submitted line becomes a `print_jobs` row and is sent by the per-printer queue, one slip at a time (see `specs/feature-print-queue/`). `warning` reports a printer that is already offline; a slip that fails later is `print_status='failed'` and can be retried.
 - Order submit API returns success if DB + business rules succeed.
 - Print errors are logged; async dispatch uses exception isolation.
 

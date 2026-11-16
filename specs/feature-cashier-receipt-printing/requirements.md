@@ -14,7 +14,7 @@ Multi-cashier terminals share one (or more) network receipt printers configured 
 | Role | Capability |
 |------|------------|
 | Admin | Configure `cashier` host/port via `GET/PUT /api/admin/kitchen-printers` (same settings singleton + `PrinterRouteEndpoint`) |
-| Cashier / checkout roles | Checkout with `issue_receipt`; see API `warning` if print fails |
+| Cashier / checkout roles | Checkout with `issue_receipt`; a failed receipt shows in **Print failed** and can be retried |
 | System | After paid commit, optional in-request TCP print (short timeout) |
 
 ## FR-CR1: Cashier printers (via unified Printer table)
@@ -40,7 +40,10 @@ Multi-cashier terminals share one (or more) network receipt printers configured 
 2. If `issue_receipt`:
    - Resolve target: `printer_id` → that cashier `Printer`, else first active `role=cashier`
    - Build receipt text … render … send (file or TCP 3s)
-3. Return **`200`**; print failure → `warning` only
+3. Return **`200`** without waiting for the printer (see `specs/feature-print-queue/`)
+   - The receipt is stored as a `print_jobs` row and queued for its printer
+   - A failed print sets `print_status='failed'` + `error_message` (real cause: unreachable host, missing Windows queue name, spooler error, …), is broadcast as `print_job_updated`, and is written to `logs/printing/print.log`
+   - `warning` = `Receipt was not printed: <reason>` only when the receipt could not be queued at all
 
 ## FR-CR4: Shop name
 - `SHOP_NAME` env var; fallback **`My Restaurant`**
@@ -49,7 +52,8 @@ Multi-cashier terminals share one (or more) network receipt printers configured 
 - Check Out pane / cashier header: printer `<select id="cashier-printer-select">` + Print Receipt checkbox
 - Persist selection in `localStorage.selectedCashierPrinterId`
 - Checkout body includes `printer_id` when printing
-- On success + `warning`: toast; no browser `window.print()`
+- On success + `warning`: toast shows the translated notice **plus** the server `warning` text; no browser `window.print()`
+- A receipt that fails to print: toast + **Print failed (N)** button with **Retry** (`static/print-jobs.js`)
 
 ## FR-CR6: Line-level takeaway marker
 - When a receipt line has `is_takeaway=true`, append ` (ပါဆယ်)` to the item name on the same line. See `specs/feature-menu-pricing/` FR-P6.

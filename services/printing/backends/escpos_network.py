@@ -56,8 +56,9 @@ def send_network_ticket(
     endpoint = config.routes.get(route)
     if endpoint is None:
         raise RuntimeError(
-            f"No LAN endpoint configured for printer route '{route}'. "
-            f"Set PRINTER_{route.upper()}_HOST and PRINTER_{route.upper()}_PORT."
+            f"No LAN address for the '{route}' printer. Set its IP and port in "
+            f"Menu Management > Printers (or PRINTER_{route.upper()}_HOST / "
+            f"PRINTER_{route.upper()}_PORT in .env)."
         )
     effective_timeout = (
         CASHIER_SOCKET_TIMEOUT_SECONDS

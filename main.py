@@ -714,7 +714,29 @@ async def lifespan(app: FastAPI):
                 db.commit()
     finally:
         db.close()
+
+    # Print queue (specs/feature-print-queue). The queue itself is in memory, so
+    # slips still pending from before this start will never be sent: mark them
+    # failed and let staff decide whether to retry.
+    from services.printing import print_jobs
+    from services.printing.print_queue import get_print_queue
+
+    db = SessionLocal()
+    try:
+        print_jobs.mark_interrupted_jobs_failed(db)
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+    print_jobs.configure(notifier=app.state.ws_manager.broadcast)
+    print_queue = get_print_queue()
+    await print_queue.start()
+    app.state.print_queue = print_queue
+
     yield
+
+    await print_queue.stop()
+    print_jobs.configure(notifier=None)
     engine.dispose()
 
 
