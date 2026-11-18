@@ -226,16 +226,34 @@ def _round_money(value) -> float:
 
 def _resolve_checkout_payment(body: OrderCheckoutRequest, final_total: float) -> dict:
     """
-    Resolve applied cash/mobile amounts, tendered cash, change, and payment_method.
-    Supports legacy payment_method+amount_tendered and explicit cash/mobile amounts.
+    Resolve how the bill is paid: cash / KPay / MMQR parts, cash handed over,
+    change and the stored payment_method. See specs/feature-payment-kpay-mmqr.
+
+    - Amounts given (cash_amount / kpay_amount / mmqr_amount): KPay + MMQR are
+      exact and may not exceed the total; cash covers the rest and any excess
+      cash is change.
+    - Otherwise payment_method + amount_tendered: the whole bill is one method.
     """
     final_total = _round_money(final_total)
-    has_explicit_amounts = body.cash_amount is not None or body.mobile_money_amount is not None
+    has_explicit_amounts = any(
+        value is not None
+        for value in (body.cash_amount, body.kpay_amount, body.mmqr_amount)
+    )
 
     if has_explicit_amounts:
         cash_tendered = _round_money(max(float(body.cash_amount or 0.0), 0.0))
-        mobile_tendered = _round_money(max(float(body.mobile_money_amount or 0.0), 0.0))
-        paid_sum = _round_money(cash_tendered + mobile_tendered)
+        kpay = _round_money(body.kpay_amount or 0.0)
+        mmqr = _round_money(body.mmqr_amount or 0.0)
+        mobile = _round_money(kpay + mmqr)
+        if mobile > final_total:
+            # Never decide which of the two transfers to reduce.
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"KPay + MMQR ({mobile:.2f}) is more than the total ({final_total:.2f})"
+                ),
+            )
+        paid_sum = _round_money(cash_tendered + mobile)
         if paid_sum < final_total:
             raise HTTPException(
                 status_code=400,
@@ -243,34 +261,38 @@ def _resolve_checkout_payment(body: OrderCheckoutRequest, final_total: float) ->
                     f"Payment amounts ({paid_sum:.2f}) are less than total ({final_total:.2f})"
                 ),
             )
-        applied_mobile = _round_money(min(mobile_tendered, final_total))
-        applied_cash = _round_money(final_total - applied_mobile)
-        # Change Due comes strictly from excess cash tendered (not mobile overpay).
+        applied_cash = _round_money(final_total - mobile)
+        # Change comes only from excess cash handed over.
         change = _round_money(cash_tendered - applied_cash)
         if change < 0:
             raise HTTPException(
                 status_code=400,
-                detail="Cash amount is insufficient after applying mobile money",
+                detail="Cash amount is insufficient after applying KPay / MMQR",
             )
-        if applied_cash > 0 and applied_mobile > 0:
+        used = [
+            name
+            for name, amount in (("cash", applied_cash), ("kpay", kpay), ("mmqr", mmqr))
+            if amount > 0
+        ]
+        if len(used) > 1:
             method = "split"
-        elif applied_mobile > 0:
-            method = "mobile_money"
         else:
-            method = "cash"
+            method = used[0] if used else "cash"
         return {
             "payment_method": method,
             "cash_amount": applied_cash,
-            "mobile_money_amount": applied_mobile,
+            "kpay_amount": kpay,
+            "mmqr_amount": mmqr,
+            "mobile_money_amount": mobile,
             "amount_tendered": cash_tendered,
             "change_amount": change,
         }
 
     method = body.payment_method
-    if method not in ("cash", "mobile_money"):
+    if method not in ("cash", "kpay", "mmqr"):
         raise HTTPException(
             status_code=422,
-            detail="payment_method must be 'cash' or 'mobile_money' when amounts are omitted",
+            detail="payment_method must be 'cash', 'kpay' or 'mmqr' when amounts are omitted",
         )
     if body.amount_tendered is None:
         raise HTTPException(status_code=422, detail="amount_tendered is required")
@@ -280,19 +302,20 @@ def _resolve_checkout_payment(body: OrderCheckoutRequest, final_total: float) ->
             status_code=400,
             detail=f"Amount tendered ({tendered:.2f}) is less than total ({final_total:.2f})",
         )
+    if method != "cash" and tendered > final_total:
+        # A transfer is an exact amount: there is no change to give back.
+        label = "KPay" if method == "kpay" else "MMQR"
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label} amount ({tendered:.2f}) must equal the total ({final_total:.2f})",
+        )
     change = _round_money(tendered - final_total)
-    if method == "cash":
-        return {
-            "payment_method": "cash",
-            "cash_amount": final_total,
-            "mobile_money_amount": 0.0,
-            "amount_tendered": tendered,
-            "change_amount": change,
-        }
     return {
-        "payment_method": "mobile_money",
-        "cash_amount": 0.0,
-        "mobile_money_amount": final_total,
+        "payment_method": method,
+        "cash_amount": final_total if method == "cash" else 0.0,
+        "kpay_amount": final_total if method == "kpay" else 0.0,
+        "mmqr_amount": final_total if method == "mmqr" else 0.0,
+        "mobile_money_amount": 0.0 if method == "cash" else final_total,
         "amount_tendered": tendered,
         "change_amount": change,
     }
@@ -1010,6 +1033,10 @@ def _build_daily_history_response(day_label: str, orders: list[Order]) -> DailyO
                 customer_name=getattr(order, "customer_name", None),
                 table_id=getattr(order, "table_id", None),
                 payment_method=getattr(order, "payment_method", None),
+                cash_amount=getattr(order, "cash_amount", None),
+                kpay_amount=getattr(order, "kpay_amount", None),
+                mmqr_amount=getattr(order, "mmqr_amount", None),
+                mobile_money_amount=getattr(order, "mobile_money_amount", None),
                 items=[_daily_history_line(oi) for oi in active_lines(order)],
             )
         )
@@ -1566,6 +1593,8 @@ async def checkout_order(
     order.discount_value = _round_money(discount_value) if normalized_discount_type else 0.0
     order.payment_method = payment["payment_method"]
     order.cash_amount = payment["cash_amount"]
+    order.kpay_amount = payment["kpay_amount"]
+    order.mmqr_amount = payment["mmqr_amount"]
     order.mobile_money_amount = payment["mobile_money_amount"]
     order.amount_tendered = _round_money(tendered)
     order.change_amount = _round_money(change)
@@ -1685,6 +1714,8 @@ async def checkout_order(
                     "amount_tendered": _round_money(tendered),
                     "change_amount": _round_money(change),
                     "cash_amount": payment["cash_amount"],
+                    "kpay_amount": payment["kpay_amount"],
+                    "mmqr_amount": payment["mmqr_amount"],
                     "mobile_money_amount": payment["mobile_money_amount"],
                     "created_at": created_at_str,
                 },

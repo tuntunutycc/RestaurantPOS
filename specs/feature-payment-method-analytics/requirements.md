@@ -1,5 +1,7 @@
 # Requirements: Payment Method Analytics
 
+> **Extended (2026-11-18):** totals are now reported as Cash, KPay and MMQR, also per cashier. `mobile_money` in the responses is kept as the sum of all mobile money. See `specs/feature-payment-kpay-mmqr/requirements.md`.
+
 ## Purpose
 Enable restaurant owners and cashiers to reconcile daily and monthly sales by **Cash** vs **Mobile Money**. Payment method is captured at checkout and aggregated on the Counter Dashboard.
 

@@ -86,8 +86,8 @@ Tests: `tests/test_cashier_receipt_printing.py` (pre-tax line + note on checkout
 | # | Request | Priority | Sheet | Code |
 |---|---------|----------|-------|------|
 | 5 | Per food-item sales reporting | `***` | Open | **PARTIAL** (top-items / history lines; full item×day report မရှိ) |
-| 9 | Cash / Kpay / MMQR (+ split သုံးခု) | `**` | Open | **NOT_DONE** (`cash` / `mobile_money` / `split` ပဲ) |
-| 16 | Per-cashier Cash/Kpay/MMQR | — | Prioritized | **PARTIAL** |
+| 9 | Cash / Kpay / MMQR (+ split သုံးခု) | `**` | Open | **DONE** 2026-11-18 (`cash` / `kpay` / `mmqr` / `split`; `specs/feature-payment-kpay-mmqr/`) |
+| 16 | Per-cashier Cash/Kpay/MMQR | — | Prioritized | **DONE** 2026-11-18 (Dashboard → Staff Performance; cashier = login account) |
 | 3 | Daily vouchers + Excel | `***` | Prioritized | **DONE** |
 
 ### Printing / voucher layout

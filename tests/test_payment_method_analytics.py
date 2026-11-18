@@ -53,24 +53,24 @@ def _seed_open_order(db_session, *, total_amount: float = 1000.0):
     return order
 
 
-def test_checkout_mobile_money_persists_payment_method(client, db_session, auth_headers):
+def test_checkout_kpay_persists_payment_method(client, db_session, auth_headers):
     order = _seed_open_order(db_session, total_amount=1500.0)
 
     res = client.put(
         f"/api/orders/{order.id}/checkout",
         headers=auth_headers("cashier"),
         json={
-            "payment_method": "mobile_money",
+            "payment_method": "kpay",
             "amount_tendered": 1500.0,
             "discount_type": None,
             "discount_value": 0,
         },
     )
     assert res.status_code == 200, res.text
-    assert res.json()["payment_method"] == "mobile_money"
+    assert res.json()["payment_method"] == "kpay"
 
     db_session.refresh(order)
-    assert order.payment_method == "mobile_money"
+    assert order.payment_method == "kpay"
     assert order.status == "paid"
 
 
@@ -90,14 +90,14 @@ def test_checkout_rejects_invalid_payment_method(client, db_session, auth_header
     assert res.status_code == 422, res.text
 
 
-def test_checkout_accepts_mobile_money_display_alias(client, db_session, auth_headers):
+def test_checkout_accepts_display_case_for_method(client, db_session, auth_headers):
     order = _seed_open_order(db_session, total_amount=800.0)
 
     res = client.put(
         f"/api/orders/{order.id}/checkout",
         headers=auth_headers("cashier"),
         json={
-            "payment_method": "Mobile Money",
+            "payment_method": " MMQR ",
             "amount_tendered": 800.0,
             "discount_type": None,
             "discount_value": 0,
@@ -105,7 +105,7 @@ def test_checkout_accepts_mobile_money_display_alias(client, db_session, auth_he
     )
     assert res.status_code == 200, res.text
     db_session.refresh(order)
-    assert order.payment_method == "mobile_money"
+    assert order.payment_method == "mmqr"
 
 
 def test_sales_breakdown_sums_cash_and_mobile_for_today(client, db_session, auth_headers, seed_users):
@@ -121,7 +121,7 @@ def test_sales_breakdown_sums_cash_and_mobile_for_today(client, db_session, auth
     cash_order = _seed_open_order(db_session, total_amount=300.0)
     mobile_order = _seed_open_order(db_session, total_amount=200.0)
 
-    for order, method in ((cash_order, "cash"), (mobile_order, "mobile_money")):
+    for order, method in ((cash_order, "cash"), (mobile_order, "kpay")):
         res = client.put(
             f"/api/orders/{order.id}/checkout",
             headers=auth_headers("cashier"),

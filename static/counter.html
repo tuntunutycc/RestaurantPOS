@@ -156,7 +156,15 @@
                 <span id="pm-today-cash" class="font-semibold text-slate-800">0 Ks</span>
               </li>
               <li class="flex justify-between gap-2">
-                <span>📱 Mobile Money</span>
+                <span>📱 KPay</span>
+                <span id="pm-today-kpay" class="font-semibold text-slate-800">0 Ks</span>
+              </li>
+              <li class="flex justify-between gap-2">
+                <span>🔳 MMQR</span>
+                <span id="pm-today-mmqr" class="font-semibold text-slate-800">0 Ks</span>
+              </li>
+              <li id="pm-today-mobile-row" class="hidden flex justify-between gap-2" title="Mobile money recorded before KPay and MMQR were separated">
+                <span>Mobile (unspecified)</span>
                 <span id="pm-today-mobile" class="font-semibold text-slate-800">0 Ks</span>
               </li>
             </ul>
@@ -183,7 +191,15 @@
                 <span id="pm-month-cash" class="font-semibold text-slate-800">0 Ks</span>
               </li>
               <li class="flex justify-between gap-2">
-                <span>📱 Mobile Money</span>
+                <span>📱 KPay</span>
+                <span id="pm-month-kpay" class="font-semibold text-slate-800">0 Ks</span>
+              </li>
+              <li class="flex justify-between gap-2">
+                <span>🔳 MMQR</span>
+                <span id="pm-month-mmqr" class="font-semibold text-slate-800">0 Ks</span>
+              </li>
+              <li id="pm-month-mobile-row" class="hidden flex justify-between gap-2" title="Mobile money recorded before KPay and MMQR were separated">
+                <span>Mobile (unspecified)</span>
                 <span id="pm-month-mobile" class="font-semibold text-slate-800">0 Ks</span>
               </li>
             </ul>
@@ -291,6 +307,27 @@
               <canvas id="staffCashierChart"></canvas>
               <p id="staffCashierChartEmpty" class="hidden absolute inset-0 flex items-center justify-center text-sm text-slate-500">No cashier data for this period.</p>
             </div>
+            <h4 class="text-sm font-semibold text-slate-700 mt-6 mb-2">Cash / KPay / MMQR by cashier</h4>
+            <div class="overflow-x-auto border border-slate-200 rounded-md">
+              <table class="min-w-full text-sm" id="staff-cashier-payments-table">
+                <thead class="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th class="px-3 py-2 text-left font-medium">Cashier</th>
+                    <th class="px-3 py-2 text-right font-medium">Cash</th>
+                    <th class="px-3 py-2 text-right font-medium">KPay</th>
+                    <th class="px-3 py-2 text-right font-medium">MMQR</th>
+                    <th class="px-3 py-2 text-right font-medium hidden" data-col="mobile-unspecified" title="Mobile money recorded before KPay and MMQR were separated">Mobile (unspecified)</th>
+                    <th class="px-3 py-2 text-right font-medium">Total</th>
+                    <th class="px-3 py-2 text-right font-medium">Orders</th>
+                  </tr>
+                </thead>
+                <tbody id="staff-cashier-payments-body" class="divide-y divide-slate-100 bg-white">
+                  <tr><td colspan="7" class="px-3 py-4 text-slate-500">No cashier data for this period.</td></tr>
+                </tbody>
+                <tfoot id="staff-cashier-payments-foot" class="bg-slate-50 font-semibold text-slate-800"></tfoot>
+              </table>
+            </div>
+            <p class="text-xs text-slate-500 mt-2">A cashier is the login account that confirmed the payment.</p>
           </section>
           <section class="bg-white rounded-lg shadow p-5" id="staff-waiter-section" data-role-widget="waiter-breakdown">
             <h3 class="text-base font-semibold text-slate-800 mb-4">Sales by Waiter / Order Staff</h3>
@@ -395,7 +432,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
             <section class="rounded-lg border border-blue-200 bg-blue-50 p-4">
               <p class="text-xs font-medium uppercase tracking-wide text-blue-700">Total Orders</p>
               <p id="sales-report-orders" class="text-2xl font-bold text-blue-900 mt-1">0</p>
@@ -405,10 +442,17 @@
               <p id="sales-report-cash" class="text-2xl font-bold text-slate-900 mt-1">0 Ks</p>
             </section>
             <section class="rounded-lg border border-violet-200 bg-violet-50 p-4">
-              <p class="text-xs font-medium uppercase tracking-wide text-violet-700">Mobile Received</p>
-              <p id="sales-report-mobile" class="text-2xl font-bold text-violet-900 mt-1">0 Ks</p>
+              <p class="text-xs font-medium uppercase tracking-wide text-violet-700">KPay Received</p>
+              <p id="sales-report-kpay" class="text-2xl font-bold text-violet-900 mt-1">0 Ks</p>
+            </section>
+            <section class="rounded-lg border border-teal-200 bg-teal-50 p-4">
+              <p class="text-xs font-medium uppercase tracking-wide text-teal-700">MMQR Received</p>
+              <p id="sales-report-mmqr" class="text-2xl font-bold text-teal-900 mt-1">0 Ks</p>
             </section>
           </div>
+          <p id="sales-report-mobile-row" class="hidden mt-3 text-sm text-slate-600" title="Mobile money recorded before KPay and MMQR were separated">
+            Mobile (unspecified): <span id="sales-report-mobile" class="font-semibold text-slate-800">0 Ks</span>
+          </p>
           <p id="sales-report-status" class="mt-4 text-sm text-slate-500">Select a period and load the report.</p>
         </section>
       </div>
@@ -553,7 +597,7 @@
                 <div>
                   <label class="block text-sm font-medium text-slate-700 mb-2" data-i18n="payment_method">Payment Method</label>
                   <input type="hidden" id="payment-method" value="cash" />
-                  <div id="payment-method-toggle" class="grid grid-cols-3 gap-2">
+                  <div id="payment-method-toggle" class="grid grid-cols-4 gap-2">
                     <button
                       type="button"
                       data-payment-method="cash"
@@ -564,11 +608,19 @@
                     </button>
                     <button
                       type="button"
-                      data-payment-method="mobile_money"
+                      data-payment-method="kpay"
                       class="payment-method-btn px-2 py-3 rounded-md border-2 border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
                       aria-pressed="false"
                     >
-                      📱 Mobile
+                      📱 KPay
+                    </button>
+                    <button
+                      type="button"
+                      data-payment-method="mmqr"
+                      class="payment-method-btn px-2 py-3 rounded-md border-2 border-slate-200 bg-white text-slate-700 font-semibold text-sm hover:bg-slate-50"
+                      aria-pressed="false"
+                    >
+                      🔳 MMQR
                     </button>
                     <button
                       type="button"
@@ -591,15 +643,27 @@
                   />
                 </div>
                 <div id="checkout-split-block" class="hidden space-y-3">
-                  <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1" for="split-mobile-amount">Mobile Money Amount</label>
-                    <input
-                      type="number"
-                      id="split-mobile-amount"
-                      min="0"
-                      step="0.01"
-                      class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-sm font-medium text-slate-700 mb-1" for="split-kpay-amount">KPay Amount</label>
+                      <input
+                        type="number"
+                        id="split-kpay-amount"
+                        min="0"
+                        step="0.01"
+                        class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-slate-700 mb-1" for="split-mmqr-amount">MMQR Amount</label>
+                      <input
+                        type="number"
+                        id="split-mmqr-amount"
+                        min="0"
+                        step="0.01"
+                        class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1" for="split-cash-amount">Cash Tendered</label>
@@ -610,7 +674,7 @@
                       step="0.01"
                       class="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
-                    <p class="text-xs text-slate-500 mt-1">Auto-filled with remaining after mobile; increase for overpay / change.</p>
+                    <p class="text-xs text-slate-500 mt-1">Auto-filled with what is left after KPay + MMQR; increase for overpay / change.</p>
                   </div>
                   <div
                     id="split-change-due-box"

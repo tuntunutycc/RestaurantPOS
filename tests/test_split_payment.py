@@ -74,7 +74,7 @@ def test_split_payment_cash_and_mobile(client, db_session, auth_headers):
             json={
                 "payment_method": "split",
                 "cash_amount": 100.0,
-                "mobile_money_amount": 50.0,
+                "kpay_amount": 50.0,
                 "amount_tendered": 100.0,
                 "issue_receipt": False,
             },
@@ -103,7 +103,7 @@ def test_split_payment_insufficient_returns_400(client, db_session, auth_headers
             headers=auth_headers("cashier"),
             json={
                 "cash_amount": 40.0,
-                "mobile_money_amount": 50.0,
+                "kpay_amount": 50.0,
                 "issue_receipt": False,
             },
         )
@@ -124,7 +124,7 @@ def test_split_payment_overpay_change_due_5000(client, db_session, auth_headers)
             headers=auth_headers("cashier"),
             json={
                 "payment_method": "split",
-                "mobile_money_amount": 3000.0,
+                "mmqr_amount": 3000.0,
                 "cash_amount": 3000.0,
                 "issue_receipt": False,
             },
@@ -198,7 +198,7 @@ def test_split_payment_counts_in_sales_breakdown(client, db_session, auth_header
             headers=auth_headers("cashier"),
             json={
                 "cash_amount": 100.0,
-                "mobile_money_amount": 50.0,
+                "kpay_amount": 50.0,
                 "issue_receipt": False,
             },
         )

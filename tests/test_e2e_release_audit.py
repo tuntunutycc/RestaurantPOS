@@ -253,7 +253,7 @@ def test_split_payment_change_due_5000_mobile_3000_cash_3000(
         headers=auth_headers("cashier"),
         json={
             "payment_method": "split",
-            "mobile_money_amount": 3000.0,
+            "kpay_amount": 3000.0,
             "cash_amount": 3000.0,
             "issue_receipt": False,
         },
@@ -262,6 +262,7 @@ def test_split_payment_change_due_5000_mobile_3000_cash_3000(
     body = res.json()
     assert body["status"] == "paid"
     assert body["change_amount"] == 1000.0
+    assert body["kpay_amount"] == 3000.0
     assert body["mobile_money_amount"] == 3000.0
     assert body["cash_amount"] == 2000.0
     assert body["amount_tendered"] == 3000.0

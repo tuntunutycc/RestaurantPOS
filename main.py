@@ -506,6 +506,14 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE orders ADD COLUMN mobile_money_amount FLOAT"))
     except Exception:
         pass
+    # KPay / MMQR parts of a payment (specs/feature-payment-kpay-mmqr).
+    for column in ("kpay_amount", "mmqr_amount"):
+        try:
+            from sqlalchemy import text
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE orders ADD COLUMN {column} FLOAT"))
+        except Exception:
+            pass
     try:
         from sqlalchemy import text
         with engine.begin() as conn:
@@ -763,6 +771,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Restaurant POS API", lifespan=lifespan)
+from services import validation_errors  # noqa: E402
+
+validation_errors.install(app)
 app.include_router(setup.router)
 app.include_router(root_users.router)
 app.include_router(auth.router)

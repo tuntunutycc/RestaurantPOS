@@ -90,9 +90,11 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 | `status` | String(50) | `pending` | `open`, `dining`, `paid`, `cancelled`, etc. |
 | `total_amount` | Float | 0.0 | Sum of active line subtotals (open); finalized at checkout |
 | `created_at` | DateTime | utcnow | |
-| `payment_method` | String(32) nullable | | `cash` \| `mobile_money` \| `split` at checkout |
+| `payment_method` | String(32) nullable | | `cash` \| `kpay` \| `mmqr` \| `split` at checkout (`mobile_money` only on orders from before KPay/MMQR) |
 | `cash_amount` | Float nullable | | Applied cash portion of bill |
-| `mobile_money_amount` | Float nullable | | Applied mobile portion of bill |
+| `kpay_amount` | Float nullable | | Part of the bill paid by KPay. Added at startup to existing databases |
+| `mmqr_amount` | Float nullable | | Part of the bill paid by MMQR. Added at startup to existing databases |
+| `mobile_money_amount` | Float nullable | | All mobile money = `kpay_amount + mmqr_amount`. Invariant: `cash_amount + kpay_amount + mmqr_amount == total_amount` |
 | `amount_tendered` | Float nullable | | Cash physically given |
 | `change_amount` | Float nullable | | |
 | `tax_amount` | Float nullable | 0.0 | Receipt tax breakdown (sum of line taxes) |

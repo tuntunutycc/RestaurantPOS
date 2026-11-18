@@ -1,5 +1,7 @@
 # Feature: Split Payment Checkout
 
+> **Superseded in part (2026-11-18):** Mobile Money is now recorded as **KPay** or **MMQR**, and a split can combine Cash, KPay and MMQR. The request no longer accepts `mobile_money` / `mobile_money_amount`. Current rules: `specs/feature-payment-kpay-mmqr/requirements.md`. The text below describes the earlier two-method version.
+
 ## Purpose
 Allow cashiers to settle one bill with **Cash + Mobile Money** in a single checkout, while keeping fast one-method checkout (Full Cash / Full Mobile Money). Persist per-method amounts for accurate daily/monthly reports.
 

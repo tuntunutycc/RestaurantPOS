@@ -101,6 +101,9 @@ def _override_get_db(db: Session):
 @pytest.fixture()
 def app(db_session: Session) -> FastAPI:
     app = FastAPI()
+    from services import validation_errors
+
+    validation_errors.install(app)
     app.state.ws_manager = ConnectionManager()
 
     app.include_router(setup_router.router)

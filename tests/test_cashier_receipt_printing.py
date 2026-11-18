@@ -337,7 +337,7 @@ def test_checkout_printer_connection_error_records_failed_job(
             f"/api/orders/{order.id}/checkout",
             headers=auth_headers("cashier"),
             json={
-                "payment_method": "mobile_money",
+                "payment_method": "kpay",
                 "amount_tendered": 8.0,
                 "issue_receipt": True,
             },
@@ -345,7 +345,7 @@ def test_checkout_printer_connection_error_records_failed_job(
         assert res.status_code == 200, res.text
         body = res.json()
         assert body["status"] == "paid"
-        assert body["payment_method"] == "mobile_money"
+        assert body["payment_method"] == "kpay"
         # Checkout no longer waits for the printer: the receipt is queued and
         # the failure (with its real reason) is recorded on the print job.
         assert body["warning"] is None

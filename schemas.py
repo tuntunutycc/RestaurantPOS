@@ -686,8 +686,12 @@ class OrderResponseDetail(BaseModel):
     # Free-text cashier label captured at checkout (receipt).
     cashier_name: str | None = None
     # Payment information for cashier
+    # cash | kpay | mmqr | split (mobile_money only on orders from before KPay/MMQR).
     payment_method: str | None = None
     cash_amount: float | None = None
+    kpay_amount: float | None = None
+    mmqr_amount: float | None = None
+    # All mobile money = kpay_amount + mmqr_amount.
     mobile_money_amount: float | None = None
     amount_tendered: float | None = None
     change_amount: float | None = None
@@ -790,6 +794,8 @@ class OrderResponseDetail(BaseModel):
                 cashier_name=getattr(order, "cashier_name", None),
                 payment_method=getattr(order, "payment_method", None),
                 cash_amount=getattr(order, "cash_amount", None),
+                kpay_amount=getattr(order, "kpay_amount", None),
+                mmqr_amount=getattr(order, "mmqr_amount", None),
                 mobile_money_amount=getattr(order, "mobile_money_amount", None),
                 amount_tendered=getattr(order, "amount_tendered", None),
                 change_amount=getattr(order, "change_amount", None),
@@ -807,14 +813,24 @@ class OrderRead(OrderResponseDetail):
 
 
 class OrderCheckoutRequest(BaseModel):
-    """Checkout body: single-method (legacy) or explicit cash/mobile amounts (split)."""
+    """Checkout body: one method + amount_tendered, or explicit amounts (split).
+
+    Methods: cash | kpay | mmqr | split. See specs/feature-payment-kpay-mmqr.
+    """
 
     payment_method: str | None = None
-    amount_tendered: float | None = None
-    cash_amount: float | None = None
-    mobile_money_amount: float | None = None
+    # Money fields refuse NaN / Infinity: they compare as "not less than the
+    # total", so the order would be marked paid without any money counted.
+    amount_tendered: float | None = Field(default=None, allow_inf_nan=False)
+    # Cash handed over (may be more than the cash part of the bill → change).
+    cash_amount: float | None = Field(default=None, allow_inf_nan=False)
+    kpay_amount: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    mmqr_amount: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    # No longer accepted. Declared so a client that still sends it gets a clear
+    # 422 instead of having part of the payment silently ignored.
+    mobile_money_amount: float | None = Field(default=None, allow_inf_nan=False)
     discount_type: Literal["percentage", "amount"] | None = None
-    discount_value: float | None = 0.0
+    discount_value: float | None = Field(default=0.0, allow_inf_nan=False)
     issue_receipt: bool = True
     printer_id: int | None = None
     cashier_name: str | None = None
@@ -837,11 +853,22 @@ class OrderCheckoutRequest(BaseModel):
         raw = str(v).strip().lower().replace(" ", "_")
         if raw in ("cash",):
             return "cash"
-        if raw in ("mobile_money", "mobilemoney"):
-            return "mobile_money"
-        if raw in ("split",):
-            return "split"
-        raise ValueError("payment_method must be 'cash', 'mobile_money', or 'split'")
+        if raw in ("kpay", "mmqr", "split"):
+            return raw
+        if raw in ("mobile_money", "mobilemoney", "mobile"):
+            raise ValueError(
+                "Mobile Money is no longer a payment method. Choose 'kpay' or 'mmqr'."
+            )
+        raise ValueError("payment_method must be 'cash', 'kpay', 'mmqr', or 'split'")
+
+    @field_validator("mobile_money_amount", mode="after")
+    @classmethod
+    def reject_unspecified_mobile_amount(cls, v):
+        if v is not None and float(v) != 0.0:
+            raise ValueError(
+                "mobile_money_amount is no longer accepted. Send kpay_amount and/or mmqr_amount."
+            )
+        return v
 
 
 class OrderCheckoutResponse(OrderResponseDetail):
@@ -883,6 +910,9 @@ class PaymentMethodTotalsResponse(BaseModel):
     """Aggregated sales for one period grouped by payment method."""
 
     cash: float = 0.0
+    kpay: float = 0.0
+    mmqr: float = 0.0
+    # All mobile money: kpay + mmqr + mobile money from before they were told apart.
     mobile_money: float = 0.0
     total: float = 0.0
     # Order revenue (tax-aware). `total` remains cash + mobile for backward compatibility.
@@ -892,7 +922,7 @@ class PaymentMethodTotalsResponse(BaseModel):
 
 
 class SalesBreakdownResponse(BaseModel):
-    """Today and current-month sales split by Cash vs Mobile Money."""
+    """Today and current-month sales split by Cash, KPay and MMQR."""
 
     today: PaymentMethodTotalsResponse
     month: PaymentMethodTotalsResponse
@@ -908,6 +938,9 @@ class SalesPeriodReportResponse(BaseModel):
     total_tax: float = 0.0
     grand_total_revenue: float = 0.0
     total_cash: float = 0.0
+    total_kpay: float = 0.0
+    total_mmqr: float = 0.0
+    # All mobile money: total_kpay + total_mmqr + mobile money from before they were told apart.
     total_mobile: float = 0.0
 
 
@@ -982,6 +1015,16 @@ class StaffSalesPointResponse(BaseModel):
     order_count: int = 0
 
 
+class CashierSalesPointResponse(StaffSalesPointResponse):
+    """One cashier's paid orders, split by how they were paid."""
+
+    cash: float = 0.0
+    kpay: float = 0.0
+    mmqr: float = 0.0
+    # Mobile money from before KPay / MMQR were told apart; 0 on a cleared database.
+    mobile_unspecified: float = 0.0
+
+
 class PromotedStaffSalesResponse(BaseModel):
     """Promoted menu item sales attributed to order-taking staff."""
 
@@ -1015,6 +1058,11 @@ class DailyOrderHistoryOrder(BaseModel):
     customer_name: str | None = None
     table_id: int | None = None
     payment_method: str | None = None
+    # Parts of the bill by method (a split shows them in the detail view).
+    cash_amount: float | None = None
+    kpay_amount: float | None = None
+    mmqr_amount: float | None = None
+    mobile_money_amount: float | None = None
     items: List[DailyOrderHistoryLine] = Field(default_factory=list)
 
 

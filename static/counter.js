@@ -25,6 +25,10 @@ const panelAuditLogs = document.getElementById('panel-audit-logs');
 const panelTables = document.getElementById('panel-tables');
 let hasInitializedDefaultPanel = false;
 let activeDashboardTab = 'overview';
+// Declared before the role check below opens the dashboard: loadDashboardSummary()
+// writes to these on page load, and a `let` further down is not usable yet at that point.
+let overviewSummaryCache = null;
+let overviewPaymentCache = null;
 let usersState = [];
 let selectedUserId = null;
 let rootAdminsState = [];
@@ -367,8 +371,6 @@ let monthlySalesChart = null;
 let hasLoadedSalesHistoryTab = false;
 let hasLoadedSalesReportsTab = false;
 let salesPeriodReportCache = null;
-let overviewSummaryCache = null;
-let overviewPaymentCache = null;
 let categoryChart = null;
 let cancelledItemsChart = null;
 let hasLoadedInsightsTab = false;
@@ -542,12 +544,26 @@ function renderSalesReportMetrics() {
   const ordersEl = document.getElementById('sales-report-orders');
   const cashEl = document.getElementById('sales-report-cash');
   const mobileEl = document.getElementById('sales-report-mobile');
+  const mobileRowEl = document.getElementById('sales-report-mobile-row');
+  const kpayEl = document.getElementById('sales-report-kpay');
+  const mmqrEl = document.getElementById('sales-report-mmqr');
   if (netEl) netEl.textContent = moneyOrZero(data.subtotal_revenue);
   if (taxEl) taxEl.textContent = moneyOrZero(data.total_tax);
   if (grossEl) grossEl.textContent = moneyOrZero(data.grand_total_revenue);
   if (ordersEl) ordersEl.textContent = String(Math.max(0, Math.floor(Number(data.total_orders) || 0)));
   if (cashEl) cashEl.textContent = moneyOrZero(data.total_cash);
-  if (mobileEl) mobileEl.textContent = moneyOrZero(data.total_mobile);
+  if (kpayEl) kpayEl.textContent = moneyOrZero(data.total_kpay);
+  if (mmqrEl) mmqrEl.textContent = moneyOrZero(data.total_mmqr);
+  // Mobile money from before KPay / MMQR were separated: shown only when there is some.
+  const unspecified = unspecifiedMobileAmount(data.total_mobile, data.total_kpay, data.total_mmqr);
+  if (mobileEl) mobileEl.textContent = moneyOrZero(unspecified);
+  if (mobileRowEl) mobileRowEl.classList.toggle('hidden', !(unspecified > 0));
+}
+
+// Mobile money that is neither KPay nor MMQR (sales recorded before they were separated).
+function unspecifiedMobileAmount(mobile, kpay, mmqr) {
+  const rest = roundMoney((Number(mobile) || 0) - (Number(kpay) || 0) - (Number(mmqr) || 0));
+  return rest > 0 ? rest : 0;
 }
 
 async function loadSalesPeriodReport() {
@@ -625,13 +641,11 @@ function renderOverviewPaymentMetrics() {
   const todayTaxEl = document.getElementById('pm-today-tax');
   const todayTotalEl = document.getElementById('pm-today-total');
   const todayCashEl = document.getElementById('pm-today-cash');
-  const todayMobileEl = document.getElementById('pm-today-mobile');
   const monthNetEl = document.getElementById('pm-month-net');
   const monthTaxEl = document.getElementById('pm-month-tax');
   const monthTotalEl = document.getElementById('pm-month-total');
   const monthCashEl = document.getElementById('pm-month-cash');
-  const monthMobileEl = document.getElementById('pm-month-mobile');
-  if (!todayTotalEl || !todayCashEl || !todayMobileEl) return;
+  if (!todayTotalEl || !todayCashEl) return;
 
   const today = (overviewPaymentCache && overviewPaymentCache.today) || {};
   const month = (overviewPaymentCache && overviewPaymentCache.month) || {};
@@ -646,12 +660,24 @@ function renderOverviewPaymentMetrics() {
   if (todayTaxEl) todayTaxEl.textContent = moneyOrZero(todayTax);
   todayTotalEl.textContent = moneyOrZero(todayGrand);
   todayCashEl.textContent = moneyOrZero(today.cash);
-  todayMobileEl.textContent = moneyOrZero(today.mobile_money);
+  renderOverviewMobileLines('today', today);
   if (monthNetEl) monthNetEl.textContent = moneyOrZero(monthNet);
   if (monthTaxEl) monthTaxEl.textContent = moneyOrZero(monthTax);
   if (monthTotalEl) monthTotalEl.textContent = moneyOrZero(monthGrand);
   if (monthCashEl) monthCashEl.textContent = moneyOrZero(month.cash);
-  if (monthMobileEl) monthMobileEl.textContent = moneyOrZero(month.mobile_money);
+  renderOverviewMobileLines('month', month);
+}
+
+function renderOverviewMobileLines(scope, totals) {
+  const kpayEl = document.getElementById(`pm-${scope}-kpay`);
+  const mmqrEl = document.getElementById(`pm-${scope}-mmqr`);
+  const mobileEl = document.getElementById(`pm-${scope}-mobile`);
+  const mobileRowEl = document.getElementById(`pm-${scope}-mobile-row`);
+  if (kpayEl) kpayEl.textContent = moneyOrZero(totals.kpay);
+  if (mmqrEl) mmqrEl.textContent = moneyOrZero(totals.mmqr);
+  const unspecified = unspecifiedMobileAmount(totals.mobile_money, totals.kpay, totals.mmqr);
+  if (mobileEl) mobileEl.textContent = moneyOrZero(unspecified);
+  if (mobileRowEl) mobileRowEl.classList.toggle('hidden', !(unspecified > 0));
 }
 
 async function loadDailySalesChart(startDate, endDate) {
@@ -970,6 +996,51 @@ function renderStaffBarChart(canvasId, emptyId, rows, label) {
   return chart;
 }
 
+// Cash / KPay / MMQR taken by each cashier (login account that confirmed the payment).
+function renderCashierPaymentsTable(rows) {
+  const body = document.getElementById('staff-cashier-payments-body');
+  const foot = document.getElementById('staff-cashier-payments-foot');
+  const table = document.getElementById('staff-cashier-payments-table');
+  if (!body || !table) return;
+  const list = Array.isArray(rows) ? rows : [];
+  const num = (v) => Number(v) || 0;
+  const showUnspecified = list.some((r) => num(r.mobile_unspecified) > 0);
+  table.querySelectorAll('[data-col="mobile-unspecified"]').forEach((el) => {
+    el.classList.toggle('hidden', !showUnspecified);
+  });
+  const cell = (value) => `<td class="px-3 py-2 text-right whitespace-nowrap">${escapeHtml(moneyOrZero(value))}</td>`;
+  const unspecifiedCell = (value) => (showUnspecified ? cell(value) : '');
+
+  if (!list.length) {
+    body.innerHTML = `<tr><td colspan="${showUnspecified ? 7 : 6}" class="px-3 py-4 text-slate-500">No cashier data for this period.</td></tr>`;
+    if (foot) foot.innerHTML = '';
+    return;
+  }
+
+  const totals = { cash: 0, kpay: 0, mmqr: 0, mobile_unspecified: 0, total_sales: 0, order_count: 0 };
+  body.innerHTML = list
+    .map((r) => {
+      Object.keys(totals).forEach((key) => {
+        totals[key] = roundMoney(totals[key] + num(r[key]));
+      });
+      return `<tr>
+        <td class="px-3 py-2">${escapeHtml(r.username || 'User')} <span class="text-xs text-slate-500">(${escapeHtml(r.role || '')})</span></td>
+        ${cell(r.cash)}${cell(r.kpay)}${cell(r.mmqr)}${unspecifiedCell(r.mobile_unspecified)}
+        <td class="px-3 py-2 text-right whitespace-nowrap font-semibold">${escapeHtml(moneyOrZero(r.total_sales))}</td>
+        <td class="px-3 py-2 text-right">${Math.floor(num(r.order_count))}</td>
+      </tr>`;
+    })
+    .join('');
+  if (foot) {
+    foot.innerHTML = `<tr>
+      <td class="px-3 py-2">All cashiers</td>
+      ${cell(totals.cash)}${cell(totals.kpay)}${cell(totals.mmqr)}${unspecifiedCell(totals.mobile_unspecified)}
+      ${cell(totals.total_sales)}
+      <td class="px-3 py-2 text-right">${Math.floor(totals.order_count)}</td>
+    </tr>`;
+  }
+}
+
 async function loadStaffBreakdownCharts() {
   const { startDate, endDate } = getStaffReportDateRange();
   updateStaffReportPeriodLabel(startDate, endDate);
@@ -986,6 +1057,7 @@ async function loadStaffBreakdownCharts() {
         cashierRows,
         t('total', 'Total')
       );
+      renderCashierPaymentsTable(cashierRows);
     }
   }
 
@@ -1524,8 +1596,7 @@ async function loadDashboardSummary() {
 async function loadPaymentMethodBreakdown() {
   const todayTotalEl = document.getElementById('pm-today-total');
   const todayCashEl = document.getElementById('pm-today-cash');
-  const todayMobileEl = document.getElementById('pm-today-mobile');
-  if (!todayTotalEl || !todayCashEl || !todayMobileEl) return;
+  if (!todayTotalEl || !todayCashEl) return;
 
   overviewPaymentCache = null;
   renderOverviewPaymentMetrics();
@@ -1546,8 +1617,7 @@ async function loadPaymentMethodBreakdown() {
 }
 
 function setCheckoutPaymentMethod(method) {
-  const normalized =
-    method === 'mobile_money' ? 'mobile_money' : method === 'split' ? 'split' : 'cash';
+  const normalized = ['kpay', 'mmqr', 'split'].includes(method) ? method : 'cash';
   const hidden = document.getElementById('payment-method');
   if (hidden) hidden.value = normalized;
   document.querySelectorAll('.payment-method-btn').forEach((btn) => {
@@ -1567,11 +1637,18 @@ function setCheckoutPaymentMethod(method) {
   if (singleBlock) singleBlock.classList.toggle('hidden', isSplit);
   if (splitBlock) splitBlock.classList.toggle('hidden', !isSplit);
   if (singleChangeRow) singleChangeRow.classList.toggle('hidden', isSplit);
+  if (!isSplit && normalized !== 'cash' && selectedOrderId != null) {
+    // A transfer is exactly the bill: fill it in so the cashier only has to confirm.
+    const tenderEl = document.getElementById('amount-tendered');
+    if (tenderEl) tenderEl.value = String(roundMoney(Number.isFinite(selectedOrderTotal) ? selectedOrderTotal : 0));
+  }
   if (isSplit) {
     const total = Number.isFinite(selectedOrderTotal) ? selectedOrderTotal : 0;
     const cashEl = document.getElementById('split-cash-amount');
-    const mobileEl = document.getElementById('split-mobile-amount');
-    if (mobileEl && !mobileEl.value) mobileEl.value = '0';
+    const kpayEl = document.getElementById('split-kpay-amount');
+    const mmqrEl = document.getElementById('split-mmqr-amount');
+    if (kpayEl && !kpayEl.value) kpayEl.value = '0';
+    if (mmqrEl && !mmqrEl.value) mmqrEl.value = '0';
     if (cashEl && !cashEl.value) cashEl.value = String(total || '');
   }
   recalculateCheckoutTotals();
@@ -1586,10 +1663,24 @@ function parseMoneyInput(el) {
 }
 
 function getSplitPaymentAmounts() {
+  const kpay = parseMoneyInput(document.getElementById('split-kpay-amount'));
+  const mmqr = parseMoneyInput(document.getElementById('split-mmqr-amount'));
   return {
     cash: parseMoneyInput(document.getElementById('split-cash-amount')),
-    mobile: parseMoneyInput(document.getElementById('split-mobile-amount')),
+    kpay,
+    mmqr,
+    mobile: roundMoney(kpay + mmqr),
   };
+}
+
+// Same rules as the server: KPay + MMQR are exact and may not exceed the bill;
+// cash covers the rest and any extra cash is change.
+function splitPaymentState(total) {
+  const { cash, kpay, mmqr, mobile } = getSplitPaymentAmounts();
+  const mobileTooMuch = mobile > total;
+  const insufficient = !mobileTooMuch && roundMoney(cash + mobile) < total;
+  const changeDue = roundMoney(cash - roundMoney(Math.max(total - mobile, 0)));
+  return { cash, kpay, mmqr, mobile, mobileTooMuch, insufficient, changeDue, ok: !mobileTooMuch && !insufficient };
 }
 
 function updateCheckoutConfirmEnabled() {
@@ -1602,28 +1693,30 @@ function updateCheckoutConfirmEnabled() {
     return;
   }
   if (method === 'split') {
-    const { cash, mobile } = getSplitPaymentAmounts();
-    btn.disabled = roundMoney(cash + mobile) < total;
+    btn.disabled = !splitPaymentState(total).ok;
     return;
   }
   const tendered = parseFloat(document.getElementById('amount-tendered')?.value || '0');
-  btn.disabled = Number.isNaN(tendered) || tendered < total;
+  btn.disabled = Number.isNaN(tendered) || !singleTenderOk(method, tendered, total);
+}
+
+// Cash may be more than the bill (change). A KPay / MMQR transfer must be exactly the bill.
+function singleTenderOk(method, tendered, total) {
+  const paid = roundMoney(tendered);
+  const bill = roundMoney(total);
+  return method === 'cash' ? paid >= bill : paid === bill;
 }
 
 function updateSplitChangeDueDisplay(finalTotal) {
-  const cash = parseMoneyInput(document.getElementById('split-cash-amount'));
-  const mobile = parseMoneyInput(document.getElementById('split-mobile-amount'));
   const dueBox = document.getElementById('split-change-due-box');
   const dueEl = document.getElementById('split-change-due');
   const changeSpan = document.getElementById('change-amount');
-  const paid = roundMoney(cash + mobile);
-  // Change is excess cash after mobile covers its share (same as backend).
-  const remainingAfterMobile = roundMoney(Math.max(finalTotal - mobile, 0));
-  const changeDue = roundMoney(cash - remainingAfterMobile);
-  const insufficient = paid < finalTotal;
+  const { mobileTooMuch, changeDue, ok } = splitPaymentState(finalTotal);
+  const insufficient = !ok;
 
   let label = formatMoney(0);
-  if (insufficient) label = t('insufficient', 'Insufficient');
+  if (mobileTooMuch) label = 'KPay + MMQR is more than the total';
+  else if (insufficient) label = t('insufficient', 'Insufficient');
   else label = formatMoney(Math.max(changeDue, 0));
 
   if (dueEl) dueEl.textContent = label;
@@ -1648,29 +1741,28 @@ function initPaymentMethodToggle() {
     });
   });
   const cashEl = document.getElementById('split-cash-amount');
-  const mobileEl = document.getElementById('split-mobile-amount');
-  // Cash tendered: manual override allowed (overpay → Change Due). Do not rewrite mobile.
+  // Cash tendered: manual override allowed (overpay → Change Due). Do not rewrite KPay / MMQR.
   if (cashEl) {
     cashEl.addEventListener('input', () => {
       recalculateCheckoutTotals();
       updateCheckoutConfirmEnabled();
     });
   }
-  // Mobile entered → auto-fill Cash with exact remaining balance.
-  if (mobileEl) {
-    mobileEl.addEventListener('input', () => {
+  // KPay / MMQR entered → auto-fill Cash with what is left of the bill.
+  ['split-kpay-amount', 'split-mmqr-amount'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
       if (splitAutofillLock) return;
       splitAutofillLock = true;
       const total = Number.isFinite(selectedOrderTotal) ? selectedOrderTotal : 0;
-      const mobile = parseFloat(mobileEl.value || '0');
-      if (cashEl && Number.isFinite(mobile) && mobile >= 0) {
-        cashEl.value = String(roundMoney(Math.max(total - mobile, 0)));
-      }
+      const { mobile } = getSplitPaymentAmounts();
+      if (cashEl) cashEl.value = String(roundMoney(Math.max(total - mobile, 0)));
       splitAutofillLock = false;
       recalculateCheckoutTotals();
       updateCheckoutConfirmEnabled();
     });
-  }
+  });
   setCheckoutPaymentMethod('cash');
 }
 
@@ -1791,6 +1883,7 @@ function recalculateCheckoutTotals() {
     return finalTotal;
   }
   if (Number.isNaN(change)) changeSpan.textContent = formatMoney(0);
+  else if (method !== 'cash' && roundMoney(change) > 0) changeSpan.textContent = 'Must equal the total';
   else if (change >= 0) changeSpan.textContent = formatMoney(change);
   else changeSpan.textContent = t('insufficient', 'Insufficient');
   updateCheckoutConfirmEnabled();
@@ -2142,9 +2235,11 @@ function selectOrder(order, source = null) {
   if (amountInput) amountInput.value = '';
   if (changeSpan) changeSpan.textContent = formatMoney(0);
   const splitCash = document.getElementById('split-cash-amount');
-  const splitMobile = document.getElementById('split-mobile-amount');
   if (splitCash) splitCash.value = '';
-  if (splitMobile) splitMobile.value = '';
+  ['split-kpay-amount', 'split-mmqr-amount'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   if (discountTypeSelect) discountTypeSelect.value = 'none';
   if (discountValueInput) {
     discountValueInput.value = '';
@@ -2203,16 +2298,20 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
   };
 
   if (method === 'split') {
-    const cash = parseMoneyInput(document.getElementById('split-cash-amount'));
-    const mobile = parseMoneyInput(document.getElementById('split-mobile-amount'));
-    if (roundMoney(cash + mobile) < currentFinalTotal) {
+    const split = splitPaymentState(currentFinalTotal);
+    if (split.mobileTooMuch) {
+      await dialogAlert('KPay + MMQR is more than the total.', 'error', t('error', 'Error'));
+      return;
+    }
+    if (split.insufficient) {
       await dialogAlert(t('amount_less_than_total', 'Amount tendered is less than total.'), 'error', t('error', 'Error'));
       return;
     }
     payload.payment_method = 'split';
-    payload.cash_amount = cash;
-    payload.mobile_money_amount = mobile;
-    payload.amount_tendered = cash;
+    payload.cash_amount = split.cash;
+    payload.kpay_amount = split.kpay;
+    payload.mmqr_amount = split.mmqr;
+    payload.amount_tendered = split.cash;
   } else {
     if (Number.isNaN(tendered) || tendered <= 0) {
       await dialogAlert(t('enter_valid_amount_tendered', 'Enter a valid amount tendered.'), 'error', t('error', 'Error'));
@@ -2220,6 +2319,11 @@ document.getElementById('btn-process-payment').addEventListener('click', async (
     }
     if (tendered < currentFinalTotal) {
       await dialogAlert(t('amount_less_than_total', 'Amount tendered is less than total.'), 'error', t('error', 'Error'));
+      return;
+    }
+    if (!singleTenderOk(method, tendered, currentFinalTotal)) {
+      const label = method === 'kpay' ? 'KPay' : 'MMQR';
+      await dialogAlert(`${label} amount must equal the total (${formatMoney(currentFinalTotal)}).`, 'error', t('error', 'Error'));
       return;
     }
     payload.payment_method = method;

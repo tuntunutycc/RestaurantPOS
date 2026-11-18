@@ -21,6 +21,7 @@ from rbac import (
 from schemas import (
     CancelledItemCountResponse,
     CancellationsSummaryResponse,
+    CashierSalesPointResponse,
     CategorySalesPointResponse,
     DailySalesPointResponse,
     HourlySalesTrendResponse,
@@ -30,6 +31,14 @@ from schemas import (
     StaffSalesPointResponse,
     TopSellingItemResponse,
     TodaySalesSummaryResponse,
+)
+from services.payment_totals import (
+    cash_part,
+    kpay_part,
+    mmqr_part,
+    mobile_part,
+    mobile_unspecified,
+    summed,
 )
 from services.report_access import (
     ACCOUNT_ACCESS_DENIED_DETAIL,
@@ -114,26 +123,10 @@ def get_sales_period_report(
     assert_report_date_range(current_user, start_day, end_day)
     start_dt, end_dt = dt_range_for_dates(start_day, end_day)
 
-    cash_expr = func.coalesce(
-        func.sum(
-            case(
-                (Order.cash_amount.isnot(None), Order.cash_amount),
-                (func.lower(Order.payment_method) == "cash", Order.total_amount),
-                else_=0.0,
-            )
-        ),
-        0.0,
-    )
-    mobile_expr = func.coalesce(
-        func.sum(
-            case(
-                (Order.mobile_money_amount.isnot(None), Order.mobile_money_amount),
-                (func.lower(Order.payment_method) == "mobile_money", Order.total_amount),
-                else_=0.0,
-            )
-        ),
-        0.0,
-    )
+    cash_expr = summed(cash_part())
+    kpay_expr = summed(kpay_part())
+    mmqr_expr = summed(mmqr_part())
+    mobile_expr = summed(mobile_part())
     tax_expr = func.coalesce(func.sum(func.coalesce(Order.tax_amount, 0.0)), 0.0)
     grand_expr = func.coalesce(func.sum(Order.total_amount), 0.0)
 
@@ -144,6 +137,8 @@ def get_sales_period_report(
             tax_expr,
             cash_expr,
             mobile_expr,
+            kpay_expr,
+            mmqr_expr,
         )
         .filter(
             Order.created_at >= start_dt,
@@ -167,6 +162,8 @@ def get_sales_period_report(
         total_tax=total_tax,
         grand_total_revenue=grand_total,
         total_cash=total_cash,
+        total_kpay=round(float(row[5] or 0.0), 2),
+        total_mmqr=round(float(row[6] or 0.0), 2),
         total_mobile=total_mobile,
     )
 
@@ -469,14 +466,18 @@ _STAFF_REPORT_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_ACCOUNT]
 _ORDER_STAFF_ROLES = [ROLE_ROOT, ROLE_ADMIN, ROLE_WAITER]
 
 
-@router.get("/reports/sales/by-cashier", response_model=list[StaffSalesPointResponse])
+@router.get("/reports/sales/by-cashier", response_model=list[CashierSalesPointResponse])
 def get_sales_by_cashier(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(_STAFF_REPORT_ROLES)),
 ):
-    """Per-cashier checkout totals (uses Order.checked_out_by_id)."""
+    """Per-cashier checkout totals split by Cash / KPay / MMQR.
+
+    A cashier is the login account that confirmed the payment
+    (Order.checked_out_by_id). See specs/feature-payment-kpay-mmqr.
+    """
     today = datetime.utcnow().date()
     effective_end = end_date or today
     effective_start = start_date or effective_end
@@ -490,6 +491,10 @@ def get_sales_by_cashier(
             User.role.label("role"),
             func.coalesce(func.sum(Order.total_amount), 0.0).label("total_sales"),
             func.count(Order.id).label("order_count"),
+            summed(cash_part()).label("cash"),
+            summed(kpay_part()).label("kpay"),
+            summed(mmqr_part()).label("mmqr"),
+            summed(mobile_part()).label("mobile"),
         )
         .join(Order, Order.checked_out_by_id == User.id)
         .filter(
@@ -504,12 +509,16 @@ def get_sales_by_cashier(
 
     rows = q.all()
     return [
-        StaffSalesPointResponse(
+        CashierSalesPointResponse(
             user_id=int(row.user_id),
             username=str(row.username),
             role=str(row.role),
             total_sales=float(row.total_sales or 0.0),
             order_count=int(row.order_count or 0),
+            cash=round(float(row.cash or 0.0), 2),
+            kpay=round(float(row.kpay or 0.0), 2),
+            mmqr=round(float(row.mmqr or 0.0), 2),
+            mobile_unspecified=mobile_unspecified(row.mobile, row.kpay, row.mmqr),
         )
         for row in rows
     ]

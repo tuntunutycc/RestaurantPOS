@@ -1,5 +1,49 @@
 # Changelog
 
+## 2026-11-18 — KPay / MMQR payments, Cash / KPay / MMQR per cashier, clear-sales script
+
+### Summary
+Checkout now records **Cash**, **KPay** and **MMQR** separately (a split can combine all three), and the admin dashboard shows how much each cashier took by each method. A new script clears sales only and keeps staff, menu, tables and printers.
+
+### Changed (breaking for old clients)
+- Checkout no longer accepts `payment_method = mobile_money` or `mobile_money_amount` above 0 (`422`). A counter page left open from before the update must be reloaded; its **Mobile** button is refused, nothing is recorded wrongly.
+
+### Added
+- `orders.kpay_amount`, `orders.mmqr_amount`; added to existing databases at startup. `mobile_money_amount` is kept as their sum.
+- `PUT /api/orders/{id}/checkout`: `payment_method` `cash | kpay | mmqr | split`; `kpay_amount`, `mmqr_amount`. Response and order details carry both amounts.
+- `GET /api/reports/sales/by-cashier`: `cash`, `kpay`, `mmqr`, `mobile_unspecified` per cashier.
+- `GET /api/analytics/sales-breakdown`: `kpay`, `mmqr`. `GET /api/reports/sales`: `total_kpay`, `total_mmqr`. `GET /api/orders/daily-history`: payment parts per order.
+- Counter: **Cash / KPay / MMQR / Split** buttons; split has KPay, MMQR and Cash inputs. Dashboard → Staff Performance: **Cash / KPay / MMQR by cashier** table. Overview and Sales Reports show KPay and MMQR. Order History shows the method and split parts.
+- Receipt: `Payment: KPay`, `MMQR`, or `Split (Cash + KPay + MMQR)` with a line per mobile method.
+- `scripts/clear_sales.py` (README: *Clear sales only*). Shows counts by default; `--yes` backs up the SQLite file, then deletes orders, order lines and print jobs and frees every table. `*.db.backup-*` is git-ignored.
+
+### Behaviour
+- A cashier in the report is the **login account** that confirmed the payment, not the free-text Cashier Name. Each cashier needs their own PIN.
+- KPay + MMQR may not be more than the bill (`400`); cash covers the rest and only extra cash gives change. The server never guesses or adjusts a mobile amount.
+- Paying with KPay or MMQR alone: the amount must **equal** the bill (`400` if more or less). A transfer never produces change; only cash can be more than the bill. The counter fills the bill amount in when KPay / MMQR is chosen and keeps **Confirm Payment** disabled until it is exact.
+- Every checkout satisfies `cash_amount + kpay_amount + mmqr_amount == total_amount`.
+- Mobile money recorded before this change is shown as **Mobile (unspecified)** (only when there is some). It is never counted as KPay or MMQR and never dropped from a total.
+- The three reports use the same SQL expressions (`services/payment_totals.py`).
+
+### Fixed
+- Checkout refused `NaN` / `Infinity` in `amount_tendered`, `cash_amount`, `kpay_amount`, `mmqr_amount`, `mobile_money_amount` and `discount_value` (`422`). Before, `NaN` marked the order paid with no money counted, `Infinity` marked it paid and then failed to answer (and could break every report summing it), and an infinite discount made the bill 0. Present before this change for the first three fields.
+- A `422` caused by `NaN` / `Infinity` is now answered as a normal `422` (`services/validation_errors.py`, same shape as before) instead of a `500`.
+- `scripts/clear_sales.py` stops with a message when the database file does not exist (for example run from the wrong folder) instead of creating an empty `pos.db` and reporting 0 orders.
+- Counter page: dashboard figures stayed at 0 after the page opened until the Dashboard tab was clicked (variables used before their declaration; present before this change).
+
+### Spec
+- `specs/feature-payment-kpay-mmqr/` (requirements, plan, validation); `api-reference.md`, `database-schema.md`; notes in the split-payment and payment-method-analytics specs; final review items 9 and 16.
+
+### Tests
+- `tests/test_payment_kpay_mmqr.py` (82), `tests/test_clear_sales.py` (18); four existing test files now pay with KPay/MMQR instead of `mobile_money`. Suite: 474 passed.
+
+### Review checklist
+- Security: no new endpoint. Amounts are bounded by the schema (≥ 0, finite) and by the bill. The clear script runs only from the server's command line, deletes nothing without `--yes`, and refuses to delete when it cannot write a backup. The backup contains sales and password hashes and is git-ignored.
+- Roles: checkout stays root / admin / cashier (`403` waiter, account). The per-cashier report stays root / admin / account (`403` cashier, waiter). A cashier's own dashboard shows only their own checkouts.
+- Money: invariant above tested for every method, split, discount and cents; rejected checkouts leave the order unpaid; report rows add up to the cashier's total.
+- Edge cases: KPay/MMQR above, below and exactly the bill (also after a discount), cash still allowed above the bill, split without cash, amounts for a single method, zero amounts, KPay + MMQR equal to the bill, overpaying with cash, old mobile-money rows, existing database without the columns, clearing an already empty database, failure in the middle of clearing.
+- Not verified: phone/tablet layout, Burmese labels (new labels are English), a real receipt printer, the script on Windows. The Account page still shows cashier totals without the split.
+
 ## 2026-11-16 — Kitchen slip copies with a large COPY banner
 
 ### Summary

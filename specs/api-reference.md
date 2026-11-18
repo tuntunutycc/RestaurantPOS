@@ -127,7 +127,7 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | GET | `/api/orders/active-takeaways` | `list[ActiveTakeawayOrderResponse]` | `order_type=takeaway`, not paid/cancelled |
 | GET | `/api/orders/tables` | `list[OrderResponseDetail]` | Checkout-ready tables |
 | GET | `/api/orders/active-by-table/{table_id}` | `OrderResponseDetail` | |
-| GET | `/api/orders/daily-history?date=` | `DailyOrderHistoryResponse` | **Paid/completed** for one day; roles `ORDER_HISTORY_ROLES` (`root`/`admin`/`cashier`) |
+| GET | `/api/orders/daily-history?date=` | `DailyOrderHistoryResponse` | Each order carries `payment_method`, `cash_amount`, `kpay_amount`, `mmqr_amount`, `mobile_money_amount`. **Paid/completed** for one day; roles `ORDER_HISTORY_ROLES` (`root`/`admin`/`cashier`) |
 | GET | `/api/orders/daily-history/export?date=` | `.xlsx` download | Same filter; columns Order ID, Time, Item Details, Qty, Total Price |
 | PUT | `/api/orders/{order_id}/status` | `OrderStatusUpdateResponse` | Legacy bulk cancel path |
 | POST | `/api/orders/{order_id}/cancel` | `OrderStatusUpdateResponse` | API/test whole-order cancel |
@@ -145,15 +145,16 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | GET | `/api/print-jobs/failed?hours=12` | `PrintJobResponse[]` | Retryable failed slips of the last `hours` (1–168), newest first. Waiter: kitchen slips only |
 
 **Checkout body (`OrderCheckoutRequest`):**
-- `payment_method` — `cash` \| `mobile_money` \| `split` (optional when `cash_amount` / `mobile_money_amount` provided)
-- `amount_tendered` — required for legacy single-method; for split, cash given
-- optional `cash_amount`, `mobile_money_amount` — tendered/applied per method; sum must be ≥ final total
+- `payment_method` — `cash` \| `kpay` \| `mmqr` \| `split` (optional when amounts are given; case and spaces ignored). `mobile_money` → `422`
+- `amount_tendered` — required when paying with one method and no amounts. `cash`: must cover the total (extra = change). `kpay` / `mmqr`: must equal the total (`400` otherwise)
+- optional `cash_amount` (cash handed over), `kpay_amount`, `mmqr_amount` (each ≥ 0). `kpay_amount + mmqr_amount` above the total → `400`; the three together below the total → `400`. Applied cash = total − KPay − MMQR; change comes from extra cash only. Stored method = the one method used, or `split`
+- `mobile_money_amount` above 0 → `422` (use `kpay_amount` / `mmqr_amount`)
 - optional `discount_type` (`percentage`|`amount`), `discount_value`
 - `issue_receipt` — bool, default `true`
 - `printer_id` — optional cashier printer id
 - `cashier_name` — optional free-text label printed on the receipt (blank → omitted / stored null)
 
-**Checkout response (`OrderCheckoutResponse`):** same fields as `OrderResponseDetail` plus optional `warning` (`Receipt was not printed: <reason>`, only when the receipt could not be queued). The receipt is printed by the print queue after the response; a failed print is a `failed` print job (`GET /api/orders/{id}/print-jobs`, WebSocket `print_job_updated`). Payment success is always reflected by HTTP 200 + `status=paid`; print failures do not roll back checkout.
+**Checkout response (`OrderCheckoutResponse`):** same fields as `OrderResponseDetail` (including `cash_amount`, `kpay_amount`, `mmqr_amount`, and `mobile_money_amount` = KPay + MMQR) plus optional `warning` (`Receipt was not printed: <reason>`, only when the receipt could not be queued). The receipt is printed by the print queue after the response; a failed print is a `failed` print job (`GET /api/orders/{id}/print-jobs`, WebSocket `print_job_updated`). Payment success is always reflected by HTTP 200 + `status=paid`; print failures do not roll back checkout.
 
 **Admin printers:** `GET/PUT /api/admin/kitchen-printers` manages global print mode only (`file` \| `escpos_network` \| `windows_printer`). `windows_printer` sends **cashier receipts** to a Windows queue; kitchen/bar keep **LAN** when `Printer.host` is set (else file). Named printers use `/api/printers` CRUD with roles `cashier|kitchen|bar|other` and optional `windows_printer_name`. `GET /api/admin/windows-printers` lists installed queues when `pywin32` is available. Category `food`→kitchen, `drinks`→bar (fallback kitchen). Cashier UI persists selection in `localStorage.selectedCashierPrinterId` and display name in `localStorage.currentCashierName`.
 
@@ -168,12 +169,12 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 **`SalesBreakdownResponse`:**
 ```json
 {
-  "today": { "cash": 0, "mobile_money": 0, "total": 0 },
-  "month": { "cash": 0, "mobile_money": 0, "total": 0 }
+  "today": { "cash": 0, "kpay": 0, "mmqr": 0, "mobile_money": 0, "total": 0 },
+  "month": { "cash": 0, "kpay": 0, "mmqr": 0, "mobile_money": 0, "total": 0 }
 }
 ```
 
-Paid/completed orders only. `total == cash + mobile_money`.
+Paid/completed orders only. `total == cash + mobile_money`. `mobile_money` is all mobile money: `kpay + mmqr`, plus mobile money recorded before the two were separated (`mobile_money − kpay − mmqr`, shown in the UI as **Mobile (unspecified)** when above 0).
 
 ---
 
@@ -228,14 +229,14 @@ Menu items include `category_id`; categories at `GET /api/categories/` — used 
 | Method | Path | Role notes |
 |--------|------|------------|
 | GET | `/api/reports/summary/today` | Cashier = own checkout total |
-| GET | `/api/reports/sales` | root, admin, account; `period=daily\|monthly` + `date`; tax-aware totals |
+| GET | `/api/reports/sales` | root, admin, account; `period=daily\|monthly` + `date`; tax-aware totals; `total_cash`, `total_kpay`, `total_mmqr`, `total_mobile` (all mobile money) |
 | GET | `/api/reports/top-items` | Dashboard roles |
 | GET | `/api/reports/hourly-trend` | |
 | GET | `/api/reports/daily-sales` | Account ≤ 90 days |
 | GET | `/api/reports/monthly-sales` | Cashier excluded |
 | GET | `/api/reports/category-sales` | |
 | GET | `/api/reports/cancellations` | |
-| GET | `/api/reports/sales/by-cashier` | root, admin, account; not cashier/waiter |
+| GET | `/api/reports/sales/by-cashier` | root, admin, account; not cashier/waiter. `CashierSalesPointResponse[]`: `user_id`, `username`, `role`, `total_sales`, `order_count`, `cash`, `kpay`, `mmqr`, `mobile_unspecified`. A cashier is the login account that confirmed the payment; `cash + kpay + mmqr + mobile_unspecified == total_sales` |
 | GET | `/api/reports/sales/by-order-staff` | root, admin (all); waiter (self); account → 403 |
 | GET | `/api/reports/sales/promoted-by-waiter` | root, admin; waiter self |
 

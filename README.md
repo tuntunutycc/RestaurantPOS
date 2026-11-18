@@ -281,6 +281,28 @@ Use this when you want to wipe all users, menu, orders, and sales history.
 
 **What is wiped:** all users, menu, zones/tables, orders, reports history, audit logs, and sessions. You must seed root again and reconfigure the restaurant.
 
+### Clear sales only (keep staff, menu, tables, printers)
+
+Use this to start the sales figures from zero without setting the shop up again, for example after testing on the deploy machine.
+
+1. **Stop the running server.** Open a terminal **in the project folder** (the one that contains `pos.db`); the script stops with a message if it cannot find the database file.
+2. **See what would be deleted** (changes nothing):
+   ```bash
+   python scripts/clear_sales.py
+   ```
+3. **Delete:**
+   ```bash
+   python scripts/clear_sales.py --yes
+   ```
+   On Windows, in the project folder with the virtual environment active: `python scripts\clear_sales.py --yes`.
+4. **Start the server again.**
+
+| Deleted | Kept |
+|---------|------|
+| Orders, order lines, print jobs (so every sales report and the order history become empty). Every table is set to available. Order numbers start again from 1. | Staff accounts and PINs, menu and categories, zones and tables, printers and print settings, quick instruction tags, audit log |
+
+Before deleting, the script copies the SQLite file next to itself as `pos.db.backup-YYYYmmdd-HHMMSS` and stops without deleting if that copy cannot be made. To undo, stop the server and put the backup back in place of `pos.db`. The backup holds the old sales and the staff password hashes: keep it private, delete it when no longer needed (it is git-ignored). The script uses the database from `DATABASE_URL` in `.env`; for a non-SQLite database make your own backup and add `--no-backup`.
+
 ### Native Windows Deployment (Required for USB Receipt Printing)
 
 Cashier USB / installed-queue receipt printing uses **`pywin32`** and the **Windows Print Spooler**. On the cashier PC, run the app **natively on Windows 11** — not inside Docker.

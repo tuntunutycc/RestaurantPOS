@@ -346,6 +346,8 @@ async def dispatch_cashier_receipt(
     mobile_money_amount: float | None = None,
     created_at: str | None = None,
     cashier_name: str | None = None,
+    kpay_amount: float | None = None,
+    mmqr_amount: float | None = None,
     printer_id: int | None = None,
     db: Session | None = None,
 ) -> None:
@@ -364,6 +366,8 @@ async def dispatch_cashier_receipt(
         amount_tendered=amount_tendered,
         change_amount=change_amount,
         cash_amount=cash_amount,
+        kpay_amount=kpay_amount,
+        mmqr_amount=mmqr_amount,
         mobile_money_amount=mobile_money_amount,
         created_at=created_at,
     )

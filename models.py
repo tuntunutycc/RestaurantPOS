@@ -177,9 +177,13 @@ class Order(Base):
     total_amount = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     # Payment information (filled at checkout)
-    payment_method = Column(String(32), nullable=True)  # cash | mobile_money | split
+    # cash | kpay | mmqr | split (mobile_money only on orders from before KPay/MMQR)
+    payment_method = Column(String(32), nullable=True)
     cash_amount = Column(Float, nullable=True)  # applied bill portion paid in cash
-    mobile_money_amount = Column(Float, nullable=True)  # applied bill portion paid via mobile
+    kpay_amount = Column(Float, nullable=True)  # applied bill portion paid via KPay
+    mmqr_amount = Column(Float, nullable=True)  # applied bill portion paid via MMQR
+    # All mobile money = kpay_amount + mmqr_amount for checkouts since KPay/MMQR.
+    mobile_money_amount = Column(Float, nullable=True)
     amount_tendered = Column(Float, nullable=True)
     change_amount = Column(Float, nullable=True)
     tax_amount = Column(Float, nullable=True, default=0.0)

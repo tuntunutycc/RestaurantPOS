@@ -111,6 +111,27 @@
     });
   }
 
+  // "KPay", "Split: Cash 2,000 Ks + KPay 3,000 Ks", ...
+  function paymentLabel(order) {
+    const names = { cash: 'Cash', kpay: 'KPay', mmqr: 'MMQR', mobile_money: 'Mobile Money', split: 'Split' };
+    const method = String(order.payment_method || '').toLowerCase();
+    const label = names[method] || String(order.payment_method || '');
+    if (method !== 'split') return label;
+    const kpay = Number(order.kpay_amount) || 0;
+    const mmqr = Number(order.mmqr_amount) || 0;
+    // Mobile money recorded before KPay / MMQR were separated.
+    const otherMobile = (Number(order.mobile_money_amount) || 0) - kpay - mmqr;
+    const parts = [
+      ['Cash', Number(order.cash_amount) || 0],
+      ['KPay', kpay],
+      ['MMQR', mmqr],
+      ['Mobile', otherMobile],
+    ]
+      .filter(([, amount]) => amount > 0)
+      .map(([name, amount]) => `${name} ${formatMoney(amount)}`);
+    return parts.length ? `${label}: ${parts.join(' + ')}` : label;
+  }
+
   function openDetail(orderId) {
     const order = ordersById[orderId];
     const modal = document.getElementById('history-detail-modal');
@@ -123,7 +144,7 @@
       `<p><span class="text-slate-500">Time:</span> ${escapeHtml(formatTime(order.created_at))}</p>`,
       `<p><span class="text-slate-500">Type:</span> ${escapeHtml(typeLabel)}</p>`,
       order.customer_name ? `<p><span class="text-slate-500">Customer:</span> ${escapeHtml(order.customer_name)}</p>` : '',
-      order.payment_method ? `<p><span class="text-slate-500">Payment:</span> ${escapeHtml(order.payment_method)}</p>` : '',
+      order.payment_method ? `<p><span class="text-slate-500">Payment:</span> ${escapeHtml(paymentLabel(order))}</p>` : '',
       `<p><span class="text-slate-500">Total:</span> <strong>${escapeHtml(formatMoney(order.total_amount))}</strong></p>`,
     ].join('');
 

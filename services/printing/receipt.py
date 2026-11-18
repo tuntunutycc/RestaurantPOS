@@ -14,15 +14,20 @@ def _money(value: float | int | None) -> str:
     return f"{float(value or 0.0):.2f}"
 
 
-def _payment_label(method: str | None) -> str:
+_METHOD_LABELS = {
+    "cash": "Cash",
+    "kpay": "KPay",
+    "mmqr": "MMQR",
+    # Receipts recorded before KPay / MMQR were told apart.
+    "mobile_money": "Mobile Money",
+}
+
+
+def _payment_label(method: str | None, split_parts: Sequence[str] = ()) -> str:
     raw = (method or "").strip().lower().replace(" ", "_")
-    if raw == "mobile_money":
-        return "Mobile Money"
-    if raw == "cash":
-        return "Cash"
     if raw == "split":
-        return "Split (Cash + Mobile)"
-    return (method or "").strip() or "—"
+        return f"Split ({' + '.join(split_parts or ('Cash', 'Mobile'))})"
+    return _METHOD_LABELS.get(raw) or (method or "").strip() or "—"
 
 
 def build_receipt_text(
@@ -42,6 +47,8 @@ def build_receipt_text(
     mobile_money_amount: float | None = None,
     created_at: str | None = None,
     cashier_name: str | None = None,
+    kpay_amount: float | None = None,
+    mmqr_amount: float | None = None,
 ) -> str:
     """Build a plain-text cashier receipt for Pillow/ESC/POS rendering."""
     lines = [
@@ -111,21 +118,39 @@ def build_receipt_text(
             f"Discount:    -{_money(discount_amount)}",
             f"Tax:          {_money(tax_amount)}",
             f"Grand Total:  {_money(grand_total)}",
-            f"Payment:      {_payment_label(payment_method)}",
         ]
     )
     method = (payment_method or "").strip().lower().replace(" ", "_")
-    if method == "split":
-        mobile_paid = float(mobile_money_amount or 0.0)
-        tendered_cash = amount_tendered
-        if tendered_cash is None:
-            tendered_cash = cash_amount
-        lines.append(f"Paid via Mobile: {_money(mobile_paid)}")
+    tendered_cash = amount_tendered if amount_tendered is not None else cash_amount
+    if method == "split" and (kpay_amount is not None or mmqr_amount is not None):
+        cash_paid = float(cash_amount or 0.0)
+        kpay_paid = float(kpay_amount or 0.0)
+        mmqr_paid = float(mmqr_amount or 0.0)
+        parts = [
+            name
+            for name, amount in (("Cash", cash_paid), ("KPay", kpay_paid), ("MMQR", mmqr_paid))
+            if amount > 0
+        ]
+        lines.append(f"Payment:      {_payment_label(method, parts)}")
+        if kpay_paid > 0:
+            lines.append(f"Paid via KPay:   {_money(kpay_paid)}")
+        if mmqr_paid > 0:
+            lines.append(f"Paid via MMQR:   {_money(mmqr_paid)}")
+        # Cash lines only when cash was part of the payment.
+        if cash_paid > 0 or float(tendered_cash or 0.0) > 0:
+            lines.append(f"Tendered Cash:   {_money(tendered_cash)}")
+            if change_amount is not None:
+                lines.append(f"Change Due:      {_money(change_amount)}")
+    elif method == "split":
+        # Receipt recorded before KPay / MMQR were told apart.
+        lines.append(f"Payment:      {_payment_label(method)}")
+        lines.append(f"Paid via Mobile: {_money(mobile_money_amount)}")
         if tendered_cash is not None:
             lines.append(f"Tendered Cash:   {_money(tendered_cash)}")
         if change_amount is not None:
             lines.append(f"Change Due:      {_money(change_amount)}")
     else:
+        lines.append(f"Payment:      {_payment_label(payment_method)}")
         if amount_tendered is not None:
             lines.append(f"Tendered:     {_money(amount_tendered)}")
         if change_amount is not None:
