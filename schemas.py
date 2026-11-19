@@ -5,6 +5,8 @@ from typing import List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from services.item_names import order_line_display_name
+
 
 class LoginRequest(BaseModel):
     """Schema for login request."""
@@ -738,14 +740,8 @@ class OrderResponseDetail(BaseModel):
                 waiter_name = None
             items = [
                 OrderItemDetail(
-                    menu_item_name=(
-                        getattr(getattr(oi, "menu_item", None), "name", None)
-                        if (
-                            getattr(oi, "menu_item", None) is not None
-                            and not bool(getattr(getattr(oi, "menu_item", None), "is_deleted", False))
-                        )
-                        else (getattr(oi, "menu_item_name_at_sale", None) or deleted_item_label)
-                    ),
+                    # Sold-as name first (specs/feature-snapshot-first-names).
+                    menu_item_name=order_line_display_name(oi, deleted_item_label),
                     quantity=oi.quantity,
                     subtotal=float(oi.subtotal),
                     unit_price_at_sale=(

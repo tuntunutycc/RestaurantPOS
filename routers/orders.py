@@ -20,6 +20,7 @@ from services.order_history import (
     parse_history_date,
     query_daily_paid_orders,
 )
+from services.item_names import order_line_display_name
 from services.printing.health import check_route_health, warning_for_offline_routes
 from services.printing.routes import resolve_printer_route
 from services.printing.print_log import get_print_logger
@@ -322,14 +323,8 @@ def _resolve_checkout_payment(body: OrderCheckoutRequest, final_total: float) ->
 
 
 def _display_menu_item_name(order_item: OrderItem) -> str:
-    menu_item = getattr(order_item, "menu_item", None)
-    if menu_item is not None and not bool(getattr(menu_item, "is_deleted", False)):
-        return (
-            getattr(menu_item, "name", None)
-            or getattr(order_item, "menu_item_name_at_sale", None)
-            or DELETED_ITEM_LABEL
-        )
-    return getattr(order_item, "menu_item_name_at_sale", None) or DELETED_ITEM_LABEL
+    # Sold-as name first (specs/feature-snapshot-first-names): a rename never rewrites old lines.
+    return order_line_display_name(order_item, DELETED_ITEM_LABEL)
 
 
 def _display_waiter_name(order_item: OrderItem) -> str | None:

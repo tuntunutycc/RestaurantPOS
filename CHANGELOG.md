@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-19 — Snapshot-first item names (renaming a menu item no longer rewrites old bills)
+
+### Summary
+Prices were already stored per sold line, but several screens showed the **live** menu name instead of the name the line was sold under. After renaming a dish, old bills, the Order History detail and the order lists showed the new name. They now keep the sold-as name, like the receipt, kitchen slip and reports already did.
+
+### Fixed
+- `menu_item_name` of an order line is now `menu_item_name_at_sale` first; the live name is used only for legacy lines without one, then `[Deleted Item]` (`GET /orders/`, `/orders/active-by-table/{id}`, `/orders/tables`, `GET /orders/{id}/details`, create / submit / checkout responses, daily Order History). One shared helper (`services/item_names.py`) is used by both code paths.
+- Start-up backfill of empty `menu_item_name_at_sale` / `category_name_at_sale` on legacy order lines (from the live name; never overwrites a stored value, never touches `unit_price_at_sale`, never uses the `__system_archived__` category). A legacy line's name is frozen at the first start after upgrading.
+
+### Behaviour to know
+- On an **open** bill, lines already ordered keep the old name after a rename and lines added afterwards carry the new name (same as prices).
+
+### Found, not changed
+- `GET /api/orders/tables` answers `500` (`TypeError`, sorting `None` against an int) when an open takeaway order and an open table order exist at the same time. No screen calls it today. Separate fix.
+- The "promoted sales" report still filters on the live `is_promoted` flag.
+
+### Spec
+- `specs/feature-snapshot-first-names/`; `api-reference.md`, `database-schema.md`.
+
+### Tests
+- `tests/test_snapshot_first_names.py` (17). Suite: all passing, +17 tests (506 passed on a clean checkout of this commit; measured). 8 deliberate code breakages, all caught.
+
 ## 2026-11-18 — Waiter: "Mark as Served" failed after a few taps
 
 ### Fixed

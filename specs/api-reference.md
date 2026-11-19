@@ -201,6 +201,9 @@ Paid/completed orders only. `total == cash + mobile_money`. `mobile_money` is al
 
 Use **`GET /api/orders/{id}/details`** for waiter active-order modal / cart breakdown.
 
+### Item names on order lines (snapshot-first)
+`menu_item_name` of an order line (in `GET /orders/`, `/orders/tables`, `/orders/active-by-table/{id}`, `GET /orders/{id}/details`, the create / submit / checkout responses and `GET /orders/daily-history`) is the name the line was **sold under** (`menu_item_name_at_sale`). Renaming a menu item later does not change it. Only a legacy line without a stored name shows the live menu name, and `[Deleted Item]` when that item is deleted. Shape unchanged. See `specs/feature-snapshot-first-names/`.
+
 ---
 
 ## Kitchen printers (`ADMIN_PANEL_ROLES`)

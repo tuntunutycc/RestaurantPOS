@@ -29,6 +29,51 @@ from routers import (
 from websocket_manager import ConnectionManager
 
 
+def _backfill_order_item_snapshots(bind=None) -> dict:
+    """Fill empty sale-time name snapshots of legacy order lines (specs/feature-snapshot-first-names).
+
+    Only ``NULL`` / blank ``menu_item_name_at_sale`` and ``category_name_at_sale`` are
+    filled, from the live menu item / category; real snapshots are never overwritten and
+    ``unit_price_at_sale`` is left alone (the price of an old sale is unknown). The system
+    archive category is not used as a name. Safe to run on every start. A failure is
+    logged and never stops the server.
+    """
+    import logging
+
+    from sqlalchemy import text
+
+    from routers.menu import ARCHIVED_CATEGORY_NAME
+
+    counts = {"item_names": 0, "category_names": 0}
+    try:
+        with (bind or engine).begin() as conn:
+            counts["item_names"] = conn.execute(
+                text(
+                    "UPDATE order_items SET menu_item_name_at_sale = ("
+                    "SELECT m.name FROM menu_items m WHERE m.id = order_items.menu_item_id) "
+                    "WHERE (menu_item_name_at_sale IS NULL OR TRIM(menu_item_name_at_sale) = '') "
+                    "AND EXISTS (SELECT 1 FROM menu_items m WHERE m.id = order_items.menu_item_id "
+                    "AND TRIM(COALESCE(m.name, '')) <> '')"
+                )
+            ).rowcount or 0
+            counts["category_names"] = conn.execute(
+                text(
+                    "UPDATE order_items SET category_name_at_sale = ("
+                    "SELECT c.name FROM menu_items m JOIN categories c ON c.id = m.category_id "
+                    "WHERE m.id = order_items.menu_item_id) "
+                    "WHERE (category_name_at_sale IS NULL OR TRIM(category_name_at_sale) = '') "
+                    "AND EXISTS (SELECT 1 FROM menu_items m JOIN categories c ON c.id = m.category_id "
+                    "WHERE m.id = order_items.menu_item_id "
+                    "AND TRIM(COALESCE(c.name, '')) <> '' AND c.name <> :archived)"
+                ),
+                {"archived": ARCHIVED_CATEGORY_NAME},
+            ).rowcount or 0
+    except Exception:
+        logging.getLogger(__name__).exception("order_items snapshot backfill skipped")
+        return {"item_names": 0, "category_names": 0}
+    return counts
+
+
 def _ensure_order_items_cancelled_status_constraint():
     """SQLite safety migration for legacy DBs missing cancelled status in check constraint."""
     try:
@@ -480,6 +525,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     _ensure_order_items_cancelled_status_constraint()
+    _backfill_order_item_snapshots()
     # Add payment fields to orders for cashier checkout.
     try:
         from sqlalchemy import text

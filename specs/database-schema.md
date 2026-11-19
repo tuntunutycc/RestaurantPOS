@@ -123,11 +123,11 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 | `selected_modifiers` | JSON | `[]` | |
 | `note` | String(1024) nullable | | |
 | `special_instructions` | String(1024) nullable | | Alias of note in API |
-| `menu_item_name_at_sale` | String(255) nullable | | Snapshot |
+| `menu_item_name_at_sale` | String(255) nullable | | Snapshot; shown instead of the live name. Empty values of legacy rows are filled once from the live name at start-up |
 | `unit_price_at_sale` | Float nullable | | Effective base at submit |
 | `unit_discount_at_sale` | Float nullable | | Per-unit discount snapshot |
 | `unit_tax_at_sale` | Float nullable | | Per-unit tax on discounted price |
-| `category_name_at_sale` | String(255) nullable | | |
+| `category_name_at_sale` | String(255) nullable | | Snapshot; legacy empty values are filled at start-up (never with the `__system_archived__` bucket) |
 | `is_takeaway` | Boolean | false | Per-line pricing flag |
 | `created_by_id` | FK → users nullable | | Waiter/cashier attribution |
 
@@ -236,6 +236,8 @@ At order submit, server persists per line:
 4. `subtotal` = `(discounted + tax + modifiers) × quantity`
 
 See `specs/feature-menu-item-discount/` and `specs/feature-menu-item-tax/`.
+
+**Start-up backfill (`main._backfill_order_item_snapshots`)**: `menu_item_name_at_sale` / `category_name_at_sale` that are `NULL` or blank are filled from the live menu item / category. Real values are never overwritten; `unit_price_at_sale` is never invented (the price of an old sale is unknown). A legacy line's name is therefore frozen at the first start after the upgrade. Idempotent; a failure is logged and does not stop the server. See `specs/feature-snapshot-first-names/`.
 
 ---
 
