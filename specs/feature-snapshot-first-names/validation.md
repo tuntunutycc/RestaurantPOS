@@ -5,7 +5,7 @@ Run: `PYTHONPATH=.:.pip_pkgs python -m pytest -q` -> **627 passed** (2026-11-19;
 ## Automated - `tests/test_snapshot_first_names.py`
 Use unique item names per test (the in-memory DB is shared across the suite).
 
-- [x] FR-N1: order an item, **rename** it, then check the old name is still shown by: `GET /orders/{id}/details`, order list, active-by-table (`GET /orders/tables` is not asserted: it answers `500` when an open takeaway and an open table order coexist - a separate, pre-existing problem, see CHANGELOG), the Order History day detail, the checkout response (paid order), and the receipt payload.
+- [x] FR-N1: order an item, **rename** it, then check the old name is still shown by: `GET /orders/{id}/details`, order list, `GET /orders/tables` and active-by-table (the `500` that `/orders/tables` used to give next to an open takeaway is fixed, see CHANGELOG), the Order History day detail, the checkout response (paid order), and the receipt payload.
 - [x] FR-N1: open bill, rename, add the item again (new batch): the first line shows the old name, the new line the new name.
 - [x] FR-N1: prices and totals of the same bill are unchanged by the rename (guards against fixing names by accident through money).
 - [x] FR-N1: reports (top items, category sales, cancellations) after a rename still use the old name for old sales (regression, already true).

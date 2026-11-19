@@ -112,10 +112,8 @@ def test_rename_does_not_change_details_list_tables_and_active_by_table(client, 
     assert _details_names(client, auth_headers, order_id) == [old]
     listed = _listed_order(client, auth_headers, "/api/orders/?status=pending&status=open&status=dining", order_id)
     assert _names(listed["items"]) == [old]
-    # Not asserted on GET /orders/tables: it answers 500 whenever an open takeaway and an
-    # open table order exist together (sort of None vs int; separate, pre-existing, no UI
-    # calls it) and this suite's shared database often holds such leftovers. It builds its
-    # items through the same `OrderResponseDetail` path as the two reads here.
+    tabled = _listed_order(client, auth_headers, "/api/orders/tables", order_id)
+    assert _names(tabled["items"]) == [old]
     active = _listed_order(client, auth_headers, f"/api/orders/active-by-table/{table.id}", order_id)
     assert _names(active["items"]) == [old]
 

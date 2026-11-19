@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-19 — Fix: `GET /api/orders/tables` 500 and the missing "Confirm Delete" label
+
+### Fixed
+- `GET /api/orders/tables` answered `500` (`TypeError`, sorting `None` against an int) whenever an open takeaway order existed next to an open table order. Orders that have no table (takeaways) are now left out of this list; they were never a table, and `GET /api/orders/active-takeaways` lists them. Response shape unchanged. (Decision made by the assistant from the endpoint's documented purpose, "checkout-ready tables"; tell me if takeaways should appear here instead.)
+- The delete confirmation button showed the raw key `confirm_delete`. Added the `confirm_delete` label to `i18n.js` (en / my).
+
+### Tests
+- `tests/test_orders_tables_endpoint.py` (4); `tests/test_snapshot_first_names.py` now also asserts the sold-as name on `/orders/tables`.
+
 ## 2026-11-19 — Linked add-ons (an add-on can follow a main menu item's price)
 
 ### Summary

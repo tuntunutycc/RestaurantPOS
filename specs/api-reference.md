@@ -127,7 +127,7 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | POST | `/api/orders/` | `OrderCreateResponse` | **Legacy** create/append; no batch/kitchen print |
 | GET | `/api/orders/` | `list[OrderResponseDetail]` | Optional `status` filter |
 | GET | `/api/orders/active-takeaways` | `list[ActiveTakeawayOrderResponse]` | `order_type=takeaway`, not paid/cancelled |
-| GET | `/api/orders/tables` | `list[OrderResponseDetail]` | Checkout-ready tables |
+| GET | `/api/orders/tables` | `list[OrderResponseDetail]` | Checkout-ready tables: one canonical order per table, sorted by table. Takeaway orders (no table) are not listed here, use `GET /api/orders/active-takeaways`. Never `500` because of an open takeaway. |
 | GET | `/api/orders/active-by-table/{table_id}` | `OrderResponseDetail` | |
 | GET | `/api/orders/daily-history?date=` | `DailyOrderHistoryResponse` | Each order carries `voucher_no`, `payment_method`, `cash_amount`, `kpay_amount`, `mmqr_amount`, `mobile_money_amount`. **Paid/completed** for one day; roles `ORDER_HISTORY_ROLES` (`root`/`admin`/`cashier`) |
 | GET | `/api/orders/daily-history/export?date=` | `.xlsx` download | Same filter; columns Order ID, Voucher No, Time, Item Details, Qty, Total Price |

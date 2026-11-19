@@ -902,6 +902,9 @@ def list_orders_by_table(
     by_table = {}
     for o in orders:
         table_key = o.table_id if getattr(o, "table_id", None) is not None else o.table_number
+        if table_key is None:
+            # Takeaway / walk-in order: it has no table. Listed by /orders/active-takeaways.
+            continue
         by_table.setdefault(table_key, []).append(o)
     canonical = [_canonical_order_for_table(ords) for ords in by_table.values()]
     canonical = [o for o in canonical if o is not None]
