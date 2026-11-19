@@ -285,7 +285,7 @@ Use this when you want to wipe all users, menu, orders, and sales history.
 
 Use this to start the sales figures from zero without setting the shop up again, for example after testing on the deploy machine.
 
-1. **Stop the running server.** Open a terminal **in the project folder** (the one that contains `pos.db`); the script stops with a message if it cannot find the database file.
+1. **Stop the running server.** Open a terminal **in the project folder** (the one that contains `pos.db`) with the virtual environment active: `venv\Scripts\activate` on Windows, `source venv/bin/activate` elsewhere. Without it Python reports `No module named 'sqlalchemy'`. The script stops with a message if it cannot find the database file.
 2. **See what would be deleted** (changes nothing):
    ```bash
    python scripts/clear_sales.py

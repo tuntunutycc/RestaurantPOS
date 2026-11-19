@@ -30,10 +30,17 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from sqlalchemy import func, inspect, select, text  # noqa: E402
-from sqlalchemy.orm import Session  # noqa: E402
+try:
+    from sqlalchemy import func, inspect, select, text  # noqa: E402
+    from sqlalchemy.orm import Session  # noqa: E402
 
-from models import Order, OrderItem, PrintJob, Table, TableStatus  # noqa: E402
+    from models import Order, OrderItem, PrintJob, Table, TableStatus  # noqa: E402
+except ModuleNotFoundError as exc:  # pragma: no cover - depends on the machine
+    sys.exit(
+        f"Missing Python package '{exc.name}'. Run this with the project's virtual environment:\n"
+        "  Windows:   venv\\Scripts\\python.exe scripts\\clear_sales.py\n"
+        "  Mac/Linux: venv/bin/python scripts/clear_sales.py"
+    )
 
 # Children first, so foreign keys never point at a deleted row.
 SALES_MODELS = (PrintJob, OrderItem, Order)

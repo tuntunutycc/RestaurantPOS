@@ -8,6 +8,8 @@
 ### Changed
 - `PUT /api/orders/{order_id}/items/{item_id}/status` now returns `OrderDetailsResponse` (the same body as `GET /api/orders/{order_id}/details`: items with `id` and `menu_item_id`, plus `breakdown_*`). Before it returned `OrderResponseDetail`. All old top-level fields the pages read (`status`, `total_amount`, `items[].item_status`, …) are still there. Shared builder `_build_order_details_response`.
 
+- `scripts/clear_sales.py`: when run without the project's virtual environment it now prints which package is missing and the exact command to use (`venv\Scripts\python.exe scripts\clear_sales.py` / `venv/bin/python scripts/clear_sales.py`) instead of a Python traceback. README *Clear sales only* says to activate the virtual environment first.
+
 ### Spec
 - `specs/api-reference.md`: response type of the item status endpoint.
 
