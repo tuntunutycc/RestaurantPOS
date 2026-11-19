@@ -8,6 +8,7 @@
 
 ### Tests
 - `tests/test_orders_tables_endpoint.py` (4); `tests/test_snapshot_first_names.py` now also asserts the sold-as name on `/orders/tables`.
+- `tests/test_mixed_takeaway_kitchen_slip.py` (6): one dine-in table with some lines takeaway. Locks in that the `(ပါဆယ်)` marker is on the takeaway lines only (both kitchen slip modes, later batches, image mode, receipt, Table Details, Order History) and that the header stays `Table: N`. Suite: 674 passed.
 
 ## 2026-11-19 — Linked add-ons (an add-on can follow a main menu item's price)
 
