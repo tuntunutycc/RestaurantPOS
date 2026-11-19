@@ -135,10 +135,10 @@ def test_daily_history_export_xlsx(client, db_session, auth_headers):
     wb = load_workbook(BytesIO(res.content))
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
-    assert rows[0] == ("Order ID", "Time", "Item Details", "Qty", "Total Price")
+    assert rows[0] == ("Order ID", "Voucher No", "Time", "Item Details", "Qty", "Total Price")
     data_rows = [r for r in rows[1:] if r and r[0] == order.id]
     assert len(data_rows) == 2
-    details = " ".join(str(r[2]) for r in data_rows)
+    details = " ".join(str(r[3]) for r in data_rows)
     assert "ပဲကြော်" in details
     assert "ပါဆယ်" in details
 

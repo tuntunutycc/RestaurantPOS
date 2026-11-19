@@ -1024,10 +1024,10 @@ def test_receipt_is_the_same_in_both_modes(client, db_session, auth_headers, two
     assert len(receipts) == 2 and all(_is_receipt(text) for text in receipts)
 
     def body(text: str) -> list[str]:
-        # Order number, table and time differ between the two orders by design.
+        # Order / voucher number, table and time differ between the two orders by design.
         return [
             line for line in text.splitlines()
-            if not re.match(r"\s*(Order:|Location:|Time:)", line)
+            if not re.match(r"\s*(Order:|Voucher:|Location:|Time:)", line)
         ]
 
     assert body(receipts[0]) == body(receipts[1])

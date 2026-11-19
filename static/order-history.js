@@ -92,7 +92,7 @@
     body.innerHTML = orders
       .map((o) => `
         <tr class="border-b border-slate-100 hover:bg-slate-50">
-          <td class="px-4 py-2 font-medium">#${escapeHtml(o.id)}</td>
+          <td class="px-4 py-2 font-medium">${escapeHtml(voucherLabel(o))}</td>
           <td class="px-4 py-2">${escapeHtml(formatTime(o.created_at))}</td>
           <td class="px-4 py-2 text-right">${escapeHtml(formatMoney(o.total_amount))}</td>
           <td class="px-4 py-2 text-right">
@@ -112,6 +112,11 @@
   }
 
   // "KPay", "Split: Cash 2,000 Ks + KPay 3,000 Ks", ...
+  // Daily voucher number (YYYYMMDD-NNNN); orders from before the feature show their id.
+  function voucherLabel(order) {
+    return order.voucher_no || `#${order.id}`;
+  }
+
   function paymentLabel(order) {
     const names = { cash: 'Cash', kpay: 'KPay', mmqr: 'MMQR', mobile_money: 'Mobile Money', split: 'Split' };
     const method = String(order.payment_method || '').toLowerCase();
@@ -138,7 +143,7 @@
     const title = document.getElementById('history-detail-title');
     const body = document.getElementById('history-detail-body');
     if (!order || !modal || !body) return;
-    if (title) title.textContent = `Order #${order.id}`;
+    if (title) title.textContent = voucherLabel(order);
     const typeLabel = String(order.order_type || '').toLowerCase() === 'takeaway' ? 'Takeaway' : 'Dine-in';
     const meta = [
       `<p><span class="text-slate-500">Time:</span> ${escapeHtml(formatTime(order.created_at))}</p>`,

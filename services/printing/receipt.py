@@ -49,13 +49,15 @@ def build_receipt_text(
     cashier_name: str | None = None,
     kpay_amount: float | None = None,
     mmqr_amount: float | None = None,
+    voucher_no: str | None = None,
 ) -> str:
     """Build a plain-text cashier receipt for Pillow/ESC/POS rendering."""
     lines = [
         "=================================",
         f"  {shop_name()}",
         "=================================",
-        f"Order: #{order_id}",
+        # Daily voucher number; orders without one (queued before the feature) keep the id.
+        f"Voucher: {voucher_no}" if (voucher_no or "").strip() else f"Order: #{order_id}",
         f"Location: {location_label}",
         f"Served by: {(served_by or '').strip() or 'Unknown'}",
     ]

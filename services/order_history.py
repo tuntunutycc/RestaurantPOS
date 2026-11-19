@@ -89,7 +89,7 @@ def build_daily_history_xlsx(orders: Iterable[Order], day: date) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Daily Orders"
-    ws.append(["Order ID", "Time", "Item Details", "Qty", "Total Price"])
+    ws.append(["Order ID", "Voucher No", "Time", "Item Details", "Qty", "Total Price"])
 
     for order in orders:
         created = getattr(order, "created_at", None)
@@ -103,6 +103,7 @@ def build_daily_history_xlsx(orders: Iterable[Order], day: date) -> bytes:
             ws.append(
                 [
                     int(order.id),
+                    order.voucher_no or "",
                     time_label,
                     "(no active items)",
                     0,
@@ -114,6 +115,7 @@ def build_daily_history_xlsx(orders: Iterable[Order], day: date) -> bytes:
             ws.append(
                 [
                     int(order.id),
+                    order.voucher_no or "",
                     time_label,
                     line_item_detail_text(oi),
                     int(getattr(oi, "quantity", 1) or 1),

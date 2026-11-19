@@ -62,9 +62,9 @@ Body: login requests accept optional `device_id` for session binding.
 | POST | `/api/categories/` | `root`, `admin` |
 | PUT/DELETE | `/api/categories/{category_id}` | `root`, `admin` |
 | GET | `/api/menu-items/` | authenticated |
-| POST | `/api/menu-items/` | **`root`, `admin` only** |
-| POST | `/api/menu-items/upload` | **`root`, `admin` only** |
-| PUT | `/api/menu-items/{item_id}` | **`root`, `admin` only** (full update) |
+| POST | `/api/menu-items/` | **`root`, `admin` only** (same input rules as PUT) |
+| POST | `/api/menu-items/upload` | **`root`, `admin` only** (price finite, `0 … 1,000,000,000`; name 1–255; category must exist) |
+| PUT | `/api/menu-items/{item_id}` | **`root`, `admin` only** (partial update). Money fields finite and `0 … 1,000,000,000`; percentages ≤ 100; name not blank; `category_id` must exist (`404`); an explicit `null` for a required field → `422`. See `specs/feature-menu-price-safety` |
 | PATCH | `/api/menu-items/{item_id}/availability` | **`root`, `admin`, `cashier`** — body `{ "is_available": boolean }` |
 | PUT | `/api/menu-items/{item_id}/toggle-promoted` | `root`, `admin` |
 | PUT | `/api/menu-items/{item_id}/toggle-availability` | `root`, `admin` (legacy flip; prefer PATCH) |
@@ -127,8 +127,8 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | GET | `/api/orders/active-takeaways` | `list[ActiveTakeawayOrderResponse]` | `order_type=takeaway`, not paid/cancelled |
 | GET | `/api/orders/tables` | `list[OrderResponseDetail]` | Checkout-ready tables |
 | GET | `/api/orders/active-by-table/{table_id}` | `OrderResponseDetail` | |
-| GET | `/api/orders/daily-history?date=` | `DailyOrderHistoryResponse` | Each order carries `payment_method`, `cash_amount`, `kpay_amount`, `mmqr_amount`, `mobile_money_amount`. **Paid/completed** for one day; roles `ORDER_HISTORY_ROLES` (`root`/`admin`/`cashier`) |
-| GET | `/api/orders/daily-history/export?date=` | `.xlsx` download | Same filter; columns Order ID, Time, Item Details, Qty, Total Price |
+| GET | `/api/orders/daily-history?date=` | `DailyOrderHistoryResponse` | Each order carries `voucher_no`, `payment_method`, `cash_amount`, `kpay_amount`, `mmqr_amount`, `mobile_money_amount`. **Paid/completed** for one day; roles `ORDER_HISTORY_ROLES` (`root`/`admin`/`cashier`) |
+| GET | `/api/orders/daily-history/export?date=` | `.xlsx` download | Same filter; columns Order ID, Voucher No, Time, Item Details, Qty, Total Price |
 | PUT | `/api/orders/{order_id}/status` | `OrderStatusUpdateResponse` | Legacy bulk cancel path |
 | POST | `/api/orders/{order_id}/cancel` | `OrderStatusUpdateResponse` | API/test whole-order cancel |
 | GET | `/api/orders/{order_id}/details` | `OrderDetailsResponse` | **Full breakdown** + item snapshots |
@@ -153,6 +153,8 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 - `issue_receipt` — bool, default `true`
 - `printer_id` — optional cashier printer id
 - `cashier_name` — optional free-text label printed on the receipt (blank → omitted / stored null)
+
+**Voucher number:** checkout gives the order `voucher_no` (`YYYYMMDD-NNNN`, Myanmar date, restarts at 0001 every day; see `specs/feature-voucher-number`). `voucher_no` is also in `OrderResponseDetail`, `OrderDetailsResponse` and `DailyOrderHistoryOrder`; `null` before payment and on orders from before the feature. Clients cannot send it. A number clash is retried server-side; after 5 failed attempts checkout answers `503` and the order stays unpaid.
 
 **Checkout response (`OrderCheckoutResponse`):** same fields as `OrderResponseDetail` (including `cash_amount`, `kpay_amount`, `mmqr_amount`, and `mobile_money_amount` = KPay + MMQR) plus optional `warning` (`Receipt was not printed: <reason>`, only when the receipt could not be queued). The receipt is printed by the print queue after the response; a failed print is a `failed` print job (`GET /api/orders/{id}/print-jobs`, WebSocket `print_job_updated`). Payment success is always reflected by HTTP 200 + `status=paid`; print failures do not roll back checkout.
 

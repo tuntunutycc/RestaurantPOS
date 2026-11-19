@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -100,7 +101,7 @@ def test_checkout_issue_receipt_file_backend(client, db_session, auth_headers, t
         assert out.exists()
         text = out.read_text(encoding="utf-8")
         assert "Audit Cafe" in text
-        assert f"Order: #{order.id}" in text
+        assert re.search(r"Voucher: \d{8}-\d{4}", text)
         assert "Grand Total:" in text
         assert "Payment:" in text
     finally:
@@ -154,7 +155,7 @@ def test_checkout_file_backend_with_printer_id_no_host_writes_txt(
         assert out.exists(), "expected cashier_printer_output.txt for file-backend testing"
         text = out.read_text(encoding="utf-8")
         assert "File Test Cafe" in text
-        assert f"Order: #{order.id}" in text
+        assert re.search(r"Voucher: \d{8}-\d{4}", text)
         assert "Grand Total:" in text
     finally:
         _purge_order(db_session, order.id)

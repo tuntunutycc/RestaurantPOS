@@ -1,6 +1,7 @@
 """Menu API: categories and menu items."""
 
 from datetime import datetime
+import math
 import uuid
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from schemas import (
     MenuItemCreate,
     MenuItemResponse,
     MenuItemUpdate,
+    MAX_MENU_MONEY,
 )
 
 router = APIRouter(prefix="/api")
@@ -46,6 +48,12 @@ def _menu_item_in_active_order(db: Session, menu_item_id: int) -> bool:
         .first()
     )
     return row is not None
+
+
+def _require_category(db: Session, category_id: int) -> None:
+    """A menu item must belong to a real category (a missing one hides the item)."""
+    if db.query(Category.id).filter(Category.id == category_id).first() is None:
+        raise HTTPException(status_code=404, detail=f"Category id {category_id} not found")
 
 
 @router.post("/categories/", response_model=CategoryResponse)
@@ -185,6 +193,7 @@ async def create_menu_item(
     current_user: User = Depends(require_roles(ADMIN_PANEL_ROLES)),
 ):
     """Create a new menu item (JSON). Admin only. Broadcasts menu_item_added via WebSocket."""
+    _require_category(db, item.category_id)
     db_item = MenuItem(
         name=item.name,
         price=item.price,
@@ -226,6 +235,15 @@ async def create_menu_item_upload(
     Create a menu item from form data (name, price, description, category_id, image file).
     Saves image to static/images/menu/ and stores relative URL in DB. Broadcasts menu_item_added via WebSocket.
     """
+    name = name.strip()
+    if not name or len(name) > 255:
+        raise HTTPException(status_code=422, detail="name must be 1-255 characters")
+    if not math.isfinite(price) or price < 0 or price > MAX_MENU_MONEY:
+        raise HTTPException(
+            status_code=422,
+            detail=f"price must be a number from 0 to {MAX_MENU_MONEY:,.0f}",
+        )
+    _require_category(db, category_id)
     image_url: str | None = None
     if image and image.filename:
         suffix = Path(image.filename).suffix.lower()
@@ -243,7 +261,7 @@ async def create_menu_item_upload(
         image_url = f"/images/menu/{fname}"
 
     db_item = MenuItem(
-        name=name.strip(),
+        name=name,
         price=price,
         category_id=category_id,
         description=description.strip() if description else None,
@@ -304,6 +322,21 @@ async def update_menu_item(
             m.model_dump(mode="json") if hasattr(m, "model_dump") else m
             for m in update_data["modifiers_config"]
         ]
+
+    if "category_id" in update_data:
+        _require_category(db, update_data["category_id"])
+
+    # A percentage may not pass 100, judged on the values the item will have after
+    # this update (a partial update can change only the value or only the type).
+    def _final(field: str):
+        return update_data[field] if field in update_data else getattr(db_item, field)
+
+    for kind, value in (("discount", "discount_value"), ("tax", "tax_value")):
+        if _final(f"{kind}_type") == "percentage" and float(_final(value) or 0.0) > 100:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{value} cannot be more than 100 for a percentage {kind}",
+            )
 
     for field, value in update_data.items():
         setattr(db_item, field, value)

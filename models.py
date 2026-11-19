@@ -164,6 +164,8 @@ class Order(Base):
     __table_args__ = (
         Index("ix_orders_table_status", "table_id", "status"),
         Index("ix_orders_status_created_at", "status", "created_at"),
+        # One voucher number per day (NULL rows = unpaid / pre-feature, never conflict).
+        Index("ux_orders_voucher", "voucher_date", "voucher_seq", unique=True),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -195,6 +197,16 @@ class Order(Base):
     cashier_name = Column(String(128), nullable=True)
     # Staff who opened / took the order (waiter or cashier at first submit).
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # Daily voucher number, given at checkout (specs/feature-voucher-number).
+    voucher_date = Column(String(8), nullable=True)  # YYYYMMDD, Myanmar date of checkout
+    voucher_seq = Column(Integer, nullable=True)  # 1, 2, 3 ... within voucher_date
+
+    @property
+    def voucher_no(self) -> str | None:
+        """`YYYYMMDD-NNNN`, derived so it can never disagree with its parts."""
+        if not self.voucher_date or self.voucher_seq is None:
+            return None
+        return f"{self.voucher_date}-{int(self.voucher_seq):04d}"
 
     table = relationship("Table", back_populates="orders")
     checked_out_by = relationship("User", foreign_keys=[checked_out_by_id], back_populates="checked_out_orders")

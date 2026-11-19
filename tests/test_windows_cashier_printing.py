@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -207,7 +208,7 @@ def test_checkout_windows_backend_sends_raw_receipt(
         archive = Path(tmp_path) / "cashier_printer_output.txt"
         assert archive.exists()
         archived = archive.read_text(encoding="utf-8")
-        assert f"Order: #{order.id}" in archived
+        assert re.search(r"Voucher: \d{8}-\d{4}", archived)
         assert "Grand Total:" in archived
     finally:
         _purge_order(db_session, order.id)

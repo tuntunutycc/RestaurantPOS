@@ -722,6 +722,25 @@ async def lifespan(app: FastAPI):
             conn.execute(text("ALTER TABLE orders ADD COLUMN created_by_id INTEGER"))
     except Exception:
         pass
+    # Daily voucher number (specs/feature-voucher-number).
+    for column, ddl in (("voucher_date", "VARCHAR(8)"), ("voucher_seq", "INTEGER")):
+        try:
+            from sqlalchemy import text
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE orders ADD COLUMN {column} {ddl}"))
+        except Exception:
+            pass
+    try:
+        from sqlalchemy import text
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_orders_voucher "
+                    "ON orders (voucher_date, voucher_seq)"
+                )
+            )
+    except Exception:
+        pass
     # Ensure default zone + safe legacy table_id backfill (never create "None" tables).
     db = SessionLocal()
     try:

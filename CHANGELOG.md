@@ -22,6 +22,71 @@ Prices were already stored per sold line, but several screens showed the **live*
 ### Tests
 - `tests/test_snapshot_first_names.py` (17). Suite: all passing, +17 tests (506 passed on a clean checkout of this commit; measured). 8 deliberate code breakages, all caught.
 
+## 2026-11-19 — Safe menu price changes (no system error when prices change)
+
+### Summary
+Checked what happens when the owner raises or lowers a price. The design was already right: every sold line keeps its own price, so open bills, paid orders and reports do not change. But editing the menu could cause a `500` or save a value that broke ordering later. Fixed.
+
+### Already correct (now locked in by tests)
+- An open bill keeps the old price on lines already ordered; items added afterwards use the new price (one bill can show both). Paid orders, Order History and the reports never change when a price changes.
+
+### Fixed
+- `PUT /api/menu-items/{id}` with `null` for `price`, `name`, `category_id`, `discount_type`, `discount_value`, `tax_type`, `tax_value`, `is_available`, `is_promoted` or `modifiers_config` answered `500`; now `422`.
+- `price` / `discount_value` = `NaN` answered `500`; `Infinity` was **saved** and then the answer crashed, after which ordering that item failed. Now `422`.
+- Negative price, takeaway price or discount, a percentage discount above 100 %, and a price of 1e308 were saved and later broke ordering (`500`) or the totals. Now `422`.
+- Blank menu item name and a `category_id` that does not exist (the item vanished from the menu) were accepted. Now `422` / `404`.
+- Ordering: a modifier price of `NaN` / `Infinity` sent by a device answered `500`, and with `Infinity` an order with an infinite total was **created**. Now `422`.
+- Ordering an item whose stored data is bad (negative price, infinite price or tax, negative modifier total) answered `500`. Now `400` naming the item, and nothing is saved.
+- A percentage item discount above 100 % could push a line below 0 (`500`). It is now capped at the price, like a fixed discount.
+
+### Rules (assistant's choices, easy to change)
+- Money fields of a menu item: finite, `0 … 1,000,000,000`. Price `0` stays allowed. Percentages (discount, tax) `≤ 100`. Modifier option prices may be negative but finite and within the same limit.
+
+### Spec
+- `specs/feature-menu-price-safety/` (requirements, plan, validation); `api-reference.md`.
+
+### Tests
+- `tests/test_menu_price_safety.py` (86). Suite: 610 passed. 18 of 20 deliberate breakages caught; the other 2 are duplicate guards.
+
+### Review checklist
+- Security / roles: only `root` / `admin` edit the menu (unchanged).
+- Money: recorded lines and totals never recomputed from the live price; a refused order writes nothing.
+- Not changed: a waiter's modifier prices still come from the waiter's screen (kept current by `menu_item_updated`); the server does not re-check them against the menu.
+
+## 2026-11-19 — Daily voucher number (restarts at 1 every day)
+
+### Summary
+Every paid order now gets a voucher number made of the date and a number that starts at `0001` each day, for example `20261119-0001`. The receipt prints it instead of the old `Order: #<id>`.
+
+### Added
+- `orders.voucher_date` (`YYYYMMDD`) and `orders.voucher_seq`, added to existing databases at startup, with a unique index so two orders can never share a number. The API field `voucher_no` is built from the two parts (never stored separately).
+- The number is given **at checkout**, in the same transaction as the payment. The day changes at **midnight Myanmar time (UTC+06:30)**. Unpaid and cancelled orders get none, so cancelled orders leave no gaps.
+- If two checkouts take the same number at the same moment the checkout is retried with the next number (the payment is never lost); after 5 failed attempts it answers `503` and the order stays unpaid.
+- `voucher_no` in the checkout answer, `GET /api/orders/{id}/details`, `PUT /api/orders/{id}/items/{item_id}/status`, order lists, and `GET /api/orders/daily-history`. `null` before payment and on orders from before this change. Clients cannot send it.
+- Receipt: first line `Voucher: 20261119-0001` (`Order: #<id>` is still printed for an order that has none). Order History (list, detail window) shows the voucher; the Excel export has a new `Voucher No` column after `Order ID`.
+- After `scripts/clear_sales.py` the next voucher of the day is `-0001` again (the next number is read from the orders that exist).
+
+### Not changed
+- `orders.id` stays the internal key. Kitchen slips, the Print Jobs page and waiter screens still show `#<id>` (a kitchen slip is printed before payment, when no voucher exists yet).
+- Old orders are not renumbered.
+
+### Known limits
+- Order History and the sales reports still cut the day at UTC midnight (06:30 Myanmar time). Between 00:00 and 06:30 Myanmar time a voucher carries the new Myanmar date while the order still shows under the previous UTC day. Moving the reports to Myanmar days is a separate change.
+- The voucher date is the date of checkout; Order History groups by the date the order was opened.
+
+### Spec
+- `specs/feature-voucher-number/` (requirements, plan, validation); `api-reference.md`, `database-schema.md`.
+
+### Tests
+- `tests/test_voucher_number.py` (35): Myanmar day boundary (incl. year end, leap day), format, sequence per day, new day restarts, cancelled / failed checkout leave no gap, repeated checkout keeps the voucher, client cannot choose it, roles, clash retried once, 503 after 5 clashes, unique index, receipt text, queued receipt, history, Excel export, clear-sales restart, startup upgrade of an old database. 16 deliberate code breakages were all caught.
+- Existing receipt, history-export and kitchen-slip tests updated for the `Voucher:` line / new column. Suite: 524 passed.
+
+### Review checklist
+- Security / roles: no new endpoint; checkout roles unchanged (waiter `403`, anonymous `401`); the number is chosen by the server only.
+- Money: totals and payment rules untouched; the voucher is saved with the payment in one transaction.
+- Edge cases: day boundary, race, repeated checkout, sales cleared, old orders, old queued receipts without a voucher.
+- Not verified: a real receipt printer; behaviour of two real devices paying in the same second (simulated in tests).
+
 ## 2026-11-18 — Waiter: "Mark as Served" failed after a few taps
 
 ### Fixed

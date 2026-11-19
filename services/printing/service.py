@@ -348,6 +348,7 @@ async def dispatch_cashier_receipt(
     cashier_name: str | None = None,
     kpay_amount: float | None = None,
     mmqr_amount: float | None = None,
+    voucher_no: str | None = None,
     printer_id: int | None = None,
     db: Session | None = None,
 ) -> None:
@@ -370,6 +371,7 @@ async def dispatch_cashier_receipt(
         mmqr_amount=mmqr_amount,
         mobile_money_amount=mobile_money_amount,
         created_at=created_at,
+        voucher_no=voucher_no,
     )
     endpoint_override: PrinterEndpoint | None = None
     windows_name: str | None = None

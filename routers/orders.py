@@ -1,6 +1,7 @@
 """Orders API: create and manage orders."""
 
 import logging
+import math
 from typing import Any
 
 from pydantic import BaseModel, field_validator
@@ -8,6 +9,7 @@ from pydantic import BaseModel, field_validator
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from auth import get_current_user, require_roles
@@ -21,6 +23,7 @@ from services.order_history import (
     query_daily_paid_orders,
 )
 from services.item_names import order_line_display_name
+from services.voucher import MAX_VOUCHER_ATTEMPTS, assign_voucher
 from services.printing.health import check_route_health, warning_for_offline_routes
 from services.printing.routes import resolve_printer_route
 from services.printing.print_log import get_print_logger
@@ -35,6 +38,7 @@ from services.printing.print_jobs import (
     requeue_failed_jobs,
 )
 from schemas import (
+    MAX_MENU_MONEY,
     ActiveTakeawayOrderResponse,
     DailyOrderHistoryLine,
     DailyOrderHistoryOrder,
@@ -389,7 +393,8 @@ def _calculate_unit_discount_amount(
     base_price: float, discount_type: str, discount_value: float
 ) -> float:
     if discount_type == "percentage" and discount_value > 0:
-        return _round_money(base_price * (discount_value / 100.0))
+        # Like a fixed discount, never more than the price itself.
+        return _round_money(min(base_price * (discount_value / 100.0), base_price))
     if discount_type == "fixed" and discount_value > 0:
         return _round_money(min(discount_value, base_price))
     return 0.0
@@ -429,6 +434,21 @@ def _calculate_order_line_pricing(
     unit_tax = _calculate_unit_tax_amount(discounted_price, tax_type, tax_value)
     modifiers_total = _selected_modifiers_total(selected_modifiers)
     line_subtotal = _round_money((discounted_price + unit_tax + modifiers_total) * quantity)
+    # Refuse (before anything is saved) a line that cannot be a real amount, e.g. a
+    # price that was stored badly before menu input was validated.
+    if (
+        not math.isfinite(line_subtotal)
+        or line_subtotal < 0
+        or not math.isfinite(base_price)
+        or base_price > MAX_MENU_MONEY
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"The price of '{menu_item.name}' is not valid, so it cannot be ordered. "
+                "Please ask the manager to check the menu."
+            ),
+        )
     return _round_money(base_price), unit_discount, unit_tax, line_subtotal
 
 
@@ -1022,6 +1042,7 @@ def _build_daily_history_response(day_label: str, orders: list[Order]) -> DailyO
         payload.append(
             DailyOrderHistoryOrder(
                 id=int(order.id),
+                voucher_no=order.voucher_no,
                 created_at=order.created_at,
                 total_amount=total,
                 order_type=getattr(order, "order_type", "dine_in") or "dine_in",
@@ -1090,6 +1111,7 @@ def _build_order_details_response(order: Order) -> OrderDetailsResponse:
         order_type=getattr(order, "order_type", "dine_in"),
         customer_name=getattr(order, "customer_name", None),
         status=order.status,
+        voucher_no=order.voucher_no,
         total_amount=float(order.total_amount),
         tax_amount=float(getattr(order, "tax_amount", 0.0) or 0.0),
         discount_type=getattr(order, "discount_type", None),
@@ -1588,26 +1610,43 @@ async def checkout_order(
     tendered = payment["amount_tendered"]
     change = payment["change_amount"]
 
-    order.total_amount = _round_money(final_total)
-    order.discount_type = normalized_discount_type
-    order.discount_value = _round_money(discount_value) if normalized_discount_type else 0.0
-    order.payment_method = payment["payment_method"]
-    order.cash_amount = payment["cash_amount"]
-    order.kpay_amount = payment["kpay_amount"]
-    order.mmqr_amount = payment["mmqr_amount"]
-    order.mobile_money_amount = payment["mobile_money_amount"]
-    order.amount_tendered = _round_money(tendered)
-    order.change_amount = _round_money(change)
-    order.tax_amount = _round_money(tax_amount)
-    order.status = "paid"
-    order.checked_out_by_id = current_user.id
-    order.cashier_name = body.cashier_name
     # For takeaway orders, table_id is NULL, so skip table status update safely.
     table = db.query(Table).filter(Table.id == order.table_id).first() if order.table_id is not None else None
     previous_status = table.status if table else None
-    if table:
-        table.status = "available"
-    db.commit()
+    # Payment and voucher number are saved in one transaction. If another checkout took
+    # the same number at the same moment (unique index), start over with the next one;
+    # the payment is never lost because of a number clash (specs/feature-voucher-number).
+    for attempt in range(1, MAX_VOUCHER_ATTEMPTS + 1):
+        order.total_amount = _round_money(final_total)
+        order.discount_type = normalized_discount_type
+        order.discount_value = _round_money(discount_value) if normalized_discount_type else 0.0
+        order.payment_method = payment["payment_method"]
+        order.cash_amount = payment["cash_amount"]
+        order.kpay_amount = payment["kpay_amount"]
+        order.mmqr_amount = payment["mmqr_amount"]
+        order.mobile_money_amount = payment["mobile_money_amount"]
+        order.amount_tendered = _round_money(tendered)
+        order.change_amount = _round_money(change)
+        order.tax_amount = _round_money(tax_amount)
+        order.status = "paid"
+        order.checked_out_by_id = current_user.id
+        order.cashier_name = body.cashier_name
+        if table:
+            table.status = "available"
+        assign_voucher(db, order)
+        try:
+            db.commit()
+            break
+        except IntegrityError as exc:
+            db.rollback()
+            if "voucher" not in str(getattr(exc, "orig", exc)).lower():
+                raise
+            if attempt == MAX_VOUCHER_ATTEMPTS:
+                logger.error("Voucher number clash on order %s after %s attempts", order_id, attempt)
+                raise HTTPException(
+                    status_code=503,
+                    detail="Could not issue a voucher number, please try the payment again",
+                ) from exc
     db.refresh(order)
     if table and previous_status != table.status:
         await _broadcast_table_status_changed(request, table)
@@ -1717,6 +1756,7 @@ async def checkout_order(
                     "kpay_amount": payment["kpay_amount"],
                     "mmqr_amount": payment["mmqr_amount"],
                     "mobile_money_amount": payment["mobile_money_amount"],
+                    "voucher_no": order.voucher_no,
                     "created_at": created_at_str,
                 },
             )

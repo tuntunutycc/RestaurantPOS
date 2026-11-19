@@ -1,7 +1,7 @@
 """Pydantic schemas for request/response validation."""
 
 from datetime import datetime
-from typing import List, Literal
+from typing import Annotated, List, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -59,6 +59,16 @@ PrinterRenderModeLiteral = Literal["text", "image"]
 TableStatusLiteral = Literal["available", "occupied"]
 OrderItemStatusLiteral = Literal["pending", "cooking", "served", "cancelled"]
 OrderStatusLiteral = Literal["pending", "open", "dining", "completed", "paid", "cancelled"]
+# Sanity limit for any single money amount typed in by staff (1 billion Ks).
+# Keeps totals finite; see specs/feature-menu-price-safety.
+MAX_MENU_MONEY = 1_000_000_000.0
+# Prices, discounts and taxes of a menu item: finite, 0 … MAX.
+MenuMoney = Annotated[float, Field(ge=0, le=MAX_MENU_MONEY, allow_inf_nan=False)]
+# Modifier option prices may be negative ("no meat -500"), but always finite.
+ModifierMoney = Annotated[
+    float, Field(ge=-MAX_MENU_MONEY, le=MAX_MENU_MONEY, allow_inf_nan=False)
+]
+
 MenuTaxTypeLiteral = Literal["none", "percentage", "fixed"]
 MenuDiscountTypeLiteral = Literal["none", "percentage", "fixed"]
 
@@ -357,7 +367,7 @@ class CategoryResponse(BaseModel):
 
 class ModifierOption(BaseModel):
     name: str
-    price: float = 0.0
+    price: ModifierMoney = 0.0
 
 
 class ModifierGroup(BaseModel):
@@ -368,7 +378,7 @@ class ModifierGroup(BaseModel):
 
 class SelectedModifier(BaseModel):
     name: str
-    price: float = 0.0
+    price: ModifierMoney = 0.0
     group: str | None = None
     quantity: int = Field(default=1, ge=1)
 
@@ -388,17 +398,38 @@ def _normalize_modifiers_config(value):
     return value
 
 
+def _clean_menu_item_name(value: str) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        raise ValueError("name must not be blank")
+    if len(cleaned) > 255:
+        raise ValueError("name must be at most 255 characters")
+    return cleaned
+
+
+def _check_percentages(
+    discount_type: str | None,
+    discount_value: float | None,
+    tax_type: str | None,
+    tax_value: float | None,
+) -> None:
+    if discount_type == "percentage" and discount_value is not None and discount_value > 100:
+        raise ValueError("discount_value cannot be more than 100 for a percentage discount")
+    if tax_type == "percentage" and tax_value is not None and tax_value > 100:
+        raise ValueError("tax_value cannot be more than 100 for a percentage tax")
+
+
 class MenuItemCreate(BaseModel):
     """Schema for creating a menu item."""
 
     name: str
-    price: float
-    discount_price: float | None = None
+    price: MenuMoney
+    discount_price: MenuMoney | None = None
     discount_type: MenuDiscountTypeLiteral = "none"
-    discount_value: float = 0.0
-    takeaway_price: float | None = None
+    discount_value: MenuMoney = 0.0
+    takeaway_price: MenuMoney | None = None
     tax_type: MenuTaxTypeLiteral = "none"
-    tax_value: float = 0.0
+    tax_value: MenuMoney = 0.0
     category_id: int
     description: str | None = None
     image_url: str | None = None
@@ -406,10 +437,20 @@ class MenuItemCreate(BaseModel):
     is_promoted: bool = False
     modifiers_config: List[ModifierGroup] = Field(default_factory=list)
 
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, v: str) -> str:
+        return _clean_menu_item_name(v)
+
     @field_validator("modifiers_config", mode="before")
     @classmethod
     def coerce_modifiers_config(cls, v):
         return _normalize_modifiers_config(v)
+
+    @model_validator(mode="after")
+    def percentages_within_100(self):
+        _check_percentages(self.discount_type, self.discount_value, self.tax_type, self.tax_value)
+        return self
 
 
 class MenuItemResponse(BaseModel):
@@ -445,17 +486,32 @@ class MenuItemRead(MenuItemResponse):
     pass
 
 
+# Columns that cannot be empty: sending them as null used to end in a 500.
+_MENU_ITEM_NOT_NULLABLE = (
+    "name",
+    "price",
+    "discount_type",
+    "discount_value",
+    "tax_type",
+    "tax_value",
+    "category_id",
+    "is_available",
+    "is_promoted",
+    "modifiers_config",
+)
+
+
 class MenuItemUpdate(BaseModel):
     """Partial update schema for menu item updates."""
 
     name: str | None = None
-    price: float | None = None
-    discount_price: float | None = None
+    price: MenuMoney | None = None
+    discount_price: MenuMoney | None = None
     discount_type: MenuDiscountTypeLiteral | None = None
-    discount_value: float | None = None
-    takeaway_price: float | None = None
+    discount_value: MenuMoney | None = None
+    takeaway_price: MenuMoney | None = None
     tax_type: MenuTaxTypeLiteral | None = None
-    tax_value: float | None = None
+    tax_value: MenuMoney | None = None
     category_id: int | None = None
     description: str | None = None
     image_url: str | None = None
@@ -463,12 +519,25 @@ class MenuItemUpdate(BaseModel):
     is_promoted: bool | None = None
     modifiers_config: List[ModifierGroup] | None = None
 
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, v: str | None) -> str | None:
+        return None if v is None else _clean_menu_item_name(v)
+
     @field_validator("modifiers_config", mode="before")
     @classmethod
     def coerce_modifiers_config(cls, v):
         if v is None:
             return None
         return _normalize_modifiers_config(v)
+
+    @model_validator(mode="after")
+    def no_null_for_required_fields_and_percentages(self):
+        for field in _MENU_ITEM_NOT_NULLABLE:
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        _check_percentages(self.discount_type, self.discount_value, self.tax_type, self.tax_value)
+        return self
 
 
 class MenuItemAvailabilityUpdate(BaseModel):
@@ -653,6 +722,8 @@ class OrderDetailsResponse(BaseModel):
     order_type: str = "dine_in"
     customer_name: str | None = None
     status: str
+    # Daily voucher number (YYYYMMDD-NNNN), given at checkout; null before payment.
+    voucher_no: str | None = None
     total_amount: float
     tax_amount: float | None = 0.0
     discount_type: str | None = None
@@ -678,6 +749,9 @@ class OrderResponseDetail(BaseModel):
     order_type: str = "dine_in"
     customer_name: str | None = None
     status: str
+    # Daily voucher number (YYYYMMDD-NNNN), given at checkout; null before payment
+    # and for orders made before the feature (specs/feature-voucher-number).
+    voucher_no: str | None = None
     total_amount: float
     created_at: datetime
     items: List[OrderItemDetail]
@@ -782,6 +856,7 @@ class OrderResponseDetail(BaseModel):
                 order_type=getattr(order, "order_type", "dine_in"),
                 customer_name=getattr(order, "customer_name", None),
                 status=order.status,
+                voucher_no=getattr(order, "voucher_no", None),
                 total_amount=float(order.total_amount),
                 created_at=order.created_at,
                 items=items,
@@ -1048,6 +1123,8 @@ class DailyOrderHistoryOrder(BaseModel):
     """Paid order summary for one calendar day (includes lines for detail modal)."""
 
     id: int
+    # Daily voucher number (YYYYMMDD-NNNN); null for orders made before the feature.
+    voucher_no: str | None = None
     created_at: datetime
     total_amount: float
     order_type: str = "dine_in"

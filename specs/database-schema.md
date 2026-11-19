@@ -102,6 +102,8 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 | `discount_value` | Float nullable | 0.0 | |
 | `checked_out_by_id` | FK → users nullable | | Cashier attribution (login user) |
 | `cashier_name` | string nullable | | Free-text cashier label for receipt/terminal |
+| `voucher_date` | String(8) nullable | | `YYYYMMDD` (Myanmar date of checkout). Set at checkout; NULL for unpaid / pre-feature orders. Added at startup |
+| `voucher_seq` | Integer nullable | | 1, 2, 3 … within `voucher_date`. **Unique index `ux_orders_voucher (voucher_date, voucher_seq)`**. API exposes `voucher_no` = `YYYYMMDD-NNNN` (derived, not stored). See `specs/feature-voucher-number` |
 | `created_by_id` | FK → users nullable | | **Order-taking staff** (waiter/cashier who opened the order). Set on first `POST /api/orders/submit` or `POST /api/orders/`. Immutable after create. API exposes as `waiter_name`. |
 
 **Attribution split:** `Order.created_by_id` = who **opened** the order; `OrderItem.created_by_id` = who submitted each batch; `Order.checked_out_by_id` = authenticated cashier at checkout; `Order.cashier_name` = optional display name on the physical receipt.
