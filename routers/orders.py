@@ -1084,25 +1084,8 @@ def export_daily_order_history_excel(
     )
 
 
-@router.get("/orders/{order_id}/details", response_model=OrderDetailsResponse)
-def get_order_details(
-    order_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
-):
-    order = (
-        db.query(Order)
-        .options(
-            joinedload(Order.created_by),
-            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
-            joinedload(Order.order_items).joinedload(OrderItem.created_by),
-        )
-        .filter(Order.id == order_id)
-        .first()
-    )
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-
+def _build_order_details_response(order: Order) -> OrderDetailsResponse:
+    """Shared by GET /orders/{id}/details and PUT /orders/{id}/items/{item_id}/status."""
     items = [_build_order_item_details_response(oi) for oi in order.order_items]
     breakdown = _order_price_breakdown(order)
     return OrderDetailsResponse(
@@ -1124,7 +1107,29 @@ def get_order_details(
     )
 
 
-@router.put("/orders/{order_id}/items/{item_id}/status", response_model=OrderResponseDetail)
+@router.get("/orders/{order_id}/details", response_model=OrderDetailsResponse)
+def get_order_details(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(POS_ORDER_ROLES)),
+):
+    order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.created_by),
+            joinedload(Order.order_items).joinedload(OrderItem.menu_item),
+            joinedload(Order.order_items).joinedload(OrderItem.created_by),
+        )
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    return _build_order_details_response(order)
+
+
+@router.put("/orders/{order_id}/items/{item_id}/status", response_model=OrderDetailsResponse)
 async def update_order_item_status(
     request: Request,
     order_id: int,
@@ -1221,7 +1226,7 @@ async def update_order_item_status(
                     },
                 )
 
-    return OrderResponseDetail.model_validate(updated_order)
+    return _build_order_details_response(updated_order)
 
 
 @router.post("/orders/submit", response_model=OrderSubmitResponse)

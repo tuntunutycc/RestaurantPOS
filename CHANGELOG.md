@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-18 — Waiter: "Mark as Served" failed after a few taps
+
+### Fixed
+- Waiter **Table Details**: after a few **Mark as Served** / **Undo** taps the next tap showed *Load Failed*. The server answered the item update with a body that had **no item `id`**; the panel redrew its list from that answer, so every button pointed at item `undefined` until a second refresh fixed it. On a slow Wi-Fi (or when the refresh arrived first) the broken buttons stayed. Reproduced in the browser: the redraw with `id=undefined` happens on every tap, and is corrected only ~3 ms later on a local machine.
+
+### Changed
+- `PUT /api/orders/{order_id}/items/{item_id}/status` now returns `OrderDetailsResponse` (the same body as `GET /api/orders/{order_id}/details`: items with `id` and `menu_item_id`, plus `breakdown_*`). Before it returned `OrderResponseDetail`. All old top-level fields the pages read (`status`, `total_amount`, `items[].item_status`, …) are still there. Shared builder `_build_order_details_response`.
+
+### Spec
+- `specs/api-reference.md`: response type of the item status endpoint.
+
+### Tests
+- `tests/test_item_status_response.py` (15): ids in the answer, answer equals `GET /details`, six serves and six undos in a row, totals unchanged by serving, cancel keeps ids and lowers the total, last-item cancel cancels the order, roles (waiter/cashier/admin/root allowed, no login refused), invalid status `422`, unknown ids `404`. Putting the old response back makes 14 of them fail.
+
+### Review checklist
+- Security / roles: unchanged (`POS_ORDER_ROLES`); no new data exposed (same fields as `/details`, which the same roles already read).
+- Money: serving / undo never touch `total_amount`; cancel recalculates as before; a paid order's total is still not recalculated.
+- Edge cases: last item cancelled → `status = cancelled` and the panel closes; invalid status `422`; unknown order / item `404`.
+- Not covered: the `table-dashboard.js` page ignores the answer (it reloads details), so it is unaffected; no automated browser test exists.
+
 ## 2026-11-18 — KPay / MMQR payments, Cash / KPay / MMQR per cashier, clear-sales script
 
 ### Summary

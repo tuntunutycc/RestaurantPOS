@@ -132,7 +132,7 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 | PUT | `/api/orders/{order_id}/status` | `OrderStatusUpdateResponse` | Legacy bulk cancel path |
 | POST | `/api/orders/{order_id}/cancel` | `OrderStatusUpdateResponse` | API/test whole-order cancel |
 | GET | `/api/orders/{order_id}/details` | `OrderDetailsResponse` | **Full breakdown** + item snapshots |
-| PUT | `/api/orders/{order_id}/items/{item_id}/status` | `OrderResponseDetail` | Item status incl. `cancelled` |
+| PUT | `/api/orders/{order_id}/items/{item_id}/status` | `OrderDetailsResponse` | Item status incl. `cancelled`. Same body as `GET .../details` (items carry `id` / `menu_item_id`, plus `breakdown_*`) so a client can redraw from it. Before 2026-11-18 it returned `OrderResponseDetail` (no item `id`) |
 | POST | `/api/orders/submit` | `OrderSubmitResponse` | **Primary** submit; batching + kitchen slips queued (`warning` = printer already offline, or slips not queued) |
 
 ### Checkout (`CHECKOUT_ROLES`: root, admin, cashier)
