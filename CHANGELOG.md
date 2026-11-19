@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-11-19 — Linked add-ons (an add-on can follow a main menu item's price)
+
+### Summary
+An add-on option (e.g. "extra egg") can now optionally be linked to a main menu item, so when the owner raises that item's price the add-on price follows. Add-ons that are not linked work exactly as before. No database column, table or migration: the two new keys live inside the existing `modifiers_config` JSON.
+
+### Added
+- `ModifierOption.linked_menu_item_id` and `price_override` (optional; `0` is a real override). `SelectedModifier.linked_menu_item_id`.
+- Saving a menu item: the link target must exist (`404`) and not be the item itself (`422`); a blank add-on name is filled with the target's name; the server stores the effective price in `option.price` (fallback, never `0` by accident); `price_override` without a link and duplicate `(group, name)` in an item with a link are refused (`422`).
+- When a main item's price changes, add-ons that follow it (no override) get the new stored price in the same transaction and `menu_item_updated` is sent for the item and each changed holder.
+- Deleting a menu item that is still linked is refused with `400`; the message lists the menu items (name + id) that link to it.
+- Ordering (create / add to order / submit): a linked add-on is priced by the server from the live menu; the price a screen sends is ignored. The order line snapshot stores `linked_menu_item_id` for future reports (unlinked add-ons store nothing extra).
+- Admin form (`counter.js` / `counter.html`): per option a "Link to menu item" select, name auto-fill (only when empty, editable), price shown read-only with "Custom price" / "Follow main price". Waiter screen refreshes linked add-on prices of cart lines when `menu_item_updated` arrives. Labels in `i18n.js` (en / my).
+
+### Not changed
+- Recorded money: open bills, paid orders, receipts, kitchen slips, Order History and reports keep the price each add-on was sold at (locked in by tests).
+- Add-ons that are not linked still take their price from the waiter's screen (as before).
+
+### Rules (confirmed by the owner)
+- Name stays the add-on's own; price = target's `price` only (not discount / takeaway / tax); no option ids (matching by `group` + `name`); defaults D1-D10 in the spec.
+
+### Spec
+- `specs/feature-linked-addons/`; `api-reference.md`, `database-schema.md`, `feature-priced-modifiers/requirements.md`.
+
+### Tests
+- `tests/test_linked_addons.py` (37). Suite: 664 passed. 22 deliberate code breakages, all caught (a 23rd, in a fallback branch that valid data never reaches, is equivalent).
+- Not verified: the admin form and waiter screen in a real browser (helper functions checked with Node only).
+
 ## 2026-11-19 — Snapshot-first item names (renaming a menu item no longer rewrites old bills)
 
 ### Summary

@@ -68,13 +68,15 @@ Body: login requests accept optional `device_id` for session binding.
 | PATCH | `/api/menu-items/{item_id}/availability` | **`root`, `admin`, `cashier`** — body `{ "is_available": boolean }` |
 | PUT | `/api/menu-items/{item_id}/toggle-promoted` | `root`, `admin` |
 | PUT | `/api/menu-items/{item_id}/toggle-availability` | `root`, `admin` (legacy flip; prefer PATCH) |
-| DELETE | `/api/menu-items/{item_id}` | **`root`, `admin` only** |
+| DELETE | `/api/menu-items/{item_id}` | **`root`, `admin` only**. `400` while another (non-deleted) item has an add-on **linked** to it; `detail` names the holders, e.g. `Cannot delete 'Egg' because it is linked as an add-on by: Noodle Soup (id 12), … Remove the link first.` (first 20 listed, then `and N more`). See `specs/feature-linked-addons` |
 
 See `specs/feature-menu-rbac/` for cashier availability-only contract.
 
 **MenuItem fields:** `price`, `discount_price` (legacy), `discount_type`, `discount_value`, `takeaway_price`, `tax_type`, `tax_value`, `modifiers_config`, etc.
 
 **Modifiers:** `modifiers_config` = `[{ group, is_required, options: [{ name, price }] }]`. Order lines use `selected_modifiers: [{ name, price, group?, quantity? }]` (`quantity` default 1; money = `sum(price * quantity)`).
+
+**Linked add-ons** (`specs/feature-linked-addons`): an option may carry `linked_menu_item_id` (a main menu item) and `price_override` (`0 … 1,000,000,000`, `null` = follow). Both default to `null`; options without them behave as before. Effective price = `price_override`, else the target's current `price`, else the stored `price` (fallback). On `POST` / `PUT /menu-items`, for a linked option the server: requires the target to exist and not be deleted (`404 Menu item id N not found`) and not be the item itself (`422`); fills a blank `name` with the target's name; **overwrites `price`** with the effective price; refuses `price_override` without a link (`422`) and a duplicate `(group, name)` in an item that has a linked option (`422`). When a target's `price` changes (`PUT`), the stored `price` of options that follow it (no override) is updated in the same transaction and `menu_item_updated` is broadcast for the target **and** each changed item. `POST /menu-items/upload` takes no modifiers. Ordering (`POST /orders/`, `POST /orders/submit`): for a `selected_modifiers` entry matching a linked option by `group` + `name`, the server uses the live effective price (the client's `price` and `linked_menu_item_id` are ignored) and stores `linked_menu_item_id` in the line snapshot; other entries are stored exactly as before (client price, no extra key). `SelectedModifier` responses carry `linked_menu_item_id` (`null` when not linked).
 
 **Counter UI create payload (`static/counter.js` `#form-menu-item`):** sends all `MenuItemCreate` fields including admin-edited `modifiers_config` (empty when no groups). Legacy `#item-discount-price` maps to `discount_price`. Edit mode omits `is_available` so sold-out state is preserved.
 

@@ -92,6 +92,26 @@ function normalizeSelectedModifiers(raw) {
     .filter((m) => m.name);
 }
 
+/** Linked add-ons follow their main item's price (specs/feature-linked-addons).
+ *  Re-read the price of picked add-ons from a fresh modifiers_config (matched by group + name).
+ *  This is only the screen preview: the server prices linked add-ons itself when the order is sent. */
+function refreshLinkedModifierPrices(selectedModifiers, modifiersConfig) {
+  const keyOf = (group, name) => `${String(group || '').trim()}\u0000${String(name || '').trim()}`;
+  const linkedPrices = new Map();
+  (Array.isArray(modifiersConfig) ? modifiersConfig : []).forEach((group) => {
+    (Array.isArray(group?.options) ? group.options : []).forEach((opt) => {
+      if (opt?.linked_menu_item_id != null) {
+        linkedPrices.set(keyOf(group?.group, opt?.name), toNumber(opt.price, 0));
+      }
+    });
+  });
+  if (!linkedPrices.size) return;
+  (Array.isArray(selectedModifiers) ? selectedModifiers : []).forEach((m) => {
+    const key = keyOf(m?.group, m?.name);
+    if (linkedPrices.has(key)) m.price = linkedPrices.get(key);
+  });
+}
+
 function modifiersTotal(selectedModifiers) {
   return normalizeSelectedModifiers(selectedModifiers).reduce(
     (sum, m) => sum + toNumber(m.price, 0) * Math.max(1, Math.floor(toNumber(m.quantity, 1))),
@@ -2142,6 +2162,7 @@ function connectWebSocket() {
             entry.menu_item.takeaway_price = item.takeaway_price ?? null;
             entry.menu_item.tax_type = item.tax_type || 'none';
             entry.menu_item.tax_value = item.tax_value ?? 0;
+            refreshLinkedModifierPrices(entry.selected_modifiers, item.modifiers_config);
             entry.unit_price = computeLineUnitPrice(entry.menu_item, entry.selected_modifiers, entry.is_takeaway);
           });
           renderMenu();

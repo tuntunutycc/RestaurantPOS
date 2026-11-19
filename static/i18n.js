@@ -128,6 +128,13 @@ const translations = {
     print_retry_sent: "Sent to the printer again",
     print_retry_nothing: "Nothing to reprint",
     print_retry_error: "Retry failed",
+    addon_link_label: "Link to menu item",
+    addon_no_link: "No link",
+    addon_follows_price: "Follows main item price",
+    addon_custom_price: "Custom price",
+    addon_follow_price: "Follow main price",
+    addon_link_unavailable: "(menu item not found)",
+    addon_saved_price: "Saved price",
   },
   my: {
     app_waiter_title: "ဝိတ်တာ POS - အော်ဒါယူမည်",
@@ -258,6 +265,13 @@ const translations = {
     print_retry_sent: "ပရင်တာသို့ ပြန်ပို့ပြီးပါပြီ",
     print_retry_nothing: "ပြန်ထုတ်စရာ မရှိပါ",
     print_retry_error: "ပြန်ထုတ်၍ မရပါ",
+    addon_link_label: "မီနူးပစ္စည်းနှင့် ချိတ်ဆက်ရန်",
+    addon_no_link: "မချိတ်ပါ",
+    addon_follows_price: "ပင်မပစ္စည်း၏ ဈေးအတိုင်း",
+    addon_custom_price: "ကိုယ်ပိုင်ဈေး",
+    addon_follow_price: "ပင်မဈေးအတိုင်း ပြန်လိုက်မည်",
+    addon_link_unavailable: "(မီနူးပစ္စည်း မတွေ့ပါ)",
+    addon_saved_price: "သိမ်းထားသောဈေး",
   },
 };
 

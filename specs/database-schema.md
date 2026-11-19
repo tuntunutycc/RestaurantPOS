@@ -53,7 +53,7 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 | `is_promoted` | Boolean | false | Waiter incentive reporting |
 | `is_deleted` | Boolean | false | Soft delete |
 | `deleted_at` | DateTime nullable | | |
-| `modifiers_config` | JSON | `[]` | Modifier groups/options |
+| `modifiers_config` | JSON | `[]` | Modifier groups/options. An option is `{name, price}` plus optional `linked_menu_item_id` / `price_override` (keys absent when not linked; no column or migration - `specs/feature-linked-addons`) |
 | `category_id` | FK → categories | | Required |
 
 ---
@@ -122,7 +122,7 @@ PrinterRouteEndpoint (legacy route_key PK, optional fallback)
 | `batch_number` | Integer | 1 | Kitchen ticket batch |
 | `batch_status` | String(32) | `pending` | **Legacy**; always written; KDS uses `item_status` |
 | `status` (DB) / `item_status` (ORM) | String(32) | `pending` | `pending` \| `cooking` \| `served` \| `cancelled` |
-| `selected_modifiers` | JSON | `[]` | |
+| `selected_modifiers` | JSON | `[]` | `[{name, price, group, quantity}]` sale-time snapshot; `linked_menu_item_id` is added only for an add-on that was a linked option at sale time |
 | `note` | String(1024) nullable | | |
 | `special_instructions` | String(1024) nullable | | Alias of note in API |
 | `menu_item_name_at_sale` | String(255) nullable | | Snapshot; shown instead of the live name. Empty values of legacy rows are filled once from the live name at start-up |

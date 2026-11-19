@@ -12,7 +12,7 @@ Support priced add-ons (အကြော် / ထည့်စရာ) on any menu 
 ## Data contract
 
 ### `ModifierOption` / `ModifierGroup` (menu `modifiers_config`)
-Unchanged shape: `{ group, is_required, options: [{ name, price }] }`.
+Shape: `{ group, is_required, options: [{ name, price }] }`; an option may also carry the optional keys `linked_menu_item_id` / `price_override` (an add-on that follows a main menu item's price - see `specs/feature-linked-addons`; absent = unlinked, unchanged behaviour).
 Applies to **any** menu item (not mohinga-only).
 
 ### `SelectedModifier` (order line)
@@ -22,6 +22,7 @@ Applies to **any** menu item (not mohinga-only).
 | `price` | float | Unit price of one topping unit |
 | `group` | string \| null | Optional group label |
 | `quantity` | int ≥ 1 | Default `1` when omitted (backward compatible) |
+| `linked_menu_item_id` | int \| null | Set by the server only when the add-on was a linked option at sale time (`specs/feature-linked-addons`) |
 
 Line modifier money: `sum(price * quantity)` over selected modifiers.
 Order line subtotal (existing formula): `(discounted_base + unit_tax + modifiers_total) * line_qty`.

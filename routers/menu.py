@@ -24,6 +24,12 @@ from schemas import (
     MenuItemUpdate,
     MAX_MENU_MONEY,
 )
+from services.menu_links import (
+    holders_linking_to,
+    linked_holders_message,
+    normalize_modifiers_for_save,
+    sync_dependents_price,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -194,6 +200,8 @@ async def create_menu_item(
 ):
     """Create a new menu item (JSON). Admin only. Broadcasts menu_item_added via WebSocket."""
     _require_category(db, item.category_id)
+    # Linked add-ons (specs/feature-linked-addons): validate links, server sets the stored price.
+    modifiers_config = normalize_modifiers_for_save(db, item.modifiers_config, holder_id=None)
     db_item = MenuItem(
         name=item.name,
         price=item.price,
@@ -208,7 +216,7 @@ async def create_menu_item(
         image_url=item.image_url,
         is_available=item.is_available,
         is_promoted=item.is_promoted,
-        modifiers_config=[m.model_dump(mode="json") for m in item.modifiers_config],
+        modifiers_config=modifiers_config,
     )
     db.add(db_item)
     db.commit()
@@ -318,10 +326,10 @@ async def update_menu_item(
 
     update_data = item_update.model_dump(exclude_unset=True)
     if "modifiers_config" in update_data and update_data["modifiers_config"] is not None:
-        update_data["modifiers_config"] = [
-            m.model_dump(mode="json") if hasattr(m, "model_dump") else m
-            for m in update_data["modifiers_config"]
-        ]
+        # Validate the model objects (not the dumped dicts): links, stored fallback price.
+        update_data["modifiers_config"] = normalize_modifiers_for_save(
+            db, item_update.modifiers_config, holder_id=item_id
+        )
 
     if "category_id" in update_data:
         _require_category(db, update_data["category_id"])
@@ -338,16 +346,28 @@ async def update_menu_item(
                 detail=f"{value} cannot be more than 100 for a percentage {kind}",
             )
 
+    old_price = float(db_item.price)
     for field, value in update_data.items():
         setattr(db_item, field, value)
+
+    # Add-ons that follow this item's price get the new price in the same transaction.
+    changed_holders = []
+    if "price" in update_data and float(db_item.price) != old_price:
+        changed_holders = sync_dependents_price(db, db_item)
 
     db.commit()
     db.refresh(db_item)
     item_response = MenuItemResponse.model_validate(db_item)
+    holder_responses = []
+    for holder in changed_holders:
+        db.refresh(holder)
+        holder_responses.append(MenuItemResponse.model_validate(holder))
 
     manager = getattr(request.app.state, "ws_manager", None)
     if manager:
         await manager.broadcast("menu_item_updated", item_response.model_dump(mode="json"))
+        for holder_response in holder_responses:
+            await manager.broadcast("menu_item_updated", holder_response.model_dump(mode="json"))
     return item_response
 
 
@@ -460,6 +480,11 @@ async def delete_menu_item(
 
     if _menu_item_in_active_order(db, item_id):
         raise HTTPException(status_code=400, detail=MENU_ITEM_DELETE_ACTIVE_ORDER_MSG)
+
+    # Add-ons of other items follow this item's price: keep it while they are linked.
+    holders = holders_linking_to(db, item_id)
+    if holders:
+        raise HTTPException(status_code=400, detail=linked_holders_message(db_item, holders))
 
     db_item.is_deleted = True
     db_item.deleted_at = datetime.utcnow()

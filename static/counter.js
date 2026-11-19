@@ -1349,40 +1349,59 @@ async function apiJsonRequest(url, options = {}) {
   return data;
 }
 
-/** Flatten stored modifiers_config groups into a simple option list for the admin editor. */
+/** Flatten stored modifiers_config groups into a simple option list for the admin editor.
+ *  Keeps the optional link keys (specs/feature-linked-addons): saving must never drop a link. */
 function flattenModifierOptions(config) {
   const options = [];
   for (const group of Array.isArray(config) ? config : []) {
     for (const opt of Array.isArray(group?.options) ? group.options : []) {
       const name = String(opt?.name || '').trim();
       const price = Number(opt?.price || 0);
+      const linkId = Number(opt?.linked_menu_item_id);
+      const override = opt?.price_override;
       options.push({
         name: name || String(opt?.name || ''),
         price: Number.isFinite(price) && price >= 0 ? price : 0,
+        linked_menu_item_id: Number.isFinite(linkId) && linkId > 0 ? linkId : null,
+        price_override: override != null && Number.isFinite(Number(override)) ? Number(override) : null,
       });
     }
   }
   return options;
 }
 
-/** Persist as one optional group (API contract still uses modifiers_config groups). */
+/** Persist as one optional group (API contract still uses modifiers_config groups).
+ *  An unlinked option is sent as {name, price}; a linked one adds the link keys. */
 function wrapModifierOptions(options) {
   const cleaned = (Array.isArray(options) ? options : [])
-    .map((opt) => ({
-      name: String(opt?.name || '').trim(),
-      price: Number(opt?.price || 0),
-    }))
-    .filter((opt) => opt.name)
-    .map((opt) => ({
-      name: opt.name,
-      price: Number.isFinite(opt.price) && opt.price >= 0 ? opt.price : 0,
-    }));
+    .filter((opt) => String(opt?.name || '').trim() || opt?.linked_menu_item_id)
+    .map((opt) => {
+      const price = Number(opt?.price || 0);
+      const out = {
+        name: String(opt?.name || '').trim(),
+        price: Number.isFinite(price) && price >= 0 ? price : 0,
+      };
+      const linkId = Number(opt?.linked_menu_item_id);
+      if (Number.isFinite(linkId) && linkId > 0) {
+        out.linked_menu_item_id = linkId;
+        if (opt?.price_override != null && Number.isFinite(Number(opt.price_override))) {
+          out.price_override = Math.max(Number(opt.price_override), 0);
+        }
+      }
+      return out;
+    });
   if (!cleaned.length) return [];
   return [{ group: '', is_required: false, options: cleaned }];
 }
 
 function readModifiersConfigFromEditor() {
   return wrapModifierOptions(collectModifiersEditorState());
+}
+
+/** Menu items an add-on can follow: every listed item except the one being edited. */
+function linkableMenuItems() {
+  const editingId = Number(document.getElementById('menu-edit-item-id')?.value || 0);
+  return (menuItemsCache || []).filter((m) => Number(m.id) !== editingId);
 }
 
 function renderModifiersEditor(config) {
@@ -1395,15 +1414,39 @@ function renderModifiersEditor(config) {
     root.innerHTML = `<p class="text-xs text-slate-500">No options yet. Click "+ Option" to add toppings (e.g. ပဲကြော်).</p>`;
     return;
   }
-  root.innerHTML = options.map((opt, idx) => `
-    <div class="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-md p-2" data-mod-option="${idx}">
+  const targets = linkableMenuItems();
+  root.innerHTML = options.map((opt, idx) => {
+    const linkId = Number(opt?.linked_menu_item_id) || 0;
+    const target = linkId ? (menuItemsCache || []).find((m) => Number(m.id) === linkId) : null;
+    const overrideSet = linkId && opt?.price_override != null;
+    const choices = [`<option value="">${escapeHtml(t('addon_no_link', 'No link'))}</option>`]
+      .concat(targets.map((m) => `<option value="${Number(m.id)}"${Number(m.id) === linkId ? ' selected' : ''}>${escapeHtml(`${m.name} — ${formatMoney(Number(m.price || 0))}`)}</option>`));
+    if (linkId && !targets.some((m) => Number(m.id) === linkId)) {
+      choices.push(`<option value="${linkId}" selected>${escapeHtml(`#${linkId} ${t('addon_link_unavailable', '(menu item not found)')}`)}</option>`);
+    }
+    let priceHtml;
+    if (!linkId) {
+      priceHtml = `<input type="number" data-mod-option-price value="${Number(opt?.price || 0)}" step="0.01" min="0" placeholder="Price"
+        class="w-28 px-2 py-1.5 text-sm border border-slate-300 rounded-md" />`;
+    } else if (overrideSet) {
+      priceHtml = `<input type="number" data-mod-option-override value="${Number(opt.price_override)}" step="0.01" min="0" placeholder="${escapeAttr(t('addon_custom_price', 'Custom price'))}"
+          class="w-28 px-2 py-1.5 text-sm border border-slate-300 rounded-md" />
+        <button type="button" data-mod-follow-price class="text-xs text-blue-700 hover:underline">${escapeHtml(t('addon_follow_price', 'Follow main price'))}</button>`;
+    } else {
+      const shown = target ? Number(target.price || 0) : Number(opt?.price || 0);
+      const label = target ? t('addon_follows_price', 'Follows main item price') : t('addon_saved_price', 'Saved price');
+      priceHtml = `<span class="text-sm text-slate-700" data-mod-price-label>${escapeHtml(label)}: <strong>${escapeHtml(formatMoney(shown))}</strong></span>
+        <button type="button" data-mod-custom-price class="text-xs text-blue-700 hover:underline">${escapeHtml(t('addon_custom_price', 'Custom price'))}</button>`;
+    }
+    return `
+    <div class="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-md p-2" data-mod-option="${idx}" data-mod-stored-price="${Number(opt?.price || 0)}">
       <input type="text" data-mod-option-name value="${escapeAttr(opt?.name || '')}" placeholder="Option name (e.g. ပဲကြော်)"
         class="flex-1 min-w-[8rem] px-2 py-1.5 text-sm border border-slate-300 rounded-md" />
-      <input type="number" data-mod-option-price value="${Number(opt?.price || 0)}" step="0.01" min="0" placeholder="Price"
-        class="w-28 px-2 py-1.5 text-sm border border-slate-300 rounded-md" />
+      <select data-mod-option-link title="${escapeAttr(t('addon_link_label', 'Link to menu item'))}" class="max-w-[14rem] px-2 py-1.5 text-sm border border-slate-300 rounded-md bg-white">${choices.join('')}</select>
+      ${priceHtml}
       <button type="button" data-mod-remove-option class="text-xs text-slate-500 hover:text-red-600 px-1">✕</button>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function collectModifiersEditorState() {
@@ -1411,9 +1454,24 @@ function collectModifiersEditorState() {
   if (!root) return [];
   const options = [];
   root.querySelectorAll('[data-mod-option]').forEach((optEl) => {
+    const linkId = Number(optEl.querySelector('[data-mod-option-link]')?.value || 0) || null;
+    const target = linkId ? (menuItemsCache || []).find((m) => Number(m.id) === linkId) : null;
+    const overrideEl = optEl.querySelector('[data-mod-option-override]');
+    const override = linkId && overrideEl ? (parseFloat(overrideEl.value || '0') || 0) : null;
+    let price;
+    if (!linkId) {
+      price = parseFloat(optEl.querySelector('[data-mod-option-price]')?.value || '0') || 0;
+    } else if (override != null) {
+      price = override;
+    } else {
+      // The server stores the real price; this is only the fallback it overwrites.
+      price = target ? Number(target.price || 0) : Number(optEl.getAttribute('data-mod-stored-price') || 0);
+    }
     options.push({
       name: String(optEl.querySelector('[data-mod-option-name]')?.value || ''),
-      price: parseFloat(optEl.querySelector('[data-mod-option-price]')?.value || '0') || 0,
+      price,
+      linked_menu_item_id: linkId,
+      price_override: override,
     });
   });
   return options;
@@ -1426,7 +1484,7 @@ function bindModifiersEditor() {
     addOptBtn.dataset.bound = '1';
     addOptBtn.addEventListener('click', () => {
       const next = collectModifiersEditorState();
-      next.push({ name: '', price: 0 });
+      next.push({ name: '', price: 0, linked_menu_item_id: null, price_override: null });
       renderModifiersEditor(next);
     });
   }
@@ -1435,12 +1493,41 @@ function bindModifiersEditor() {
   root.addEventListener('click', (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
-    if (!target.closest('[data-mod-remove-option]')) return;
     const optEl = target.closest('[data-mod-option]');
-    const state = collectModifiersEditorState();
     const idx = Number(optEl?.getAttribute('data-mod-option'));
-    if (Number.isNaN(idx)) return;
-    state.splice(idx, 1);
+    if (!optEl || Number.isNaN(idx)) return;
+    const state = collectModifiersEditorState();
+    if (target.closest('[data-mod-remove-option]')) {
+      state.splice(idx, 1);
+    } else if (target.closest('[data-mod-custom-price]')) {
+      // Start from the price the add-on currently has, then let the admin edit it.
+      state[idx].price_override = state[idx].price;
+    } else if (target.closest('[data-mod-follow-price]')) {
+      state[idx].price_override = null;
+    } else {
+      return;
+    }
+    renderModifiersEditor(state);
+  });
+  root.addEventListener('change', (event) => {
+    const target = event.target;
+    if (!(target instanceof Element) || !target.matches('[data-mod-option-link]')) return;
+    const optEl = target.closest('[data-mod-option]');
+    const idx = Number(optEl?.getAttribute('data-mod-option'));
+    if (!optEl || Number.isNaN(idx)) return;
+    const previousPrice = Number(optEl.getAttribute('data-mod-stored-price') || 0);
+    const state = collectModifiersEditorState();
+    const row = state[idx];
+    const linked = (menuItemsCache || []).find((m) => Number(m.id) === Number(row.linked_menu_item_id));
+    if (row.linked_menu_item_id) {
+      // Name stays the admin's own; only an empty name is filled in (and stays editable).
+      if (!String(row.name || '').trim() && linked) row.name = linked.name || '';
+      row.price_override = null;
+    } else {
+      // Back to a normal option: keep the price it had so nothing silently becomes 0.
+      row.price = Number(row.price_override ?? previousPrice) || 0;
+      row.price_override = null;
+    }
     renderModifiersEditor(state);
   });
 }

@@ -366,8 +366,18 @@ class CategoryResponse(BaseModel):
 
 
 class ModifierOption(BaseModel):
+    """One add-on option of a menu item (specs/feature-linked-addons).
+
+    ``price`` is the option's own price. For a linked option it is the server-synchronised
+    effective price (``price_override``, else the target's price) kept as a fallback.
+    """
+
     name: str
     price: ModifierMoney = 0.0
+    # Optional link to a main menu item: the add-on price follows that item's `price`.
+    linked_menu_item_id: int | None = None
+    # Price used instead of the target's price; `0` is a real value, `None` = follow the target.
+    price_override: MenuMoney | None = None
 
 
 class ModifierGroup(BaseModel):
@@ -381,6 +391,9 @@ class SelectedModifier(BaseModel):
     price: ModifierMoney = 0.0
     group: str | None = None
     quantity: int = Field(default=1, ge=1)
+    # Set by the server when the add-on was a linked option at sale time (for future reports).
+    # Anything a client sends here is ignored.
+    linked_menu_item_id: int | None = None
 
 
 def _normalize_modifiers_config(value):

@@ -23,6 +23,7 @@ from services.order_history import (
     query_daily_paid_orders,
 )
 from services.item_names import order_line_display_name
+from services.menu_links import resolve_linked_modifier
 from services.voucher import MAX_VOUCHER_ATTEMPTS, assign_voucher
 from services.printing.health import check_route_health, warning_for_offline_routes
 from services.printing.routes import resolve_printer_route
@@ -197,13 +198,27 @@ def _normalize_selected_modifier_dict(raw) -> dict | None:
     }
 
 
-def _selected_modifiers_payload(raw_modifiers) -> list[dict]:
-    """Normalize validated modifier objects into JSON-serializable dicts."""
+def _selected_modifiers_payload(raw_modifiers, menu_item=None, db=None) -> list[dict]:
+    """Normalize validated modifier objects into JSON-serializable dicts.
+
+    With ``menu_item`` and ``db`` (every order path), an add-on that is a **linked** option
+    of that menu item is priced by the server from the live menu (the price and
+    ``linked_menu_item_id`` the client sent are ignored) and its snapshot carries
+    ``linked_menu_item_id``. Any other add-on keeps the client's price and gets no extra
+    key (specs/feature-linked-addons FR-L4).
+    """
     payload = []
     for m in raw_modifiers or []:
         normalized = _normalize_selected_modifier_dict(m)
-        if normalized is not None:
-            payload.append(normalized)
+        if normalized is None:
+            continue
+        if menu_item is not None and db is not None:
+            resolved = resolve_linked_modifier(
+                db, menu_item, normalized.get("group"), normalized.get("name")
+            )
+            if resolved is not None:
+                normalized["price"], normalized["linked_menu_item_id"] = resolved
+        payload.append(normalized)
     return payload
 
 
@@ -615,7 +630,7 @@ async def create_order(
                 raise HTTPException(status_code=404, detail=f"Menu item with id {line.menu_item_id} not found")
             if line.quantity < 1:
                 raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
-            selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
+            selected_modifiers = _selected_modifiers_payload(line.selected_modifiers, menu_item, db)
             is_takeaway = bool(getattr(line, "is_takeaway", False))
             base_price, unit_discount, unit_tax, subtotal = _calculate_order_line_pricing(
                 menu_item,
@@ -693,7 +708,7 @@ async def create_order(
             raise HTTPException(status_code=404, detail=f"Menu item with id {line.menu_item_id} not found")
         if line.quantity < 1:
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
-        selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
+        selected_modifiers = _selected_modifiers_payload(line.selected_modifiers, menu_item, db)
         is_takeaway = bool(getattr(line, "is_takeaway", False))
         base_price, unit_discount, unit_tax, subtotal = _calculate_order_line_pricing(
             menu_item,
@@ -1020,6 +1035,7 @@ def _daily_history_line(oi: OrderItem) -> DailyOrderHistoryLine:
                     price=float(raw.get("price") or 0.0),
                     group=raw.get("group"),
                     quantity=max(1, int(raw.get("quantity") or 1)),
+                    linked_menu_item_id=raw.get("linked_menu_item_id"),
                 )
             )
     return DailyOrderHistoryLine(
@@ -1360,7 +1376,7 @@ async def submit_order(
             raise HTTPException(status_code=404, detail=f"Menu item id {line.menu_item_id} not found")
         if line.quantity < 1:
             raise HTTPException(status_code=400, detail=f"Quantity for {menu_item.name} must be at least 1")
-        selected_modifiers = _selected_modifiers_payload(line.selected_modifiers)
+        selected_modifiers = _selected_modifiers_payload(line.selected_modifiers, menu_item, db)
         is_takeaway = bool(getattr(line, "is_takeaway", False))
         base_price, unit_discount, unit_tax, subtotal = _calculate_order_line_pricing(
             menu_item,
