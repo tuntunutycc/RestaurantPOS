@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from sqlalchemy import text
@@ -21,6 +22,9 @@ from services.printing.config import (
     PrinterRenderModeName,
 )
 from services.printing.routes import role_fallback_chain
+from services.receipt_text import ReceiptTexts, split_lines
+
+logger = logging.getLogger(__name__)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -447,6 +451,37 @@ def load_printer_config(db: Session | None = None) -> PrinterConfig:
         return _load_printer_config_from_db(session)
     finally:
         session.close()
+
+
+def _read_receipt_row(session: Session):
+    from models import ReceiptSettings
+
+    return session.query(ReceiptSettings).filter(ReceiptSettings.id == 1).first()
+
+
+def load_receipt_texts(db: Session | None) -> ReceiptTexts:
+    """Admin-editable receipt texts. Never raises: any problem -> the built-in defaults.
+
+    Reads through its own short session so a failure here cannot disturb the
+    caller's transaction (print jobs update their own rows around this call).
+    """
+    if db is None:
+        return ReceiptTexts()
+    try:
+        with Session(bind=db.get_bind()) as session:
+            row = _read_receipt_row(session)
+            if row is None:
+                return ReceiptTexts()
+            return ReceiptTexts(
+                shop_name=(row.shop_name or "").strip(),
+                address_lines=tuple(split_lines(row.address)),
+                phone=(row.phone or "").strip(),
+                thank_you=(row.thank_you or "").strip(),
+                footer_lines=tuple(split_lines(row.footer_note)),
+            )
+    except Exception:  # noqa: BLE001 - a receipt must always print
+        logger.warning("Receipt text settings unreadable; using defaults", exc_info=True)
+        return ReceiptTexts()
 
 
 # Backward-compatible aliases

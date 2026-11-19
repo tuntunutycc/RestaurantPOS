@@ -103,6 +103,7 @@ See `specs/feature-table-all-view/` for ALL-tab floor grid UX.
 
 | Method | Path | Notes |
 |--------|------|-------|
+| GET/PUT | `/api/admin/receipt-settings` | Receipt texts `{ shop_name, address, phone, thank_you, footer_note }` (strings; `address` / `footer_note` up to 3 lines separated by `\n`). GET: blank when never set. PUT: every field optional (omitted = unchanged, `""` clears). Each line max 32 characters; `shop_name` / `phone` / `thank_you` one line; control characters removed; violations `422`. Roles `admin` / `root`; others `403`. See `specs/feature-receipt-text/` |
 | GET/PUT | `/api/admin/kitchen-printers` | Global backend: `file` \| `escpos_network` \| `windows_printer`; `kitchen_slip_mode`: `per_item` \| `combined` (optional on PUT; omitted = unchanged); `kitchen_slip_copies`: integer 1–3, copies of each combined slip (optional on PUT; omitted = unchanged; other values `422`) |
 | GET | `/api/admin/windows-printers` | List installed Windows queues (`available`, `printers[]`, `message`) |
 

@@ -4295,6 +4295,99 @@ async function loadKitchenPrinterSettings() {
   }
 }
 
+// —— Receipt text (shop name, address, phone, thank-you, footer) ——
+const RECEIPT_TEXT_FIELDS = [
+  { id: 'receipt-shop-name', key: 'shop_name', maxLines: 1 },
+  { id: 'receipt-address', key: 'address', maxLines: 3 },
+  { id: 'receipt-phone', key: 'phone', maxLines: 1 },
+  { id: 'receipt-thank-you', key: 'thank_you', maxLines: 1 },
+  { id: 'receipt-footer-note', key: 'footer_note', maxLines: 3 },
+];
+const RECEIPT_LINE_MAX_CHARS = 32;
+
+function receiptTextLines(value) {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function updateReceiptTextCounter(field) {
+  const input = document.getElementById(field.id);
+  const counter = document.querySelector(`[data-receipt-count="${field.id}"]`);
+  if (!input || !counter) return true;
+  const lines = receiptTextLines(input.value);
+  // Count characters like the server (code points), not UTF-16 units.
+  const longest = lines.reduce((max, line) => Math.max(max, Array.from(line).length), 0);
+  const tooLong = longest > RECEIPT_LINE_MAX_CHARS;
+  const tooMany = lines.length > field.maxLines;
+  const lineInfo = field.maxLines > 1 ? ` · ${lines.length}/${field.maxLines} ${t('receipt_lines', 'lines')}` : '';
+  counter.textContent = `${t('receipt_longest_line', 'Longest line')}: ${longest}/${RECEIPT_LINE_MAX_CHARS}${lineInfo}`;
+  const bad = tooLong || tooMany || (field.maxLines === 1 && /[\r\n]/.test(input.value.trim()));
+  counter.classList.toggle('text-red-600', bad);
+  counter.classList.toggle('text-slate-400', !bad);
+  return !bad;
+}
+
+async function loadReceiptTextSettings() {
+  const form = document.getElementById('form-receipt-text');
+  if (!form) return;
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/receipt-settings`, {
+      headers: { ...window.auth.getAuthHeaders() },
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    if (!res.ok) throw new Error('Failed to load receipt text settings');
+    const data = await res.json();
+    RECEIPT_TEXT_FIELDS.forEach((field) => {
+      const input = document.getElementById(field.id);
+      if (input) input.value = data[field.key] || '';
+      updateReceiptTextCounter(field);
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+RECEIPT_TEXT_FIELDS.forEach((field) => {
+  document.getElementById(field.id)?.addEventListener('input', () => updateReceiptTextCounter(field));
+});
+
+document.getElementById('form-receipt-text')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!RECEIPT_TEXT_FIELDS.every((field) => updateReceiptTextCounter(field))) {
+    await dialogAlert(
+      t('receipt_text_too_long', 'A line is longer than 32 characters, or there are too many lines.'),
+      'error',
+      'Receipt Text'
+    );
+    return;
+  }
+  const payload = {};
+  RECEIPT_TEXT_FIELDS.forEach((field) => {
+    const input = document.getElementById(field.id);
+    if (input) payload[field.key] = input.value;
+  });
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/receipt-settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...window.auth.getAuthHeaders() },
+      body: JSON.stringify(payload),
+    });
+    if (window.auth && window.auth.checkUnauthorized(res)) return;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      await dialogAlert(formatApiDetail(err, 'Failed to save receipt text'), 'error', 'Receipt Text');
+      return;
+    }
+    await loadReceiptTextSettings();
+    await dialogAlert(t('receipt_text_saved', 'Receipt text saved. It applies from the next receipt.'), 'success', 'Receipt Text');
+  } catch (err) {
+    console.error(err);
+    await dialogAlert('Failed to save receipt text', 'error', 'Receipt Text');
+  }
+});
+
 function formatPrinterApiDetail(detail) {
   if (detail == null) return '';
   if (typeof detail === 'string') return detail;
@@ -4716,6 +4809,7 @@ function renderPredefinedInstructionsList(tags) {
 async function loadMenuData() {
   const isMenuAdmin = isMenuAdminPanelRole(getCounterUserRole());
   if (isMenuAdmin) {
+    loadReceiptTextSettings();
     try {
       await loadKitchenPrinterSettings();
     } catch (e) {

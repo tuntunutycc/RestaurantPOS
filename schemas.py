@@ -6,6 +6,7 @@ from typing import Annotated, List, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from services.item_names import order_line_display_name
+from services.receipt_text import MAX_MULTI_LINES, clean_receipt_text
 
 
 class LoginRequest(BaseModel):
@@ -207,6 +208,40 @@ class KitchenPrinterSettingsUpdate(BaseModel):
         if self.paper_width_px not in (384, 576):
             raise ValueError("paper_width_px must be 384 or 576")
         return self
+
+
+class ReceiptSettingsResponse(BaseModel):
+    """Texts printed on the cashier receipt (blank = built-in default)."""
+
+    shop_name: str = ""
+    address: str = ""  # up to 3 lines separated by \n
+    phone: str = ""
+    thank_you: str = ""
+    footer_note: str = ""  # up to 3 lines separated by \n
+
+
+class ReceiptSettingsUpdate(BaseModel):
+    """Admin update. An omitted field keeps its stored value; "" clears it."""
+
+    shop_name: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    thank_you: str | None = None
+    footer_note: str | None = None
+
+    @field_validator("shop_name", "phone", "thank_you")
+    @classmethod
+    def _single_line(cls, value, info):
+        if value is None:
+            return None
+        return clean_receipt_text(value, field_name=info.field_name, max_lines=1)
+
+    @field_validator("address", "footer_note")
+    @classmethod
+    def _up_to_three_lines(cls, value, info):
+        if value is None:
+            return None
+        return clean_receipt_text(value, field_name=info.field_name, max_lines=MAX_MULTI_LINES)
 
 
 class PrinterResponse(BaseModel):

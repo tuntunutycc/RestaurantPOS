@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from typing import Any, Sequence
 
+from services.receipt_text import ReceiptTexts
+
 
 def shop_name() -> str:
     return (os.getenv("SHOP_NAME", "") or "").strip() or "My Restaurant"
@@ -50,11 +52,19 @@ def build_receipt_text(
     kpay_amount: float | None = None,
     mmqr_amount: float | None = None,
     voucher_no: str | None = None,
+    texts: ReceiptTexts | None = None,
 ) -> str:
-    """Build a plain-text cashier receipt for Pillow/ESC/POS rendering."""
+    """Build a plain-text cashier receipt for Pillow/ESC/POS rendering.
+
+    ``texts`` = the admin-editable header / footer (specs/feature-receipt-text).
+    ``None`` or blank fields -> the built-in text, so the output is unchanged.
+    """
+    texts = texts or ReceiptTexts()
     lines = [
         "=================================",
-        f"  {shop_name()}",
+        f"  {texts.shop_name or shop_name()}",
+        *texts.address_lines,
+        *([texts.phone] if texts.phone else []),
         "=================================",
         # Daily voucher number; orders without one (queued before the feature) keep the id.
         f"Voucher: {voucher_no}" if (voucher_no or "").strip() else f"Order: #{order_id}",
@@ -160,7 +170,8 @@ def build_receipt_text(
     lines.extend(
         [
             "---------------------------------",
-            "Thank you!",
+            texts.thank_you or "Thank you!",
+            *texts.footer_lines,
             "[ --- CUT RECEIPT --- ]",
             "",
         ]

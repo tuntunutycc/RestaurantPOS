@@ -20,6 +20,7 @@ from routers import (
     orders,
     predefined_instructions,
     printers,
+    receipt_settings,
     reports,
     root_users,
     setup,
@@ -849,6 +850,7 @@ app.include_router(analytics.router)
 app.include_router(users.router)
 app.include_router(tables.router)
 app.include_router(kitchen_printers.router)
+app.include_router(receipt_settings.router)
 app.include_router(printers.router)
 app.include_router(predefined_instructions.router)
 

@@ -28,6 +28,7 @@ from services.printing.receipt import build_receipt_text, shop_name
 from services.printing.routes import category_route_to_printer_role
 from services.printing.settings import (
     load_printer_config,
+    load_receipt_texts,
     resolve_cashier_printer_endpoint,
     resolve_cashier_windows_printer_name,
     resolve_printer_endpoint_for_role,
@@ -372,6 +373,8 @@ async def dispatch_cashier_receipt(
         mobile_money_amount=mobile_money_amount,
         created_at=created_at,
         voucher_no=voucher_no,
+        # Read at print time: a re-print / retry shows the current texts.
+        texts=load_receipt_texts(db),
     )
     endpoint_override: PrinterEndpoint | None = None
     windows_name: str | None = None
@@ -445,14 +448,16 @@ def _test_print_route_for_role(role: str) -> str:
     return "other" if normalized == "other" else "food"
 
 
-def build_printer_test_ticket_text(*, printer_name: str, role: str) -> str:
+def build_printer_test_ticket_text(
+    *, printer_name: str, role: str, db: Session | None = None
+) -> str:
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     return (
         f"{'=' * 32}\n"
         f"  TEST PRINT\n"
-        f"  {shop_name()}\n"
+        f"  {load_receipt_texts(db).shop_name or shop_name()}\n"
         f"{'=' * 32}\n"
         f"Printer: {printer_name}\n"
         f"Role: {role}\n"
@@ -472,7 +477,7 @@ async def dispatch_printer_test(*, printer_id: int, db: Session) -> dict[str, An
     config = load_printer_config(db)
     role = (row.role or "").strip().lower()
     route = _test_print_route_for_role(role)
-    ticket_text = build_printer_test_ticket_text(printer_name=row.name, role=role)
+    ticket_text = build_printer_test_ticket_text(printer_name=row.name, role=role, db=db)
 
     windows_name: str | None = None
     endpoint_override: PrinterEndpoint | None = None

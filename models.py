@@ -51,6 +51,24 @@ class KitchenPrinterSettings(Base):
     default_printers_seeded = Column(Boolean, nullable=False, default=False)
 
 
+class ReceiptSettings(Base):
+    """Singleton (id=1): admin-editable texts on the cashier receipt.
+
+    Blank = built-in default (shop name falls back to SHOP_NAME / "My Restaurant",
+    thank-you to "Thank you!"). `address` and `footer_note` hold up to 3 lines
+    separated by a line break. See specs/feature-receipt-text.
+    """
+
+    __tablename__ = "receipt_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    shop_name = Column(String(64), nullable=False, default="")
+    address = Column(String(128), nullable=False, default="")
+    phone = Column(String(64), nullable=False, default="")
+    thank_you = Column(String(64), nullable=False, default="")
+    footer_note = Column(String(128), nullable=False, default="")
+
+
 class PrinterRouteEndpoint(Base):
     """Legacy LAN host/port by route_key (kept for DB compat; prefer `Printer`)."""
 

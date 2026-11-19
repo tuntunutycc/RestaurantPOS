@@ -5,6 +5,9 @@ Print checkout receipts on a **LAN thermal printer** from the server, reusing th
 
 Multi-cashier terminals share one (or more) network receipt printers configured in DB — not each browser’s local printer.
 
+## Receipt texts
+The shop name, address, phone, thank-you line and footer note on the receipt are edited by an admin (`specs/feature-receipt-text/`). Nothing set = the original receipt (`SHOP_NAME`, `Thank you!`).
+
 ## Explicit non-goals
 - Do **not** change tax math when skipping a print (`issue_receipt=false` only skips paper; line/order tax unchanged).
 - Do **not** fail checkout if the printer is offline.

@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-11-19 — Editable receipt text (shop name, address, phone, thank-you, footer note)
+
+### Summary
+An admin can now change the texts printed on the cashier receipt from the Counter screen (Menu Management -> **Receipt Text**). Before, the shop name came from `SHOP_NAME` in `.env` (restart needed) and `Thank you!` was fixed in the code.
+
+### Added
+- `GET/PUT /api/admin/receipt-settings` (`admin`, `root`): `shop_name`, `address` (up to 3 lines), `phone`, `thank_you`, `footer_note` (up to 3 lines). Each line at most 32 characters (the printer does not wrap); control characters removed; blank lines dropped; violations `422`. An omitted field keeps its value, `""` clears it.
+- New table `receipt_settings` (single row; no change to existing tables). No row / blank field = the original receipt: shop name falls back to `SHOP_NAME` then `My Restaurant`, thank-you to `Thank you!`, everything else prints nothing. The receipt for an installation that never uses the screen is byte-for-byte the same as before (locked in by a golden-string test).
+- Receipt layout: shop name, address lines, phone between the top rules; thank-you line and footer lines before the cut line. Money, voucher, item and payment lines are untouched.
+- The texts are read when a receipt is printed, so a re-print or a retry of an old order uses the **current** texts (owner decision). If they cannot be read, the receipt prints with the defaults. The "Test Print" slip shows the configured shop name.
+- Counter UI block with a per-field character counter (`counter.html`, `counter.js`, `i18n.js` en / my).
+
+### Behaviour to know
+- Myanmar letters print correctly only in **Image mode**; Text mode (ESC/POS text) cannot print them. The screen says so.
+- Address, phone and footer lines print flush left; the shop name keeps its 2-space indent.
+
+### Spec
+- `specs/feature-receipt-text/`; `api-reference.md`, `database-schema.md`, `feature-cashier-receipt-printing`.
+
+### Tests
+- `tests/test_receipt_settings.py` (16). Suite: 690 passed. 15 deliberate code breakages: 14 caught, 1 equivalent (a redundant single-line check, the line-count check refuses the same input).
+- Browser (throw-away database): form, counters, over-long block, save; a paid order printed in Image mode shows the Myanmar texts correctly. Not tried on a real printer or on 58 mm paper.
+
 ## 2026-11-19 — Fix: `GET /api/orders/tables` 500 and the missing "Confirm Delete" label
 
 ### Fixed

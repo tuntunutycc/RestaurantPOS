@@ -29,6 +29,7 @@ from database import Base, get_db
 from models import User
 from routers import auth as auth_router
 from routers import kitchen_printers as kitchen_printers_router
+from routers import receipt_settings as receipt_settings_router
 from routers import menu as menu_router
 from routers import orders as orders_router
 from routers import predefined_instructions as predefined_instructions_router
@@ -116,6 +117,7 @@ def app(db_session: Session) -> FastAPI:
     app.include_router(tables_router.router)
     app.include_router(users_router.router)
     app.include_router(kitchen_printers_router.router)
+    app.include_router(receipt_settings_router.router)
     app.include_router(printers_router.router)
     app.include_router(predefined_instructions_router.router)
 

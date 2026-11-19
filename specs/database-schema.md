@@ -181,6 +181,12 @@ Singleton row `id=1`: `backend` (`file` \| `escpos_network` \| `windows_printer`
 
 ---
 
+## `receipt_settings`
+
+Singleton row `id=1` (created by the first `PUT /api/admin/receipt-settings`; no row = all blank): `shop_name`, `address`, `phone`, `thank_you`, `footer_note`, all String NOT NULL default `''`. `address` and `footer_note` hold up to 3 lines separated by `\n`; every line at most 32 characters. Blank = built-in default (shop name -> `SHOP_NAME` env -> `My Restaurant`; thank-you -> `Thank you!`; the rest prints nothing). New table only; existing tables unchanged. See `specs/feature-receipt-text/`.
+
+---
+
 ## `printer_route_endpoints`
 
 Legacy PK `route_key` (`drinks` | `food` | `cashier`) — optional host fallback. Prefer unified `printers` table.
